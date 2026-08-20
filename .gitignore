@@ -1,0 +1,21 @@
+# Python virtual environments
+.venv/
+env/
+venv/
+__pycache__/
+*.pyc
+
+# Dataset and weight files (large files)
+datasets/
+runs/
+*.pt
+*.zip
+
+# OS / Editor files
+.DS_Store
+.vscode/
+.idea/
+
+.env
+
+README.md
