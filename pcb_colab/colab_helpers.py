@@ -20,7 +20,7 @@ from ultralytics import YOLO
 
 # Original Roboflow class IDs kept during training (4 PCB components).
 FILTER_CLASS_IDS = [2, 4, 7, 9]
-CLASS_NAMES = ["IC", "Capacitor", "Connector", "Electrolytic Capacitor"]
+CLASS_NAMES = ["Capacitor", "Connector", "Electrolytic Capacitor", "IC"]
 
 MODEL_CONFIGS: dict[str, dict[str, str]] = {
     "yolov5s": {
