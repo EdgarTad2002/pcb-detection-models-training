@@ -38,7 +38,7 @@ from ultralytics import YOLO
 DEFAULT_PROJECT_ROOT = Path(
     os.environ.get(
         "PCB_PROJECT_ROOT",
-        "/mnt/weka/etadevosyan/pcb-yolo/Ensemble-methods-of-YOLO-models-for-PCB-detection",
+        "/mnt/weka/etadevosyan/pcb-yolo/pcb-detection-models-training",
     )
 )
 DEFAULT_RESULTS_DIR = Path(
