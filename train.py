@@ -82,7 +82,7 @@ def parse_args():
         help="Cluster has far more CPU headroom than Colab's workers=2 -- bump this freely.",
     )
     p.add_argument("--patience", type=int, default=100)
-    p.add_argument("--save-period", type=int, default=10)
+    p.add_argument("--save-period", type=int, default=-1)
     p.add_argument("--device", default="0")
     p.add_argument("--no-cache", action="store_true", help="Disable image caching.")
     p.add_argument("--no-pretrained", action="store_true")
