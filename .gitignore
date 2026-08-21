@@ -17,3 +17,6 @@ runs/
 .idea/
 
 .env
+
+slurm_*.out
+printed-circuit-board-3/
