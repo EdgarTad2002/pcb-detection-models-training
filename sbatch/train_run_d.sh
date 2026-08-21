@@ -6,10 +6,15 @@
 #SBATCH --gres=gpu:1
 #SBATCH --output=slurm_%j.out
 
-source /home/etadevosyan/miniconda3/etc/profile.d/conda.sh
-conda activate pcb-yolo
+export CONDA_PKGS_DIRS=/mnt/weka/etadevosyan/.conda/pkgs
+export CONDA_ENVS_PATH=/mnt/weka/etadevosyan/.conda/envs
+export YOLO_CONFIG_DIR=/mnt/weka/etadevosyan/.config/Ultralytics
+mkdir -p "$YOLO_CONFIG_DIR"
 
-cd /mnt/weka/etadevosyan/pcb-yolo/Ensemble-methods-of-YOLO-models-for-PCB-detection
+source /mnt/weka/shared-cache/miniforge3/etc/profile.d/conda.sh
+conda activate /mnt/weka/etadevosyan/.conda/envs/pcb-yolo
+
+cd /mnt/weka/etadevosyan/pcb-yolo/pcb-detection-models-training
 
 # NOTE: copy_paste is intentionally NOT set here. It requires segmentation
 # masks to know what to cut and paste, and this dataset is bbox-only -- so
