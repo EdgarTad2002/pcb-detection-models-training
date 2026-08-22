@@ -13,3 +13,5 @@ dependencies:
       - pyyaml
       - matplotlib
       - pandas
+      - sahi
+      - ensemble-boxes
