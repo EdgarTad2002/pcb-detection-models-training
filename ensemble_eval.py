@@ -113,7 +113,7 @@ def collect_predictions(model_key, weight_path, img_paths, cache_dir, conf, devi
 
     cache_dir.mkdir(parents=True, exist_ok=True)
     with open(cache_path, "w") as f:
-        json.dump(preds_by_image, f)
+        json.dump(preds_by_image, f, default=lambda o: float(o) if hasattr(o, "item") else str(o))
     return preds_by_image
 
 
