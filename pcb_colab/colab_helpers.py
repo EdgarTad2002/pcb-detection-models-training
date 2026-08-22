@@ -81,6 +81,7 @@ def run_dir_for(model_key: str, project_root: Path | None = None) -> Path:
 def prepare_dataset(
     roboflow_download_dir: str | Path,
     project_root: Path | None = None,
+    dest_folder_name: str = "pcb-filtered-yolov8",
 ) -> Path:
     """
     Copy Roboflow export into the path expected by training/ensemble scripts.
@@ -90,16 +91,20 @@ def prepare_dataset(
     if not src.exists():
         raise FileNotFoundError(f"Roboflow dataset folder not found: {src}")
 
-    dst = root / "datasets" / "pcb-filtered-yolov8"
-    yolov11_dst = root / "datasets" / "pcb-filtered-yolov11"
+    dst = root / "datasets" / dest_folder_name
 
     if dst.exists():
         shutil.rmtree(dst)
     shutil.copytree(src, dst)
 
-    if yolov11_dst.exists() or yolov11_dst.is_symlink():
-        yolov11_dst.unlink()
-    yolov11_dst.symlink_to(dst.resolve())
+    # The YOLOv11 symlink workaround only makes sense for the original
+    # 640px dataset -- skip it for any alternate destination.
+    if dest_folder_name == "pcb-filtered-yolov8":
+        yolov11_dst = root / "datasets" / "pcb-filtered-yolov11"
+        if yolov11_dst.exists() or yolov11_dst.is_symlink():
+            yolov11_dst.unlink()
+        yolov11_dst.symlink_to(dst.resolve())
+        print(f"YOLOv11 symlink: {yolov11_dst} -> {dst}")
 
     data_yaml = dst / "data.yaml"
     if data_yaml.exists():
@@ -110,7 +115,6 @@ def prepare_dataset(
             yaml.safe_dump(data, f, sort_keys=False)
 
     print(f"Dataset ready at: {dst}")
-    print(f"YOLOv11 symlink: {yolov11_dst} -> {dst}")
     return dst
 
 
@@ -144,13 +148,22 @@ def merge_ic_classes(dataset_root: Path) -> int:
     return remapped_lines
 
 
-def download_roboflow_dataset(api_key: str, project_root: Path | None = None) -> Path:
+def download_roboflow_dataset(
+    api_key: str,
+    project_root: Path | None = None,
+    version: int = 3,
+    dest_folder_name: str = "pcb-filtered-yolov8",
+) -> Path:
     from roboflow import Roboflow
 
     rf = Roboflow(api_key=api_key)
     project = rf.workspace("roboflow-100").project("printed-circuit-board")
-    dataset = project.version(3).download("yolov8")
-    dataset_root = prepare_dataset(dataset.location, project_root=project_root)
+    dataset = project.version(version).download("yolov8")
+    dataset_root = prepare_dataset(
+        dataset.location,
+        project_root=project_root,
+        dest_folder_name=dest_folder_name,
+    )
 
     n = merge_ic_classes(dataset_root)
     print(f"Merged {n} 'iC' labels into 'IC' (class 22 -> 9)")
