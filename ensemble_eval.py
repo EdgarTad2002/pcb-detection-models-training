@@ -83,8 +83,12 @@ def rank_models(args):
 def collect_predictions(model_key, weight_path, img_paths, cache_dir, conf, device):
     cache_path = cache_dir / f"{model_key}_preds.json"
     if cache_path.exists():
-        with open(cache_path) as f:
-            return json.load(f)
+        try:
+            with open(cache_path) as f:
+                return json.load(f)
+        except json.JSONDecodeError:
+            print(f"WARNING: corrupt cache for {model_key} at {cache_path} -- regenerating")
+            cache_path.unlink()
 
     print(f"Running inference: {model_key}")
     model = YOLO(str(weight_path))
@@ -112,8 +116,10 @@ def collect_predictions(model_key, weight_path, img_paths, cache_dir, conf, devi
         preds_by_image[img_path.stem] = preds
 
     cache_dir.mkdir(parents=True, exist_ok=True)
-    with open(cache_path, "w") as f:
+    tmp_path = cache_path.with_suffix(".json.tmp")
+    with open(tmp_path, "w") as f:
         json.dump(preds_by_image, f, default=lambda o: float(o) if hasattr(o, "item") else str(o))
+    tmp_path.replace(cache_path)
     return preds_by_image
 
 
