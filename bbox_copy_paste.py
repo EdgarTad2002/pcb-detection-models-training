@@ -43,6 +43,7 @@ def parse_args():
     p.add_argument("--scale-jitter", type=float, nargs=2, default=[0.7, 1.3])
     p.add_argument("--max-iou-overlap", type=float, default=0.05, help="Reject a paste position if it overlaps an existing box more than this")
     p.add_argument("--max-attempts", type=int, default=15, help="Position-sampling attempts per paste before giving up")
+    p.add_argument("--feather-px", type=int, default=6, help="Alpha-blend edge width, in pixels, to avoid a hard paste seam")
     p.add_argument("--seed", type=int, default=0)
     return p.parse_args()
 
@@ -83,6 +84,48 @@ def iou_xyxy(a, b):
     return inter / union if union > 0 else 0.0
 
 
+def feathered_paste(base_img, crop, x1, y1, feather_px=6):
+    """
+    Pastes `crop` onto `base_img` at (x1, y1) with a soft alpha-feathered
+    edge, so the paste blends into the new background instead of leaving a
+    hard rectangular seam (which otherwise gives the model an easy,
+    unrealistic "pasted-looking" shortcut to key on rather than learning
+    real capacitor appearance).
+    """
+    ch, cw = crop.shape[:2]
+    # build a mask: 1.0 in the interior, fading to 0.0 over `feather_px`
+    # pixels at each edge
+    mask = np.ones((ch, cw), dtype=np.float32)
+    f = min(feather_px, ch // 2, cw // 2)
+    if f > 0:
+        ramp = np.linspace(0, 1, f, dtype=np.float32)
+        mask[:f, :] *= ramp[:, None]
+        mask[-f:, :] *= ramp[::-1][:, None]
+        mask[:, :f] *= ramp[None, :]
+        mask[:, -f:] *= ramp[None, ::-1]
+    mask3 = mask[:, :, None]
+
+    region = base_img[y1:y1 + ch, x1:x1 + cw].astype(np.float32)
+    blended = region * (1 - mask3) + crop.astype(np.float32) * mask3
+    base_img[y1:y1 + ch, x1:x1 + cw] = blended.astype(np.uint8)
+    return base_img
+
+
+def match_brightness(crop, base_img, x1, y1):
+    """
+    Cheap photometric matching: shifts the crop's average brightness toward
+    the target region's average brightness, so a bright crop pasted onto a
+    dark board (or vice versa) doesn't stand out as an obvious mismatch.
+    """
+    ch, cw = crop.shape[:2]
+    target_region = base_img[y1:y1 + ch, x1:x1 + cw]
+    crop_mean = crop.reshape(-1, 3).mean(axis=0)
+    target_mean = target_region.reshape(-1, 3).mean(axis=0)
+    shift = target_mean - crop_mean
+    matched = crop.astype(np.float32) + shift * 0.6  # partial correction, not full match
+    return np.clip(matched, 0, 255).astype(np.uint8)
+
+
 def paste_crops(img, existing_boxes_px, bank_paths, args, rng):
     h, w = img.shape[:2]
     n_pastes = rng.randint(args.min_pastes, args.max_pastes)
@@ -113,7 +156,8 @@ def paste_crops(img, existing_boxes_px, bank_paths, args, rng):
                 [iou_xyxy(candidate_box, b) for b in existing_boxes_px] or [0.0]
             )
             if max_iou <= args.max_iou_overlap:
-                img[y1:y1 + ch, x1:x1 + cw] = crop
+                crop = match_brightness(crop, img, x1, y1)
+                feathered_paste(img, crop, x1, y1, feather_px=args.feather_px)
                 existing_boxes_px.append(candidate_box)
                 cx = (x1 + cw / 2) / w
                 cy = (y1 + ch / 2) / h
