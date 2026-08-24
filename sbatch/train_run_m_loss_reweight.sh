@@ -17,12 +17,11 @@ conda activate /mnt/weka/etadevosyan/.conda/envs/pcb-yolo
 cd /mnt/weka/etadevosyan/pcb-yolo/pcb-detection-models-training
 
 # Run Research #3: Loss Reweighting on standard pcb-filtered-yolov8 dataset (no extra augmentation)
-# Boost classification loss (cls=1.5), tune box loss (box=5.0), enable Focal Loss (fl_gamma=1.5)
+# Boost classification loss (cls=1.5) and tune box loss (box=5.0)
 python train.py \
     --run-key yolov26s_loss_reweight \
     --weights yolo26s.pt \
     --data datasets/pcb-filtered-yolov8/data.yaml \
     --cls 1.5 \
     --box 5.0 \
-    --fl-gamma 1.5 \
     --epochs 100 --imgsz 640 --batch 16 --workers 8
