@@ -107,6 +107,7 @@ def parse_args():
     p.add_argument("--box", type=float, default=None, help="Box loss gain override (default 7.5)")
     p.add_argument("--cls", type=float, default=None, help="Class loss gain override (default 0.5)")
     p.add_argument("--dfl", type=float, default=None, help="Distribution Focal Loss gain override (default 1.5)")
+    p.add_argument("--fl-gamma", type=float, default=None, help="Focal loss gamma override (default 0.0)")
 
     # --- evaluation protocol -- keep these fixed across every run for a fair comparison ---
     p.add_argument("--eval-conf", type=float, default=0.25)
@@ -173,6 +174,7 @@ def build_train_kwargs(args, data_yaml):
         "box": args.box,
         "cls": args.cls,
         "dfl": args.dfl,
+        "fl_gamma": args.fl_gamma,
     }
     for key, val in optional_overrides.items():
         if val is not None:
