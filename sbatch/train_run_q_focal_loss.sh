@@ -16,11 +16,11 @@ conda activate /mnt/weka/etadevosyan/.conda/envs/pcb-yolo
 
 cd /mnt/weka/etadevosyan/pcb-yolo/pcb-detection-models-training
 
-# Train YOLO26s with Focal Loss (fl_gamma=2.0) on Native 1280px Dataset
+# Train YOLO26s with Distribution Focal Loss (dfl=2.5, cls=2.0, label_smoothing=0.1) on Native 1280px Dataset
 python train.py \
     --run-key yolov26s_focal_loss_native \
     --weights yolo26s.pt \
     --data datasets/pcb-native-res/data.yaml \
-    --fl-gamma 2.0 \
+    --dfl 2.5 --cls 2.0 --label-smoothing 0.1 \
     --epochs 100 --imgsz 1280 --batch 8 --workers 8 \
     --eval-conf 0.001
