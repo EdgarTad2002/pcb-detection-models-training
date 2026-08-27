@@ -16,10 +16,18 @@ conda activate /mnt/weka/etadevosyan/.conda/envs/pcb-yolo
 
 cd /mnt/weka/etadevosyan/pcb-yolo/pcb-detection-models-training
 
-# 1. Install Real-ESRGAN into the active conda env (only needed once;
-#    harmless to re-run if already installed).
-pip install --quiet basicsr
-pip install --quiet git+https://github.com/xinntao/Real-ESRGAN.git
+# Stop immediately if any command fails -- prevents training from starting
+# if SR upscaling or installation failed silently.
+set -e
+
+# 1. Install Real-ESRGAN into the ACTIVE conda python (not system python).
+#    Using `python -m pip` ensures packages land in the right env.
+python -m pip install --quiet basicsr
+python -m pip install --quiet git+https://github.com/xinntao/Real-ESRGAN.git
+
+# Verify installation succeeded before proceeding.
+python -c "from basicsr.archs.rrdbnet_arch import RRDBNet; print('basicsr OK')"
+python -c "from realesrgan import RealESRGANer; print('realesrgan OK')"
 
 # 2. Build the SR-upscaled dataset (only once -- skip existing images on reruns).
 #    Uses the standard pcb-filtered-yolov8 dataset as source so the evaluation
