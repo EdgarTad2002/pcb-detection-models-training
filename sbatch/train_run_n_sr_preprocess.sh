@@ -25,7 +25,25 @@ set -e
 python -m pip install --quiet basicsr
 python -m pip install --quiet git+https://github.com/xinntao/Real-ESRGAN.git
 
-# Verify installation succeeded before proceeding.
+# Fix a known basicsr bug: it imports `rgb_to_grayscale` from
+# `torchvision.transforms.functional_tensor`, which was removed in
+# torchvision >= 0.16. Patch it to use the correct public API location.
+python - <<'EOF'
+import site, pathlib
+for sp in site.getsitepackages():
+    f = pathlib.Path(sp) / "basicsr/data/degradations.py"
+    if f.exists():
+        text = f.read_text()
+        patched = text.replace(
+            "from torchvision.transforms.functional_tensor import rgb_to_grayscale",
+            "from torchvision.transforms.functional import rgb_to_grayscale",
+        )
+        f.write_text(patched)
+        print(f"Patched basicsr torchvision compat fix: {f}")
+        break
+EOF
+
+# Verify both packages are importable before proceeding.
 python -c "from basicsr.archs.rrdbnet_arch import RRDBNet; print('basicsr OK')"
 python -c "from realesrgan import RealESRGANer; print('realesrgan OK')"
 
