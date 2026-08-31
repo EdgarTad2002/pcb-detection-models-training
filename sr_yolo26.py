@@ -246,16 +246,14 @@ def evaluate_and_save(trainer, args):
     CLASS_NAMES = ["Capacitor", "Connector", "Electrolytic Capacitor", "IC"]
     results_dir = Path("/mnt/weka/etadevosyan/pcb-yolo/results")
 
-    # 1. Extract the clean, unwrapped detection model and re-save it through
-    #    Ultralytics' own supported save path -- guarantees it'll load
-    #    correctly later via a plain YOLO(path) call.
-    clean = YOLO("yolo26s.pt")
-    clean.model.load_state_dict(trainer.model.detection_model.state_dict())
-    clean_weights_dir = trainer.save_dir / "weights"
-    clean_weights_dir.mkdir(parents=True, exist_ok=True)
-    clean_weights_path = clean_weights_dir / "best_clean.pt"
-    clean.save(str(clean_weights_path))
-    print(f"Saved clean (unwrapped) checkpoint to: {clean_weights_path}")
+    # 1. Load the clean unwrapped checkpoint that Ultralytics already saved
+    #    during training (best.pt). It has the correct adapted architecture
+    #    (nc=23, fine-tuned head) baked in -- no need to re-create a fresh
+    #    COCO model and transfer weights (which fails due to class count mismatch).
+    clean_weights_path = trainer.save_dir / "weights" / "best.pt"
+    assert clean_weights_path.exists(), f"best.pt not found at {clean_weights_path}"
+    clean = YOLO(str(clean_weights_path))
+    print(f"Loaded clean checkpoint from: {clean_weights_path}")
 
     # 2. Evaluate it under the exact same protocol as every other run
     metrics = clean.val(
