@@ -117,6 +117,18 @@ class SRWrappedModel(nn.Module):
         # forwards any of these to self.detection_model lazily, whenever
         # they're actually accessed, by which point they exist.
  
+    def __setattr__(self, name, value):
+        super().__setattr__(name, value)
+        # Ultralytics' trainer sets .args/.nc/.names/.hyp on "self.model"
+        # (which is this wrapper) -- but the actual loss computation runs
+        # on self.detection_model, one level deeper, which never receives
+        # these assignments unless we mirror them down explicitly.
+        if name in ("args", "nc", "names", "hyp"):
+            try:
+                object.__setattr__(self.detection_model, name, value)
+            except AttributeError:
+                pass  # detection_model not registered yet (during __init__)
+
     def forward(self, batch, *args, **kwargs):
         if self.training and isinstance(batch, dict) and "hr_img" in batch:
             det_loss, loss_items = self.detection_model(batch, *args, **kwargs)
