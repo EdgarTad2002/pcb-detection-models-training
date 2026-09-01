@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=run_s_superyolo_native
 #SBATCH --partition=research
-#SBATCH --mem=32G
+#SBATCH --mem=64G
 #SBATCH --cpus-per-task=8
 #SBATCH --gres=gpu:1
 #SBATCH --output=slurm_%j.out
