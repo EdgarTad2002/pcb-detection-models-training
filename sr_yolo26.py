@@ -48,9 +48,9 @@ from ultralytics import YOLO
 from ultralytics.data.dataset import YOLODataset
 from ultralytics.models.yolo.detect import DetectionTrainer
 
-SR_SOURCE_LAYER_IDX = 4       # see docstring -- verify against your installed version
-SR_SOURCE_CHANNELS = 256      # channel count at that layer for YOLO26s
-SR_SOURCE_STRIDE = 8          # spatial downsampling factor at that layer
+SR_SOURCE_LAYER_IDX = 2       # Early layer with 160x160 spatial resolution
+SR_SOURCE_CHANNELS = 128      # Standard channel count at stride 4 for YOLOv26s
+SR_SOURCE_STRIDE = 4          # Halves the downsampling footprint
 
 
 # ---------------------------------------------------------------------------
