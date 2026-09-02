@@ -31,4 +31,4 @@ python sr_yolo26.py \
     --run-key yolov26s_superyolo_native_v2 \
     --data datasets/pcb-sr-native/data.yaml \
     --project-root /mnt/weka/etadevosyan/pcb-yolo/pcb-detection-models-training \
-    --epochs 100 --imgsz 640 --batch 16 --workers 8 --sr-lambda 100.0
+    --epochs 100 --imgsz 1280 --batch 8 --workers 8 --sr-lambda 100.0
