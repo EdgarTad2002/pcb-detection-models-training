@@ -21,6 +21,7 @@ Usage:
 """
 
 import argparse
+import json
 import random
 import shutil
 from pathlib import Path
@@ -126,7 +127,7 @@ def match_brightness(crop, base_img, x1, y1):
     return np.clip(matched, 0, 255).astype(np.uint8)
 
 
-def paste_crops(img, existing_boxes_px, bank_paths, args, rng):
+def paste_crops(img, existing_boxes_px, bank_paths, bank_metadata, args, rng):
     h, w = img.shape[:2]
     n_pastes = rng.randint(args.min_pastes, args.max_pastes)
     new_labels = []
@@ -137,6 +138,9 @@ def paste_crops(img, existing_boxes_px, bank_paths, args, rng):
         if crop is None:
             continue
 
+        rel_box = bank_metadata.get(crop_path.name, {}).get("rel_box", [0.0, 0.0, 1.0, 1.0])
+        rel_x1, rel_y1, rel_x2, rel_y2 = rel_box
+
         scale = rng.uniform(*args.scale_jitter)
         ch, cw = crop.shape[:2]
         ch, cw = max(1, int(ch * scale)), max(1, int(cw * scale))
@@ -146,6 +150,8 @@ def paste_crops(img, existing_boxes_px, bank_paths, args, rng):
 
         if rng.random() < 0.5:
             crop = cv2.flip(crop, 1)  # cheap horizontal-flip variety
+            # Mirror relative horizontal coordinates
+            rel_x1, rel_x2 = 1.0 - rel_x2, 1.0 - rel_x1
 
         placed = False
         for _ in range(args.max_attempts):
@@ -159,9 +165,23 @@ def paste_crops(img, existing_boxes_px, bank_paths, args, rng):
                 crop = match_brightness(crop, img, x1, y1)
                 feathered_paste(img, crop, x1, y1, feather_px=args.feather_px)
                 existing_boxes_px.append(candidate_box)
-                cx = (x1 + cw / 2) / w
-                cy = (y1 + ch / 2) / h
-                nw, nh = cw / w, ch / h
+
+                # Compute the TRUE capacitor box on the target image (excluding context padding)
+                cap_x1 = x1 + rel_x1 * cw
+                cap_y1 = y1 + rel_y1 * ch
+                cap_x2 = x1 + rel_x2 * cw
+                cap_y2 = y1 + rel_y2 * ch
+
+                cap_w = max(1.0, cap_x2 - cap_x1)
+                cap_h = max(1.0, cap_y2 - cap_y1)
+                cap_cx = (cap_x1 + cap_x2) / 2.0
+                cap_cy = (cap_y1 + cap_y2) / 2.0
+
+                cx = cap_cx / w
+                cy = cap_cy / h
+                nw = cap_w / w
+                nh = cap_h / h
+
                 new_labels.append(f"{CAPACITOR_CLASS_ID} {cx:.6f} {cy:.6f} {nw:.6f} {nh:.6f}")
                 placed = True
                 break
@@ -174,9 +194,20 @@ def main():
     args = parse_args()
     rng = random.Random(args.seed)
 
-    bank_paths = sorted(list(args.bank.glob("*.png")) + list(args.bank.glob("*.jpg")))
+    bank_paths = sorted(
+        [p for p in args.bank.glob("*") if p.suffix.lower() in (".png", ".jpg")]
+    )
     assert bank_paths, f"No crops found in {args.bank} -- run build_capacitor_bank.py first"
     print(f"Loaded {len(bank_paths)} capacitor crops from bank")
+
+    bank_metadata_path = args.bank / "metadata.json"
+    bank_metadata = {}
+    if bank_metadata_path.exists():
+        with open(bank_metadata_path) as f:
+            bank_metadata = json.load(f)
+        print(f"Loaded metadata for {len(bank_metadata)} crops from {bank_metadata_path}")
+    else:
+        print(f"Warning: {bank_metadata_path} not found. Falling back to whole-crop bounding boxes.")
 
     src_img_dir = args.source / "train" / "images"
     src_lbl_dir = args.source / "train" / "labels"
@@ -209,7 +240,7 @@ def main():
         existing_boxes = load_labels(label_path)
         existing_boxes_px = [list(to_xyxy_px(b, w, h)) for b in existing_boxes]
 
-        aug_img, new_labels = paste_crops(img.copy(), existing_boxes_px, bank_paths, args, rng)
+        aug_img, new_labels = paste_crops(img.copy(), existing_boxes_px, bank_paths, bank_metadata, args, rng)
         if not new_labels:
             continue  # no room found, skip this sibling
 

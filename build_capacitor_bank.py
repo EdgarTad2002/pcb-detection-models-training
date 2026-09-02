@@ -11,6 +11,7 @@ Usage:
 """
 
 import argparse
+import json
 from pathlib import Path
 
 import cv2
@@ -36,6 +37,7 @@ def main():
 
     img_files = sorted(list(img_dir.glob("*.jpg")) + list(img_dir.glob("*.png")))
     n_crops = 0
+    metadata = {}
 
     for img_path in img_files:
         label_path = lbl_dir / f"{img_path.stem}.txt"
@@ -60,13 +62,18 @@ def main():
                 h, w = img.shape[:2]
 
             cx, cy, bw, bh = map(float, parts[1:5])
+            orig_box_x1 = (cx - bw / 2.0) * w
+            orig_box_y1 = (cy - bh / 2.0) * h
+            orig_box_x2 = (cx + bw / 2.0) * w
+            orig_box_y2 = (cy + bh / 2.0) * h
+
             box_w, box_h = bw * w, bh * h
             margin_w, margin_h = box_w * args.margin, box_h * args.margin
 
-            x1 = int(max(0, (cx - bw / 2) * w - margin_w))
-            y1 = int(max(0, (cy - bh / 2) * h - margin_h))
-            x2 = int(min(w, (cx + bw / 2) * w + margin_w))
-            y2 = int(min(h, (cy + bh / 2) * h + margin_h))
+            x1 = int(max(0, orig_box_x1 - margin_w))
+            y1 = int(max(0, orig_box_y1 - margin_h))
+            x2 = int(min(w, orig_box_x2 + margin_w))
+            y2 = int(min(h, orig_box_y2 + margin_h))
 
             # Force a minimum crop size so tiny boxes still get real board
             # context, not just a near-exact crop of the component itself.
@@ -84,13 +91,30 @@ def main():
             if crop_w < args.min_size or crop_h < args.min_size:
                 continue
 
+            # Compute exact relative bounding box within the crop [0, 1]
+            rel_x1 = max(0.0, min(1.0, (orig_box_x1 - x1) / crop_w))
+            rel_y1 = max(0.0, min(1.0, (orig_box_y1 - y1) / crop_h))
+            rel_x2 = max(0.0, min(1.0, (orig_box_x2 - x1) / crop_w))
+            rel_y2 = max(0.0, min(1.0, (orig_box_y2 - y1) / crop_h))
+
             crop = img[y1:y2, x1:x2]
-            out_path = args.dest / f"{img_path.stem}_cap{i}.png"
+            crop_filename = f"{img_path.stem}_cap{i}.png"
+            out_path = args.dest / crop_filename
             cv2.imwrite(str(out_path), crop)
+
+            metadata[crop_filename] = {
+                "rel_box": [rel_x1, rel_y1, rel_x2, rel_y2]
+            }
             n_crops += 1
 
+    metadata_path = args.dest / "metadata.json"
+    with open(metadata_path, "w") as f:
+        json.dump(metadata, f, indent=2)
+
     print(f"Extracted {n_crops} capacitor crops to {args.dest}")
+    print(f"Saved crop relative box metadata to {metadata_path}")
 
 
 if __name__ == "__main__":
     main()
+
