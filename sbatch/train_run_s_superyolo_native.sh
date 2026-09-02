@@ -25,10 +25,14 @@ if [ ! -f "datasets/pcb-sr-native/data.yaml" ]; then
 fi
 
 # 2. Train YOLO26s with the auxiliary SuperYOLO-style SR branch using genuine high-res targets
-#    NOTE: sr-lambda increased to 100.0 because L1 loss is typically very small (~0.003) 
-#    compared to YOLO detection loss (~3.0). This scales the SR gradient up so the backbone actually cares.
+#    - imgsz 640: detector trains on 640px input (matching source-lr)
+#    - sr-target-imgsz 1280: auxiliary branch reconstructs native 1280px targets from intermediate layer
+#    - sr-lambda 100.0: scales L1 loss to balance with detection loss
+#    - eval-conf 0.001: evaluates across full PR curve for benchmark table reproduction
 python sr_yolo26.py \
     --run-key yolov26s_superyolo_native_v2 \
     --data datasets/pcb-sr-native/data.yaml \
     --project-root /mnt/weka/etadevosyan/pcb-yolo/pcb-detection-models-training \
-    --epochs 100 --imgsz 1280 --batch 8 --workers 8 --sr-lambda 100.0
+    --epochs 100 --imgsz 640 --batch 16 --workers 8 --sr-lambda 100.0 \
+    --sr-target-imgsz 1280 --eval-conf 0.001
+

@@ -38,6 +38,7 @@ Usage: see sbatch/train_run_r_superyolo.sh
 """
 
 import argparse
+import math
 from pathlib import Path
 
 import cv2
@@ -48,22 +49,38 @@ from ultralytics import YOLO
 from ultralytics.data.dataset import YOLODataset
 from ultralytics.models.yolo.detect import DetectionTrainer
 
-SR_SOURCE_LAYER_IDX = 2       # Early layer with 160x160 spatial resolution
+SR_SOURCE_LAYER_IDX = 2       # Early layer with spatial resolution (stride 4)
 SR_SOURCE_CHANNELS = 128      # Standard channel count at stride 4 for YOLOv26s
-SR_SOURCE_STRIDE = 4          # Halves the downsampling footprint
+SR_SOURCE_STRIDE = 4          # Stride 4 footprint
+
+
+def letterbox_hr(img, target_size=1280):
+    """Resizes and center-pads an image to (target_size, target_size) matching
+    Ultralytics' standard LetterBox transformation without aspect ratio distortion."""
+    h, w = img.shape[:2]
+    r = min(target_size / h, target_size / w)
+    nh, nw = int(round(h * r)), int(round(w * r))
+    if (nw, nh) != (w, h):
+        img = cv2.resize(img, (nw, nh), interpolation=cv2.INTER_LINEAR)
+    pad_w = target_size - nw
+    pad_h = target_size - nh
+    top, bottom = pad_h // 2, pad_h - (pad_h // 2)
+    left, right = pad_w // 2, pad_w - (pad_w // 2)
+    return cv2.copyMakeBorder(
+        img, top, bottom, left, right, cv2.BORDER_CONSTANT, value=(114, 114, 114)
+    )
 
 
 # ---------------------------------------------------------------------------
-# 1. SR decoder head -- a small upsampling stack, discarded at inference
+# 1. SR decoder head -- upsamples from feature map to target HR resolution
 # ---------------------------------------------------------------------------
 class SRHead(nn.Module):
     """Reconstructs a 3-channel image from an intermediate feature map via
-    a few conv + pixel-shuffle upsampling blocks, back up to roughly the
-    original input resolution (undoing the feature map's stride)."""
+    conv + pixel-shuffle upsampling blocks up to the target HR resolution."""
 
-    def __init__(self, in_channels, stride):
+    def __init__(self, in_channels, upsample_factor=8):
         super().__init__()
-        n_upsamples = int(torch.log2(torch.tensor(float(stride))).item())  # e.g. stride 8 -> 3 upsample steps
+        n_upsamples = max(1, int(round(math.log2(upsample_factor))))
         layers = []
         ch = in_channels
         for _ in range(n_upsamples):
@@ -105,29 +122,21 @@ class SRWrappedModel(nn.Module):
     term before returning.
     """
 
-    def __init__(self, detection_model, sr_lambda=1.0):
+    def __init__(self, detection_model, sr_lambda=1.0, imgsz=640, target_imgsz=1280):
         super().__init__()
         self.detection_model = detection_model
-        self.sr_head = SRHead(SR_SOURCE_CHANNELS, SR_SOURCE_STRIDE)
+        upsample_factor = max(1, round(target_imgsz / (imgsz / SR_SOURCE_STRIDE)))
+        self.sr_head = SRHead(SR_SOURCE_CHANNELS, upsample_factor=upsample_factor)
         self.capture = FeatureCapture(detection_model, SR_SOURCE_LAYER_IDX)
         self.sr_lambda = sr_lambda
-        # NOTE: .args/.stride/.nc/.names are intentionally NOT copied here --
-        # DetectionModel doesn't have .args set yet at this point in the
-        # trainer's setup (the trainer attaches it later). __getattr__ below
-        # forwards any of these to self.detection_model lazily, whenever
-        # they're actually accessed, by which point they exist.
 
     def __setattr__(self, name, value):
         super().__setattr__(name, value)
-        # Ultralytics' trainer sets .args/.nc/.names/.hyp on "self.model"
-        # (which is this wrapper) -- but the actual loss computation runs
-        # on self.detection_model, one level deeper, which never receives
-        # these assignments unless we mirror them down explicitly.
         if name in ("args", "nc", "names", "hyp"):
             try:
                 object.__setattr__(self.detection_model, name, value)
             except AttributeError:
-                pass  # detection_model not registered yet (during __init__)
+                pass
 
     def forward(self, batch, *args, **kwargs):
         if self.training and isinstance(batch, dict) and "hr_img" in batch:
@@ -138,18 +147,20 @@ class SRWrappedModel(nn.Module):
 
             hr_target = batch["hr_img"].to(sr_out.device).float() / 255.0
             if hr_target.shape[-2:] != sr_out.shape[-2:]:
-                hr_target = F.interpolate(hr_target, size=sr_out.shape[-2:], mode="bilinear", align_corners=False)
+                hr_target = F.interpolate(
+                    hr_target,
+                    size=sr_out.shape[-2:],
+                    mode="bilinear",
+                    align_corners=False,
+                )
 
             sr_loss = F.l1_loss(sr_out, hr_target)
             total_loss = det_loss + self.sr_lambda * sr_loss
             return total_loss, loss_items
         else:
-            # inference / validation: plain detection forward, SR branch never runs
             return self.detection_model(batch, *args, **kwargs)
 
     def __getattr__(self, name):
-        # forward any attribute Ultralytics looks for (e.g. .criterion, .args)
-        # to the underlying DetectionModel if not found on the wrapper itself
         try:
             return super().__getattr__(name)
         except AttributeError:
@@ -163,8 +174,9 @@ class SRYOLODataset(YOLODataset):
     """
     Expects a sibling directory next to `images/` called `images_hr/` with
     identically-named files -- the high-resolution reconstruction target
-    for each training image. Built by build_sr_dataset.py.
+    for each training image.
     """
+    target_imgsz = 1280
 
     def __getitem__(self, index):
         item = super().__getitem__(index)
@@ -172,8 +184,9 @@ class SRYOLODataset(YOLODataset):
         hr_path = img_path.parent.parent / "images_hr" / img_path.name
         hr_img = cv2.imread(str(hr_path))
         if hr_img is None:
-            hr_img = cv2.cvtColor(item["img"].permute(1, 2, 0).numpy(), cv2.COLOR_RGB2BGR)  # fallback: reuse LR img
+            hr_img = cv2.cvtColor(item["img"].permute(1, 2, 0).numpy(), cv2.COLOR_RGB2BGR)
         hr_img = cv2.cvtColor(hr_img, cv2.COLOR_BGR2RGB)
+        hr_img = letterbox_hr(hr_img, target_size=self.target_imgsz)
         item["hr_img"] = torch.from_numpy(hr_img).permute(2, 0, 1).contiguous()
         return item
 
@@ -181,14 +194,7 @@ class SRYOLODataset(YOLODataset):
     def collate_fn(batch):
         hr_imgs = [b.pop("hr_img") for b in batch]
         collated = YOLODataset.collate_fn(batch)
-        # pad/resize HR images to a common size for stacking
-        max_h = max(im.shape[1] for im in hr_imgs)
-        max_w = max(im.shape[2] for im in hr_imgs)
-        padded = []
-        for im in hr_imgs:
-            pad_h, pad_w = max_h - im.shape[1], max_w - im.shape[2]
-            padded.append(F.pad(im, (0, pad_w, 0, pad_h)))
-        collated["hr_img"] = torch.stack(padded)
+        collated["hr_img"] = torch.stack(hr_imgs)
         return collated
 
 
@@ -196,12 +202,14 @@ class SRYOLODataset(YOLODataset):
 # 5. Custom trainer wiring it together
 # ---------------------------------------------------------------------------
 class SRDetectionTrainer(DetectionTrainer):
-    sr_lambda = 1.0  # set via CLI, see main() below
+    sr_lambda = 1.0
+    sr_target_imgsz = 1280
 
     def build_dataset(self, img_path, mode="train", batch=None):
         ds = super().build_dataset(img_path, mode, batch)
         if mode == "train":
             ds.__class__ = SRYOLODataset
+            ds.target_imgsz = self.sr_target_imgsz
         return ds
 
     def get_dataloader(self, dataset_path, batch_size=16, rank=0, mode="train"):
@@ -212,7 +220,13 @@ class SRDetectionTrainer(DetectionTrainer):
 
     def get_model(self, cfg=None, weights=None, verbose=True):
         detection_model = super().get_model(cfg, weights, verbose)
-        return SRWrappedModel(detection_model, sr_lambda=self.sr_lambda)
+        imgsz = getattr(self.args, "imgsz", 640)
+        return SRWrappedModel(
+            detection_model,
+            sr_lambda=self.sr_lambda,
+            imgsz=imgsz,
+            target_imgsz=self.sr_target_imgsz,
+        )
 
 
 def parse_args():
@@ -224,6 +238,10 @@ def parse_args():
     p.add_argument("--imgsz", type=int, default=640)
     p.add_argument("--batch", type=int, default=16)
     p.add_argument("--sr-lambda", type=float, default=1.0)
+    p.add_argument("--sr-target-imgsz", type=int, default=1280, help="Target resolution for HR reconstruction")
+    p.add_argument("--eval-conf", type=float, default=0.001, help="Confidence threshold for post-training evaluation")
+    p.add_argument("--eval-iou", type=float, default=0.5, help="IoU threshold for post-training evaluation")
+    p.add_argument("--eval-split", default="test", help="Dataset split for post-training evaluation")
     p.add_argument("--device", default="0")
     p.add_argument("--workers", type=int, default=8)
     return p.parse_args()
@@ -231,44 +249,40 @@ def parse_args():
 
 def evaluate_and_save(trainer, args):
     """
-    Re-saves a CLEAN checkpoint (just the trained detection weights, no
-    SRWrappedModel wrapper -- the raw saved best.pt may not load correctly
-    through a plain YOLO(path) call, since it pickles the custom wrapper),
-    then evaluates it under the project's standard protocol and writes the
-    same JSON schema every other run uses, so it shows up in
-    aggregate_results.py automatically.
+    Re-saves a clean checkpoint, evaluates it under the project's standard
+    protocol, and writes the results JSON.
     """
     import json
     import time
 
-    import numpy as np
-
     CLASS_NAMES = ["Capacitor", "Connector", "Electrolytic Capacitor", "IC"]
     results_dir = Path("/mnt/weka/etadevosyan/pcb-yolo/results")
 
-    # 1. Load the clean unwrapped checkpoint that Ultralytics already saved
-    #    during training (best.pt). It has the correct adapted architecture
-    #    (nc=23, fine-tuned head) baked in -- no need to re-create a fresh
-    #    COCO model and transfer weights (which fails due to class count mismatch).
     clean_weights_path = trainer.save_dir / "weights" / "best.pt"
     assert clean_weights_path.exists(), f"best.pt not found at {clean_weights_path}"
     clean = YOLO(str(clean_weights_path))
     print(f"Loaded clean checkpoint from: {clean_weights_path}")
 
-    # 2. Evaluate it under the exact same protocol as every other run
+    # Evaluate under the specified protocol
     metrics = clean.val(
         data=args.data,
-        split="test",
+        split=args.eval_split,
         classes=[2, 4, 7, 9],
-        conf=0.25,
-        iou=0.5,
+        conf=args.eval_conf,
+        iou=args.eval_iou,
         device=args.device,
     )
 
     speed = metrics.speed
-    total_time_ms = speed.get("preprocess", 0.0) + speed.get("inference", 0.0) + speed.get("postprocess", 0.0)
+    total_time_ms = (
+        speed.get("preprocess", 0.0)
+        + speed.get("inference", 0.0)
+        + speed.get("postprocess", 0.0)
+    )
     fps = 1000.0 / total_time_ms if total_time_ms > 0 else 0.0
-    per_class_ap = {name: float(ap) for name, ap in zip(CLASS_NAMES, metrics.box.ap50)}
+    per_class_ap = {
+        name: float(ap) for name, ap in zip(CLASS_NAMES, metrics.box.ap50)
+    }
 
     summary = {
         "model": args.run_key,
@@ -280,13 +294,14 @@ def evaluate_and_save(trainer, args):
         "total_time_ms": float(total_time_ms),
         "fps": float(fps),
         "per_class_ap50": per_class_ap,
-        "eval_conf": 0.25,
-        "eval_iou": 0.5,
-        "eval_split": "test",
+        "eval_conf": args.eval_conf,
+        "eval_iou": args.eval_iou,
+        "eval_split": args.eval_split,
         "epochs": args.epochs,
         "imgsz": args.imgsz,
         "batch": args.batch,
         "sr_lambda": args.sr_lambda,
+        "sr_target_imgsz": args.sr_target_imgsz,
         "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
     }
 
@@ -308,6 +323,7 @@ def evaluate_and_save(trainer, args):
 def main():
     args = parse_args()
     SRDetectionTrainer.sr_lambda = args.sr_lambda
+    SRDetectionTrainer.sr_target_imgsz = args.sr_target_imgsz
 
     overrides = dict(
         model="yolo26s.pt",
@@ -323,6 +339,16 @@ def main():
         name="pcb-filtered",
         exist_ok=True,
         val=True,
+        # Enforce spatial 1-to-1 pixel alignment with the HR target:
+        mosaic=0.0,
+        mixup=0.0,
+        degrees=0.0,
+        translate=0.0,
+        scale=0.0,
+        shear=0.0,
+        perspective=0.0,
+        fliplr=0.0,
+        flipud=0.0,
     )
     trainer = SRDetectionTrainer(overrides=overrides)
     trainer.train()
@@ -333,3 +359,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

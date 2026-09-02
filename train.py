@@ -110,7 +110,7 @@ def parse_args():
     p.add_argument("--label-smoothing", type=float, default=None, help="Label smoothing override (default 0.0)")
 
     # --- evaluation protocol -- keep these fixed across every run for a fair comparison ---
-    p.add_argument("--eval-conf", type=float, default=0.25)
+    p.add_argument("--eval-conf", type=float, default=0.001)
     p.add_argument("--eval-iou", type=float, default=0.5)
     p.add_argument("--eval-split", default="test")
 

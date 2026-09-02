@@ -39,11 +39,11 @@ def parse_args():
     p.add_argument("--test-images", type=Path, default=Path("datasets/pcb-filtered-yolov8/test/images"))
     p.add_argument("--test-labels", type=Path, default=Path("datasets/pcb-filtered-yolov8/test/labels"))
     p.add_argument("--results-dir", type=Path, default=Path("/mnt/weka/etadevosyan/pcb-yolo/results"))
-    p.add_argument("--inference-conf", type=float, default=0.01)
+    p.add_argument("--inference-conf", type=float, default=0.001)
     p.add_argument("--anchor-conf", type=float, default=0.5)
     p.add_argument("--radius-frac", type=float, default=0.15, help="Search radius as a fraction of image diagonal")
-    p.add_argument("--boost-factor", type=float, default=2.5)
-    p.add_argument("--conf", type=float, default=0.25)
+    p.add_argument("--boost-factor", type=float, default=1.5, help="Peak boost factor at distance 0")
+    p.add_argument("--conf", type=float, default=0.001)
     p.add_argument("--iou", type=float, default=0.5)
     p.add_argument("--device", default="0")
     return p.parse_args()
@@ -203,7 +203,11 @@ def main():
                 cx, cy = (x1 + x2) / 2, (y1 + y2) / 2
                 min_dist = min(((cx - ax) ** 2 + (cy - ay) ** 2) ** 0.5 for ax, ay in anchor_centers)
                 if min_dist <= radius:
-                    new_score = min(1.0, new_score * args.boost_factor)
+                    # Smooth Gaussian distance decay: peak boost at dist=0, smoothly decaying towards 1.0 at radius
+                    sigma = radius * 0.5
+                    decay = np.exp(-0.5 * (min_dist / sigma) ** 2)
+                    boost = 1.0 + (args.boost_factor - 1.0) * decay
+                    new_score = min(1.0, new_score * boost)
             preds_rescored[int(cls)].append((img_id, new_score, x1, y1, x2, y2))
 
     summary_baseline = summarize(f"{args.run_key}_baseline_rerun", preds_baseline, gts_by_class, args)
