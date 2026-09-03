@@ -27,6 +27,7 @@ import argparse
 import json
 import math
 import time
+from copy import copy
 from pathlib import Path
 
 import cv2
@@ -36,7 +37,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from ultralytics import YOLO
 from ultralytics.data.dataset import YOLODataset
-from ultralytics.models.yolo.detect import DetectionTrainer
+from ultralytics.models.yolo.detect import DetectionTrainer, DetectionValidator
 
 SR_SOURCE_LAYER_IDX = 2
 SR_SOURCE_CHANNELS = 128
@@ -179,14 +180,18 @@ class MultimodalDataset(YOLODataset):
         # Combine into 4-channel tensor: [R, G, B, NIR]
         item["img"] = torch.cat([img_rgb, nir_tensor], dim=0)
 
-        # Load HR target for auxiliary SR head
+        # Load HR target for auxiliary SR head if present, otherwise clean fallback
         hr_path = img_path.parent.parent / "images_hr" / img_path.name
-        hr_img = cv2.imread(str(hr_path))
+        hr_img = None
+        if hr_path.is_file():
+            hr_img = cv2.imread(str(hr_path))
+            if hr_img is not None:
+                hr_img = cv2.cvtColor(hr_img, cv2.COLOR_BGR2RGB)
+
         if hr_img is None:
-            hr_img = cv2.cvtColor(
-                img_rgb[:3].permute(1, 2, 0).byte().numpy(), cv2.COLOR_RGB2BGR
-            )
-        hr_img = cv2.cvtColor(hr_img, cv2.COLOR_BGR2RGB)
+            # Clean in-memory fallback without triggering OpenCV findDecoder warnings
+            hr_img = img_rgb[:3].permute(1, 2, 0).byte().cpu().numpy()
+
         hr_img = letterbox_hr(hr_img, target_size=self.target_imgsz)
         item["hr_img"] = torch.from_numpy(hr_img).permute(2, 0, 1).contiguous()
         return item
@@ -200,8 +205,50 @@ class MultimodalDataset(YOLODataset):
         return collated
 
 
+from ultralytics.data import utils as data_utils
+
+# Guarantee that any Ultralytics validator/dataset check treats this as a 4-channel dataset
+_orig_check_det_dataset = data_utils.check_det_dataset
+
+
+def _multimodal_check_det_dataset(*args, **kwargs):
+    d = _orig_check_det_dataset(*args, **kwargs)
+    d["channels"] = 4
+    d["ch"] = 4
+    return d
+
+
+data_utils.check_det_dataset = _multimodal_check_det_dataset
+
+
 # ---------------------------------------------------------------------------
-# 4. Custom Multimodal Detection Trainer
+# 4. Custom Multimodal Validator (Supports 4-channel [R, G, B, NIR])
+# ---------------------------------------------------------------------------
+class MultimodalDetectionValidator(DetectionValidator):
+    def build_dataset(self, img_path, mode="val", batch=None):
+        ds = super().build_dataset(img_path, mode, batch)
+        ds.__class__ = MultimodalDataset
+        return ds
+
+    def get_dataloader(self, dataset_path, batch_size=16):
+        loader = super().get_dataloader(dataset_path, batch_size)
+        loader.collate_fn = MultimodalDataset.collate_fn
+        return loader
+
+    def preprocess(self, batch):
+        batch = super().preprocess(batch)
+        # Guarantee 4 channels for input tensor
+        if batch["img"].shape[1] == 3:
+            r = batch["img"][:, 0:1]
+            g = batch["img"][:, 1:2]
+            b = batch["img"][:, 2:3]
+            nir = torch.clamp(1.35 * r - 0.35 * g + 0.1 * b, 0.0, 1.0)
+            batch["img"] = torch.cat([batch["img"], nir], dim=1)
+        return batch
+
+
+# ---------------------------------------------------------------------------
+# 5. Custom Multimodal Detection Trainer
 # ---------------------------------------------------------------------------
 class MultimodalDetectionTrainer(DetectionTrainer):
     sr_lambda = 100.0
@@ -217,6 +264,16 @@ class MultimodalDetectionTrainer(DetectionTrainer):
         loader = super().get_dataloader(dataset_path, batch_size, rank, mode)
         loader.collate_fn = MultimodalDataset.collate_fn
         return loader
+
+    def get_validator(self):
+        self.loss_names = "box_loss", "cls_loss", "dfl_loss"
+        validator = MultimodalDetectionValidator(
+            self.test_loader, save_dir=self.save_dir, args=copy(self.args), _callbacks=self.callbacks
+        )
+        validator.data = self.data
+        validator.data["channels"] = 4
+        validator.data["ch"] = 4
+        return validator
 
     def get_model(self, cfg=None, weights=None, verbose=True):
         detection_model = super().get_model(cfg, weights, verbose)
@@ -270,17 +327,25 @@ def parse_args():
 def evaluate_and_save(trainer, args):
     clean_weights_path = trainer.save_dir / "weights" / "best.pt"
     assert clean_weights_path.exists(), f"best.pt not found at {clean_weights_path}"
-    clean = YOLO(str(clean_weights_path))
     print(f"Evaluating clean checkpoint: {clean_weights_path}")
 
-    metrics = clean.val(
-        data=args.data,
-        split=args.eval_split,
-        classes=DEFAULT_CLASSES,
-        conf=args.eval_conf,
-        iou=args.eval_iou,
-        device=args.device,
+    val_args = copy(trainer.args)
+    val_args.data = args.data
+    val_args.split = args.eval_split
+    val_args.conf = args.eval_conf
+    val_args.iou = args.eval_iou
+    val_args.classes = DEFAULT_CLASSES
+    val_args.device = args.device
+
+    validator = MultimodalDetectionValidator(
+        save_dir=trainer.save_dir, args=val_args, _callbacks=trainer.callbacks
     )
+    validator.data = trainer.data
+    validator.data["channels"] = 4
+    validator.data["ch"] = 4
+
+    clean = YOLO(str(clean_weights_path))
+    metrics = validator(model=clean.model)
 
     speed = metrics.speed
     total_time_ms = (
@@ -359,8 +424,9 @@ def main():
         flipud=0.0,
     )
     trainer = MultimodalDetectionTrainer(overrides=overrides)
-    trainer.train()
-    print("Training finished. Run saved to:", trainer.save_dir)
+    if not args.skip_train:
+        trainer.train()
+        print("Training finished. Run saved to:", trainer.save_dir)
 
     evaluate_and_save(trainer, args)
 

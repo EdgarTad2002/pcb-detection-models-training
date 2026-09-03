@@ -135,6 +135,8 @@ def prepare_dataset(source_dir, dest_dir):
             "test": "test/images",
             "nc": src_cfg.get("nc", len(src_cfg["names"])),
             "names": src_cfg["names"],
+            "channels": 4,
+            "ch": 4,
         }
     else:
         new_cfg = {
@@ -144,6 +146,8 @@ def prepare_dataset(source_dir, dest_dir):
             "test": "test/images",
             "nc": 4,
             "names": {0: "Capacitor", 1: "Connector", 2: "Electrolytic Capacitor", 3: "IC"},
+            "channels": 4,
+            "ch": 4,
         }
 
     data_yaml = dest_dir / "data.yaml"
