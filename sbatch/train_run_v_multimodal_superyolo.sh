@@ -16,12 +16,14 @@ conda activate /mnt/weka/etadevosyan/.conda/envs/pcb-yolo
 
 cd /mnt/weka/etadevosyan/pcb-yolo/pcb-detection-models-training
 
-# 1. Prepare the multimodal dataset structure if not already initialized
-if [ ! -f "datasets/pcb-vision-multimodal/data.yaml" ]; then
+# 1. Prepare the multimodal dataset structure and clean any stale data.yaml
+if [ ! -f "datasets/pcb-vision-multimodal/data.yaml" ] || grep -q "2: Capacitor" "datasets/pcb-vision-multimodal/data.yaml" 2>/dev/null; then
+    rm -f "datasets/pcb-vision-multimodal/data.yaml"
     python tools/prepare_pcb_vision_multimodal.py \
         --source datasets/pcb-filtered-yolov8 \
         --dest datasets/pcb-vision-multimodal
 fi
+
 
 # 2. Run V: Multimodal SuperYOLO26s (RGB + Physical NIR + Auxiliary SR Branch)
 #    - 4-channel input: [R, G, B, NIR] with COCO weight transfer

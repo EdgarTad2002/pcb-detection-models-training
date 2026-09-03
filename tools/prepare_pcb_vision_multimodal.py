@@ -82,9 +82,13 @@ def synthesize_physical_nir(rgb_img):
     return nir
 
 
-def prepare_dataset(source_dir, dest_dir, split_ratios=(0.7, 0.15, 0.15)):
+import yaml
+
+
+def prepare_dataset(source_dir, dest_dir):
     """
-    Prepares the multimodal dataset with images/, images_nir/, and labels/
+    Prepares the multimodal dataset with images/, images_nir/, labels/,
+    and copies the valid class mapping from source data.yaml.
     """
     source_dir = Path(source_dir)
     dest_dir = Path(dest_dir)
@@ -92,25 +96,59 @@ def prepare_dataset(source_dir, dest_dir, split_ratios=(0.7, 0.15, 0.15)):
 
     print(f"Preparing Multimodal Dataset from: {source_dir} -> {dest_dir}")
 
-    # Ensure split directories exist
     splits = ["train", "valid", "test"]
     for split in splits:
-        (dest_dir / split / "images").mkdir(parents=True, exist_ok=True)
-        (dest_dir / split / "images_nir").mkdir(parents=True, exist_ok=True)
-        (dest_dir / split / "labels").mkdir(parents=True, exist_ok=True)
+        src_img_dir = source_dir / split / "images"
+        src_lbl_dir = source_dir / split / "labels"
+        dst_img_dir = dest_dir / split / "images"
+        dst_nir_dir = dest_dir / split / "images_nir"
+        dst_lbl_dir = dest_dir / split / "labels"
 
-    # Generate data.yaml
+        dst_img_dir.mkdir(parents=True, exist_ok=True)
+        dst_nir_dir.mkdir(parents=True, exist_ok=True)
+        dst_lbl_dir.mkdir(parents=True, exist_ok=True)
+
+        if src_img_dir.exists():
+            img_files = sorted(list(src_img_dir.glob("*.jpg")) + list(src_img_dir.glob("*.png")))
+            print(f"{split}: processing {len(img_files)} images...")
+            for img_p in img_files:
+                if not (dst_img_dir / img_p.name).exists():
+                    shutil.copy(img_p, dst_img_dir / img_p.name)
+                if not (dst_nir_dir / img_p.name).exists():
+                    rgb = cv2.imread(str(img_p))
+                    if rgb is not None:
+                        nir = synthesize_physical_nir(rgb)
+                        cv2.imwrite(str(dst_nir_dir / img_p.name), nir)
+                lbl_p = src_lbl_dir / f"{img_p.stem}.txt"
+                if lbl_p.exists() and not (dst_lbl_dir / lbl_p.name).exists():
+                    shutil.copy(lbl_p, dst_lbl_dir / lbl_p.name)
+
+    # Inherit full valid class mapping from source data.yaml (avoids Ultralytics class index error)
+    src_yaml = source_dir / "data.yaml"
+    if src_yaml.exists():
+        with open(src_yaml) as f:
+            src_cfg = yaml.safe_load(f)
+        new_cfg = {
+            "path": str(dest_dir.resolve()),
+            "train": "train/images",
+            "val": "valid/images",
+            "test": "test/images",
+            "nc": src_cfg.get("nc", len(src_cfg["names"])),
+            "names": src_cfg["names"],
+        }
+    else:
+        new_cfg = {
+            "path": str(dest_dir.resolve()),
+            "train": "train/images",
+            "val": "valid/images",
+            "test": "test/images",
+            "nc": 4,
+            "names": {0: "Capacitor", 1: "Connector", 2: "Electrolytic Capacitor", 3: "IC"},
+        }
+
     data_yaml = dest_dir / "data.yaml"
     with open(data_yaml, "w") as f:
-        f.write(f"path: {dest_dir.resolve()}\n")
-        f.write("train: train/images\n")
-        f.write("val: valid/images\n")
-        f.write("test: test/images\n")
-        f.write("names:\n")
-        f.write("  2: Capacitor\n")
-        f.write("  4: Connector\n")
-        f.write("  7: Electrolytic Capacitor\n")
-        f.write("  9: IC\n")
+        yaml.safe_dump(new_cfg, f, sort_keys=False)
 
     print(f"Generated multimodal data configuration: {data_yaml}")
     return dest_dir
