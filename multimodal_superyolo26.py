@@ -206,6 +206,8 @@ class MultimodalDataset(YOLODataset):
 
 
 from ultralytics.data import utils as data_utils
+from ultralytics.nn.autobackend import AutoBackend
+import ultralytics.engine.validator as val_module
 
 # Guarantee that any Ultralytics validator/dataset check treats this as a 4-channel dataset
 _orig_check_det_dataset = data_utils.check_det_dataset
@@ -219,6 +221,37 @@ def _multimodal_check_det_dataset(*args, **kwargs):
 
 
 data_utils.check_det_dataset = _multimodal_check_det_dataset
+val_module.check_det_dataset = _multimodal_check_det_dataset
+
+# Auto-adapt any 3-channel input in AutoBackend (warmup and forward) to 4 channels
+_orig_autobackend_forward = AutoBackend.forward
+_orig_autobackend_warmup = AutoBackend.warmup
+
+
+def _multimodal_autobackend_forward(self, im, *args, **kwargs):
+    if isinstance(im, torch.Tensor) and im.ndim == 4 and im.shape[1] == 3:
+        r = im[:, 0:1]
+        g = im[:, 1:2]
+        b = im[:, 2:3]
+        nir = torch.clamp(1.35 * r - 0.35 * g + 0.1 * b, 0.0, 1.0)
+        im = torch.cat([im, nir], dim=1)
+    return _orig_autobackend_forward(self, im, *args, **kwargs)
+
+
+def _multimodal_autobackend_warmup(self, imgsz=(1, 4, 640, 640), im=None):
+    if imgsz and len(imgsz) == 4 and imgsz[1] == 3:
+        imgsz = (imgsz[0], 4, imgsz[2], imgsz[3])
+    if im is not None and isinstance(im, torch.Tensor) and im.ndim == 4 and im.shape[1] == 3:
+        r = im[:, 0:1]
+        g = im[:, 1:2]
+        b = im[:, 2:3]
+        nir = torch.clamp(1.35 * r - 0.35 * g + 0.1 * b, 0.0, 1.0)
+        im = torch.cat([im, nir], dim=1)
+    return _orig_autobackend_warmup(self, imgsz=imgsz, im=im)
+
+
+AutoBackend.forward = _multimodal_autobackend_forward
+AutoBackend.warmup = _multimodal_autobackend_warmup
 
 
 # ---------------------------------------------------------------------------
