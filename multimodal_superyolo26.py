@@ -324,8 +324,28 @@ def parse_args():
     return p.parse_args()
 
 
+def find_best_weights(args, trainer=None):
+    """Finds best.pt across trainer save_dir, absolute, relative, or nested paths."""
+    candidates = []
+    if trainer and hasattr(trainer, "save_dir"):
+        candidates.append(Path(trainer.save_dir) / "weights" / "best.pt")
+    candidates.extend([
+        args.project_root.resolve() / "runs" / args.run_key / "pcb-filtered" / "weights" / "best.pt",
+        Path.cwd() / "runs" / args.run_key / "pcb-filtered" / "weights" / "best.pt",
+        Path.cwd() / "runs" / "detect" / args.run_key / "pcb-filtered" / "weights" / "best.pt",
+        Path.cwd() / "runs" / "detect" / "runs" / args.run_key / "pcb-filtered" / "weights" / "best.pt",
+    ])
+    for p in candidates:
+        if p.is_file():
+            return p
+    found = list(Path.cwd().glob(f"**/{args.run_key}/**/best.pt"))
+    if found:
+        return found[0]
+    return candidates[0]
+
+
 def evaluate_and_save(trainer, args):
-    clean_weights_path = trainer.save_dir / "weights" / "best.pt"
+    clean_weights_path = find_best_weights(args, trainer)
     assert clean_weights_path.exists(), f"best.pt not found at {clean_weights_path}"
     print(f"Evaluating clean checkpoint: {clean_weights_path}")
 

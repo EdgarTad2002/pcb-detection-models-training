@@ -19,4 +19,6 @@ cd /mnt/weka/etadevosyan/pcb-yolo/pcb-detection-models-training
 python multimodal_superyolo26.py \
     --run-key yolov26s_multimodal_superyolo \
     --data datasets/pcb-vision-multimodal/data.yaml \
+    --project-root /mnt/weka/etadevosyan/pcb-yolo/pcb-detection-models-training \
+    --results-dir /mnt/weka/etadevosyan/pcb-yolo/results \
     --skip-train
