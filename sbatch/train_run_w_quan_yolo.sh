@@ -23,7 +23,12 @@ echo "=== Running QUAN (Quaternion Approximate Network) Training for PCB Detecti
 
 # Train QUAN-YOLO11s (small model, matching YOLO26s scale)
 python -c "
-import json
+import jsoncd /mnt/weka/etadevosyan/pcb-yolo/pcb-detection-models-training
+git pull origin main
+
+# Submit the QUAN training job
+sbatch sbatch/train_run_w_quan_yolo.sh
+
 import time
 from pathlib import Path
 from ultralytics import YOLO
