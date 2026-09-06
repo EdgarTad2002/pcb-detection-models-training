@@ -11,6 +11,8 @@ runs/
 *.pt
 *.zip
 
+results/
+
 # OS / Editor files
 .DS_Store
 .vscode/
@@ -24,7 +26,9 @@ printed-circuit-board-3/
 REPOSITORY_OVERVIEW.md
 
 comparison_table.csv
+comparison_table.xlsx
+comparison_table.md
 
 presentation.tex
 
-
+tools/remote_*.sh

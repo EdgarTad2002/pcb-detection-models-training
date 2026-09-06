@@ -56,6 +56,12 @@ def parse_args():
     p.add_argument(
         "--weights", required=True, help="e.g. yolo26s.pt or yolo26s-p2.yaml"
     )
+    p.add_argument(
+        "--pretrained-weights",
+        type=str,
+        default=None,
+        help="Optional pretrained weights to transfer (e.g. yolo26s.pt) when --weights is a YAML config",
+    )
 
     # --- paths ---
     p.add_argument("--project-root", type=Path, default=DEFAULT_PROJECT_ROOT)
@@ -192,6 +198,7 @@ def evaluate(weights_path, args, data_yaml):
         classes=args.classes,
         conf=args.eval_conf,
         iou=args.eval_iou,
+        imgsz=args.imgsz,
         device=args.device,
     )
 
@@ -223,6 +230,7 @@ def evaluate(weights_path, args, data_yaml):
         "epochs": args.epochs,
         "imgsz": args.imgsz,
         "batch": args.batch,
+        "pretrained_weights": args.pretrained_weights,
         "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
     }
     return summary
@@ -247,6 +255,9 @@ def main():
         print("=" * 70)
 
         model = YOLO(args.weights)
+        if args.pretrained_weights:
+            print(f"Loading/transferring pretrained weights from: {args.pretrained_weights}")
+            model.load(args.pretrained_weights)
         train_kwargs = build_train_kwargs(args, data_yaml)
         results = model.train(**train_kwargs)
         print("Training finished. Run saved to:", results.save_dir)

@@ -39,7 +39,7 @@ MODEL_CHECKPOINTS = {
     "yolov11s": "runs/yolov11s/pcb-filtered/weights/best.pt",
     "yolov12s": "runs/yolov12s/pcb-filtered/weights/best.pt",
     "yolov26s": "runs/yolov26s/pcb-filtered/weights/best.pt",
-    "yolov26s_native_res": "runs/yolov26s_native_res/pcb-filtered/weights/best.pt",
+    # "yolov26s_native_res": "runs/yolov26s_native_res/pcb-filtered/weights/best.pt",
 }
 
 
@@ -62,6 +62,7 @@ def parse_args():
 # ---------------------------------------------------------------------------
 def rank_models(args):
     ranked = []
+    model_times = {}
     for key in MODEL_CHECKPOINTS:
         result_path = args.results_dir / f"{key}.json"
         weight_path = args.project_root / MODEL_CHECKPOINTS[key]
@@ -70,11 +71,24 @@ def rank_models(args):
         with open(result_path) as f:
             data = json.load(f)
         ranked.append((key, data["mAP50"], weight_path))
+
+        # Extract benchmarked or recorded inference latency (ms)
+        total_time = data.get("total_time_ms")
+        if total_time is not None:
+            try:
+                model_times[key] = float(total_time)
+            except (ValueError, TypeError):
+                pass
+        elif "speed" in data and isinstance(data["speed"], dict):
+            s = data["speed"]
+            model_times[key] = float(s.get("preprocess", 0) + s.get("inference", 0) + s.get("postprocess", 0))
+
     ranked.sort(key=lambda x: -x[1])
     print("Model ranking (by existing test-set mAP50):")
     for key, m, _ in ranked:
-        print(f"  {key}: {m:.4f}")
-    return ranked
+        t_str = f" ({model_times[key]:.1f} ms)" if key in model_times else ""
+        print(f"  {key}: {m:.4f}{t_str}")
+    return ranked, model_times
 
 
 # ---------------------------------------------------------------------------
@@ -301,16 +315,26 @@ def compute_ap_and_pr(preds_by_class, gts_by_class, iou_thresh, conf_thresh):
     return results
 
 
-def summarize_and_save(run_key, preds_by_class, gts_by_class, args, extra_meta=None):
+def summarize_and_save(run_key, preds_by_class, gts_by_class, args, extra_meta=None, speed_meta=None):
     per_class = compute_ap_and_pr(preds_by_class, gts_by_class, args.iou, args.conf)
+    p_mean = float(np.mean([r["precision"] for r in per_class.values()]))
+    r_mean = float(np.mean([r["recall"] for r in per_class.values()]))
+    f1 = float(2 * p_mean * r_mean / (p_mean + r_mean + 1e-16))
+
+    total_time_ms = speed_meta.get("total_time_ms") if speed_meta else None
+    fps = speed_meta.get("fps") if speed_meta else None
+    fei = float(f1 * math.log10(max(fps, 1.0))) if fps is not None else None
+
     summary = {
         "model": run_key,
         "mAP50": float(np.mean([r["ap50"] for r in per_class.values()])),
         "mAP50_95": None,
-        "precision": float(np.mean([r["precision"] for r in per_class.values()])),
-        "recall": float(np.mean([r["recall"] for r in per_class.values()])),
-        "total_time_ms": None,
-        "fps": None,
+        "precision": p_mean,
+        "recall": r_mean,
+        "F1": f1,
+        "total_time_ms": total_time_ms,
+        "fps": fps,
+        "FEI": fei,
         "per_class_ap50": {CLASS_NAMES[RAW_ID_TO_LOCAL[c]]: r["ap50"] for c, r in per_class.items()},
         "eval_conf": args.conf,
         "eval_iou": args.iou,
@@ -319,12 +343,15 @@ def summarize_and_save(run_key, preds_by_class, gts_by_class, args, extra_meta=N
     }
     if extra_meta:
         summary.update(extra_meta)
+    if speed_meta and "fusion_overhead_ms" in speed_meta:
+        summary["fusion_overhead_ms"] = speed_meta["fusion_overhead_ms"]
 
     args.results_dir.mkdir(parents=True, exist_ok=True)
     with open(args.results_dir / f"{run_key}.json", "w") as f:
         json.dump(summary, f, indent=2)
 
-    print(f"\n{run_key}: mAP50={summary['mAP50']:.4f}  P={summary['precision']:.4f}  R={summary['recall']:.4f}")
+    fps_str = f"  FPS={fps:.1f}  FEI={fei:.4f}" if fps is not None else ""
+    print(f"\n{run_key}: mAP50={summary['mAP50']:.4f}  P={p_mean:.4f}  R={r_mean:.4f}  F1={f1:.4f}{fps_str}")
     for name, ap in summary["per_class_ap50"].items():
         print(f"    {name}: {ap:.4f}")
     return summary
@@ -335,7 +362,7 @@ def main():
     img_paths = sorted(list(args.test_images.glob("*.jpg")) + list(args.test_images.glob("*.png")))
     gts_by_class = load_ground_truth(img_paths, args.test_labels)
 
-    ranked = rank_models(args)
+    ranked, model_times = rank_models(args)
     if len(ranked) < 2:
         print("Need at least 2 models with existing results to ensemble. Aborting.")
         return
@@ -356,6 +383,8 @@ def main():
             ("affirmative", "vote"), ("consensus", "vote"), ("unanimous", "vote"),
         ]:
             preds_by_class = {c: [] for c in DEFAULT_CLASSES}
+            t_fusion_start = time.perf_counter()
+            fused_img_count = 0
             for img_path in img_paths:
                 img_id = img_path.stem
                 boxes_list, scores_list, labels_list = [], [], []
@@ -380,12 +409,36 @@ def main():
                 else:
                     boxes, scores, labels = fuse_voting(boxes_list, scores_list, labels_list, args.iou, strategy_name, n)
 
+                fused_img_count += 1
                 for b, s, l in zip(boxes, scores, labels):
                     raw_cls = DEFAULT_CLASSES[int(l)]
                     preds_by_class[raw_cls].append((img_id, float(s), b[0] * w, b[1] * h, b[2] * w, b[3] * h))
 
+            t_fusion_elapsed = time.perf_counter() - t_fusion_start
+            n_imgs = max(fused_img_count, len(img_paths), 1)
+            fusion_ms_per_img = (t_fusion_elapsed / n_imgs) * 1000.0
+
+            # Calculate total ensemble latency and FPS:
+            # Latency = sum of model inference latencies + fusion algorithm overhead per image
+            models_latency = sum(model_times.get(k, 0.0) for k in model_keys)
+            total_time_ms = models_latency + fusion_ms_per_img if models_latency > 0 else None
+            fps = (1000.0 / total_time_ms) if total_time_ms and total_time_ms > 0 else None
+
+            speed_meta = {
+                "total_time_ms": total_time_ms,
+                "fps": fps,
+                "fusion_overhead_ms": fusion_ms_per_img,
+            }
+
             run_key = f"ensemble_{strategy_name}_top{n}"
-            summarize_and_save(run_key, preds_by_class, gts_by_class, args, extra_meta={"ensemble_models": model_keys})
+            summarize_and_save(
+                run_key,
+                preds_by_class,
+                gts_by_class,
+                args,
+                extra_meta={"ensemble_models": model_keys},
+                speed_meta=speed_meta,
+            )
 
 
 if __name__ == "__main__":
