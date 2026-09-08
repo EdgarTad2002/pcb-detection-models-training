@@ -47,14 +47,11 @@ CANDIDATE_MODELS = [
     # 2. Fair 640px Techniques on YOLO26
     ("yolov26s_loss_reweight", "runs/yolov26s_loss_reweight/pcb-filtered/weights/best.pt", 640),
     ("yolov26s_bbox_cappaste", "runs/yolov26s_bbox_cappaste/pcb-filtered/weights/best.pt", 640),
-    ("yolov26s_spectral_640", "runs/yolov26s_spectral_640/pcb-filtered/weights/best.pt", 640),
+    ("yolov26s_focal_loss_640", "runs/yolov26s_focal_loss_640/pcb-filtered/weights/best.pt", 640),
     ("yolov26s_physics_spectral_640", "runs/yolov26s_physics_spectral_640/pcb-filtered/weights/best.pt", 640),
-    ("yolov26s_geo_hsv_aug", "runs/yolov26s_geo_hsv_aug/pcb-filtered/weights/best.pt", 640),
-    ("yolov26s_p2_combined_v2", "runs/yolov26s_p2_combined_v2/pcb-filtered/weights/best.pt", 640),
 
     # 3. Native-Resolution Discussion Ablations
     ("yolov26s_native_res", "runs/yolov26s_native_res/pcb-filtered/weights/best.pt", 1280),
-    ("yolov26s_focal_loss_native", "runs/yolov26s_focal_loss_native/pcb-filtered/weights/best.pt", 1280),
 ]
 
 

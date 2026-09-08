@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=run_r_superyolo
+#SBATCH --job-name=superyolo_v5s
 #SBATCH --partition=research
 #SBATCH --mem=32G
 #SBATCH --cpus-per-task=8
@@ -16,9 +16,7 @@ conda activate /mnt/weka/etadevosyan/.conda/envs/pcb-yolo
 
 cd /mnt/weka/etadevosyan/pcb-yolo/pcb-detection-models-training
 
-# 1. Build the LR/HR pair from the STANDARD 640px dataset only -- no
-#    native-res source needed. LR = degraded (downsample+upsample), HR =
-#    original sharp 640x640 image (SR reconstruction target only).
+# Build paired SR dataset if not present
 if [ ! -f "datasets/pcb-sr-640/data.yaml" ]; then
     python build_sr_dataset.py \
         --source datasets/pcb-filtered-yolov8 \
@@ -26,24 +24,12 @@ if [ ! -f "datasets/pcb-sr-640/data.yaml" ]; then
         --degradation-factor 4
 fi
 
-# 2. Sanity check: confirm layer 2 is really a 128-channel stride-4 block
-#    for the installed Ultralytics version before committing to a full run.
-python -c "
-from ultralytics import YOLO
-m = YOLO('yolo26s.pt')
-layer = m.model.model[2]
-print('Layer 2 (SR Hook):', layer)
-"
-
-# 3. Train YOLO26s with the auxiliary SuperYOLO-style SR branch (v3)
-#    - imgsz 640: detector trains on 640px input
-#    - sr-target-imgsz 640: auxiliary branch reconstructs sharp 640px image via multi-scale fusion
-#    - sr-lambda 0.5: calibrated auxiliary loss weight with Smooth L1
-#    - cls 1.5, box 5.0: optimal class loss balance for small components
+# Train Native SuperYOLO on YOLOv5s (the exact architecture recommended by Prof. Agaian)
+# - imgsz 640, 100 epochs, batch 16, eval-conf 0.001
 python sr_yolo26.py \
-    --run-key yolov26s_superyolo_640 \
+    --run-key yolov5s_superyolo_640 \
+    --weights yolov5s.pt \
     --data datasets/pcb-sr-640/data.yaml \
     --project-root /mnt/weka/etadevosyan/pcb-yolo/pcb-detection-models-training \
-    --cls 1.5 --box 5.0 \
     --epochs 100 --imgsz 640 --batch 16 --workers 8 --sr-lambda 0.5 \
     --sr-target-imgsz 640 --eval-conf 0.001

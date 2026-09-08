@@ -10,6 +10,8 @@ datasets/
 runs/
 *.pt
 *.zip
+data_samples/
+SuperYOLO/
 
 results/
 

@@ -1,44 +1,31 @@
 #!/usr/bin/env python3
 """
-SuperYOLO-style auxiliary super-resolution training for YOLO26.
+SuperYOLO-style auxiliary super-resolution training for YOLO26 (Corrected v3).
 
 Reimplements the core idea from icey-zhang/SuperYOLO (Zhang et al., TGRS 2023)
-using Ultralytics' own extension points, since SuperYOLO's actual code is
-built on the old standalone YOLOv5 repo and isn't compatible with the
-modern `ultralytics` package YOLO26 lives in.
+adapted for modern Ultralytics and YOLO26:
 
-Core idea: an auxiliary decoder branch attached to an intermediate backbone
-feature map learns to reconstruct a high-resolution version of the input
-during training (SR loss, L1), on top of the normal detection loss. This
-forces the backbone to preserve fine detail relevant to small objects.
-At inference, the SR branch is never invoked -- ZERO added inference cost,
-matching the paper's own real-time deployment framing.
+Key Improvements in v3:
+  1. Multi-Scale Feature Fusion: The SR head now captures BOTH Layer 2 (stride 4,
+     128ch spatial detail) and Layer 4 (stride 8, 256ch semantic detail). Both
+     low-level edge layers and mid-level detection layers receive SR gradient supervision.
+  2. Smooth L1 Loss (Huber Loss): Replaces raw unscaled L1 with Smooth L1 (beta=0.01)
+     to avoid huge gradient spikes from outlier pixels.
+  3. Stable Loss Scaling: Default sr-lambda set to 0.5 (calibrated auxiliary regularizer),
+     fixing the severe gradient instability caused by previous sr-lambda=100.0.
+  4. Spatial Alignment: Enforces exact 1:1 pixel coordinate matching with letterbox
+     transformation and disables desynchronizing spatial augmentations.
+  5. Loss Reweight Compatibility: Supports --cls, --box, and --dfl overrides so
+     SuperYOLO can synergize with class loss reweighting.
+  6. Zero-Cost Inference: The auxiliary SR head is completely detached at test time.
 
-Uses your native-res dataset as the natural HR target (downsampled for the
-actual detector input, original used as the SR reconstruction target) --
-see build_sr_dataset.py to prepare the paired data.
-
-IMPORTANT: This wires into Ultralytics 8.4.x via three well-established,
-stable extension points:
-  1. A forward hook on an intermediate backbone layer (does not modify
-     DetectionModel.forward() at all -- very version-stable)
-  2. A custom YOLODataset subclass that also returns the HR target image
-  3. A wrapped model whose forward() adds the SR loss to whatever the
-     underlying DetectionModel already returns -- the trainer only ever
-     sees (loss, loss_items), same contract regardless of what's inside
-
-The one thing to verify once actually running: SR_SOURCE_LAYER_IDX below is
-set for YOLO26s's architecture as printed in earlier training logs (layer 4,
-C3k2 block, 256 channels, stride 8). If Ultralytics prints a different
-layer numbering for your installed version, adjust it -- run:
-    python -c "from ultralytics import YOLO; m = YOLO('yolo26s.pt'); print(m.model.model)"
-and confirm layer 4 is still the 256-channel stride-8 C3k2 block.
-
-Usage: see sbatch/train_run_r_superyolo.sh
+Usage: see sbatch/train_run_r_superyolo.sh or sbatch/train_run_s_superyolo_native.sh
 """
 
 import argparse
+import json
 import math
+import time
 from pathlib import Path
 
 import cv2
@@ -49,12 +36,13 @@ from ultralytics import YOLO
 from ultralytics.data.dataset import YOLODataset
 from ultralytics.models.yolo.detect import DetectionTrainer
 
-SR_SOURCE_LAYER_IDX = 2       # Early layer with spatial resolution (stride 4)
-SR_SOURCE_CHANNELS = 128      # Standard channel count at stride 4 for YOLOv26s
-SR_SOURCE_STRIDE = 4          # Stride 4 footprint
+LAYER_P2_IDX = 2       # Backbone Layer 2: stride 4, 128 channels (fine spatial detail)
+LAYER_P3_IDX = 4       # Backbone Layer 4: stride 8, 256 channels (semantic context)
+P2_CHANNELS = 128
+P3_CHANNELS = 256
 
 
-def letterbox_hr(img, target_size=1280):
+def letterbox_hr(img, target_size=640):
     """Resizes and center-pads an image to (target_size, target_size) matching
     Ultralytics' standard LetterBox transformation without aspect ratio distortion."""
     h, w = img.shape[:2]
@@ -72,19 +60,34 @@ def letterbox_hr(img, target_size=1280):
 
 
 # ---------------------------------------------------------------------------
-# 1. SR decoder head -- upsamples from feature map to target HR resolution
+# 1. Multi-Scale SR Decoder Head (Fuses P2 spatial detail + P3 semantic context)
 # ---------------------------------------------------------------------------
-class SRHead(nn.Module):
-    """Reconstructs a 3-channel image from an intermediate feature map via
-    conv + pixel-shuffle upsampling blocks up to the target HR resolution."""
+class MultiScaleSRHead(nn.Module):
+    """Reconstructs a high-resolution 3-channel image by fusing low-level spatial
+    features (stride 4) and mid-level semantic features (stride 8)."""
 
-    def __init__(self, in_channels, upsample_factor=8):
+    def __init__(self, in_ch_p2=128, in_ch_p3=256, upsample_factor=4):
         super().__init__()
+        # Align P3 (stride 8) to P2 (stride 4)
+        self.p3_to_p2 = nn.Sequential(
+            nn.Conv2d(in_ch_p3, in_ch_p2, kernel_size=1),
+            nn.Upsample(scale_factor=2, mode="bilinear", align_corners=False),
+            nn.LeakyReLU(0.1, inplace=True),
+        )
+        # Multi-scale fusion
+        self.fuse = nn.Sequential(
+            nn.Conv2d(in_ch_p2 * 2, 128, kernel_size=3, padding=1),
+            nn.LeakyReLU(0.1, inplace=True),
+        )
+
+        # Progressive PixelShuffle upsamplers
+        # upsample_factor=4: 160 -> 320 -> 640 (2 stages)
+        # upsample_factor=8: 160 -> 320 -> 640 -> 1280 (3 stages)
         n_upsamples = max(1, int(round(math.log2(upsample_factor))))
         layers = []
-        ch = in_channels
+        ch = 128
         for _ in range(n_upsamples):
-            out_ch = max(ch // 2, 16)
+            out_ch = max(ch // 2, 32)
             layers += [
                 nn.Conv2d(ch, out_ch * 4, kernel_size=3, padding=1),
                 nn.PixelShuffle(2),
@@ -94,40 +97,61 @@ class SRHead(nn.Module):
         layers.append(nn.Conv2d(ch, 3, kernel_size=3, padding=1))
         self.net = nn.Sequential(*layers)
 
-    def forward(self, feat):
-        return torch.sigmoid(self.net(feat))  # output in [0,1], compare against normalized HR target
+    def forward(self, feat_p2, feat_p3):
+        p3_aligned = self.p3_to_p2(feat_p3)
+        if p3_aligned.shape[-2:] != feat_p2.shape[-2:]:
+            p3_aligned = F.interpolate(
+                p3_aligned, size=feat_p2.shape[-2:], mode="bilinear", align_corners=False
+            )
+        fused = self.fuse(torch.cat([feat_p2, p3_aligned], dim=1))
+        return torch.sigmoid(self.net(fused))
 
 
 # ---------------------------------------------------------------------------
-# 2. Feature capture via forward hook -- doesn't touch DetectionModel.forward()
+# 2. Multi-Layer Feature Capture Hook (Picklable for PyTorch Model Checkpointing)
 # ---------------------------------------------------------------------------
-class FeatureCapture:
-    def __init__(self, model, layer_idx):
-        self.feature = None
-        target_layer = model.model[layer_idx]
-        target_layer.register_forward_hook(self._hook)
+class LayerHook:
+    def __init__(self, storage, key):
+        self.storage = storage
+        self.key = key
 
-    def _hook(self, module, inp, out):
-        self.feature = out
+    def __call__(self, module, inp, out):
+        self.storage[self.key] = out
+
+
+class MultiLayerCapture:
+    def __init__(self, model, layer_indices):
+        self.features = {}
+        for idx in layer_indices:
+            target_layer = model.model[idx]
+            target_layer.register_forward_hook(LayerHook(self.features, idx))
 
 
 # ---------------------------------------------------------------------------
-# 3. Wrapped model -- adds SR loss on top of whatever DetectionModel returns
+# 3. Wrapped Model with Auxiliary SR Loss Regularization
 # ---------------------------------------------------------------------------
 class SRWrappedModel(nn.Module):
-    """
-    Wraps a standard Ultralytics DetectionModel. The trainer only ever calls
-    self.model(batch) expecting (loss, loss_items) back during training --
-    this wrapper preserves that contract exactly, just adding the SR loss
-    term before returning.
-    """
-
-    def __init__(self, detection_model, sr_lambda=1.0, imgsz=640, target_imgsz=1280):
+    def __init__(self, detection_model, sr_lambda=0.5, imgsz=640, target_imgsz=640):
         super().__init__()
         self.detection_model = detection_model
-        upsample_factor = max(1, round(target_imgsz / (imgsz / SR_SOURCE_STRIDE)))
-        self.sr_head = SRHead(SR_SOURCE_CHANNELS, upsample_factor=upsample_factor)
-        self.capture = FeatureCapture(detection_model, SR_SOURCE_LAYER_IDX)
+
+        # Auto-detect P2 and P3 channel dimensions for any model (YOLOv5s: 64/128, YOLO26s: 128/256)
+        dev = next(detection_model.parameters()).device
+        with torch.no_grad():
+            cur = torch.zeros(1, 3, 64, 64, device=dev)
+            ch_p2, ch_p3 = 128, 256
+            for i in range(LAYER_P3_IDX + 1):
+                cur = detection_model.model[i](cur)
+                if i == LAYER_P2_IDX:
+                    ch_p2 = cur.shape[1]
+                elif i == LAYER_P3_IDX:
+                    ch_p3 = cur.shape[1]
+
+        upsample_factor = max(1, round(target_imgsz / (imgsz / 4)))  # Stride 4 footprint
+        self.sr_head = MultiScaleSRHead(
+            in_ch_p2=ch_p2, in_ch_p3=ch_p3, upsample_factor=upsample_factor
+        )
+        self.capture = MultiLayerCapture(detection_model, [LAYER_P2_IDX, LAYER_P3_IDX])
         self.sr_lambda = sr_lambda
 
     def __setattr__(self, name, value):
@@ -142,21 +166,26 @@ class SRWrappedModel(nn.Module):
         if self.training and isinstance(batch, dict) and "hr_img" in batch:
             det_loss, loss_items = self.detection_model(batch, *args, **kwargs)
 
-            feat = self.capture.feature
-            sr_out = self.sr_head(feat)  # (B, 3, H', W')
+            feat_p2 = self.capture.features.get(LAYER_P2_IDX)
+            feat_p3 = self.capture.features.get(LAYER_P3_IDX)
 
-            hr_target = batch["hr_img"].to(sr_out.device).float() / 255.0
-            if hr_target.shape[-2:] != sr_out.shape[-2:]:
-                hr_target = F.interpolate(
-                    hr_target,
-                    size=sr_out.shape[-2:],
-                    mode="bilinear",
-                    align_corners=False,
-                )
+            if feat_p2 is not None and feat_p3 is not None:
+                sr_out = self.sr_head(feat_p2, feat_p3)
 
-            sr_loss = F.l1_loss(sr_out, hr_target)
-            total_loss = det_loss + self.sr_lambda * sr_loss
-            return total_loss, loss_items
+                hr_target = batch["hr_img"].to(sr_out.device).float() / 255.0
+                if hr_target.shape[-2:] != sr_out.shape[-2:]:
+                    hr_target = F.interpolate(
+                        hr_target,
+                        size=sr_out.shape[-2:],
+                        mode="bilinear",
+                        align_corners=False,
+                    )
+
+                # Smooth L1 loss provides well-behaved, bounded gradients
+                sr_loss = F.smooth_l1_loss(sr_out, hr_target, beta=0.01)
+                total_loss = det_loss + self.sr_lambda * sr_loss
+                return total_loss, loss_items
+            return det_loss, loss_items
         else:
             return self.detection_model(batch, *args, **kwargs)
 
@@ -168,15 +197,10 @@ class SRWrappedModel(nn.Module):
 
 
 # ---------------------------------------------------------------------------
-# 4. Dataset that also returns the paired HR target image
+# 4. Dataset with Pixel-Aligned HR Reconstruction Target
 # ---------------------------------------------------------------------------
 class SRYOLODataset(YOLODataset):
-    """
-    Expects a sibling directory next to `images/` called `images_hr/` with
-    identically-named files -- the high-resolution reconstruction target
-    for each training image.
-    """
-    target_imgsz = 1280
+    target_imgsz = 640
 
     def __getitem__(self, index):
         item = super().__getitem__(index)
@@ -199,11 +223,11 @@ class SRYOLODataset(YOLODataset):
 
 
 # ---------------------------------------------------------------------------
-# 5. Custom trainer wiring it together
+# 5. Detection Trainer Wiring
 # ---------------------------------------------------------------------------
 class SRDetectionTrainer(DetectionTrainer):
-    sr_lambda = 1.0
-    sr_target_imgsz = 1280
+    sr_lambda = 0.5
+    sr_target_imgsz = 640
 
     def build_dataset(self, img_path, mode="train", batch=None):
         ds = super().build_dataset(img_path, mode, batch)
@@ -230,31 +254,28 @@ class SRDetectionTrainer(DetectionTrainer):
 
 
 def parse_args():
-    p = argparse.ArgumentParser()
-    p.add_argument("--data", required=True)
-    p.add_argument("--run-key", required=True)
+    p = argparse.ArgumentParser(description="SuperYOLO v3: Multi-Scale Auxiliary SR Training for YOLO26")
+    p.add_argument("--data", required=True, help="Path to data.yaml")
+    p.add_argument("--run-key", required=True, help="Run key name")
+    p.add_argument("--weights", default="yolo26s.pt", help="Base model weights")
     p.add_argument("--project-root", type=Path, default=Path("."))
     p.add_argument("--epochs", type=int, default=100)
     p.add_argument("--imgsz", type=int, default=640)
     p.add_argument("--batch", type=int, default=16)
-    p.add_argument("--sr-lambda", type=float, default=1.0)
-    p.add_argument("--sr-target-imgsz", type=int, default=1280, help="Target resolution for HR reconstruction")
-    p.add_argument("--eval-conf", type=float, default=0.001, help="Confidence threshold for post-training evaluation")
-    p.add_argument("--eval-iou", type=float, default=0.5, help="IoU threshold for post-training evaluation")
-    p.add_argument("--eval-split", default="test", help="Dataset split for post-training evaluation")
+    p.add_argument("--sr-lambda", type=float, default=0.5, help="Auxiliary SR loss scale (default 0.5)")
+    p.add_argument("--sr-target-imgsz", type=int, default=640, help="Target resolution for HR reconstruction")
+    p.add_argument("--cls", type=float, default=None, help="Optional class loss gain override (e.g. 1.5)")
+    p.add_argument("--box", type=float, default=None, help="Optional box loss gain override (e.g. 5.0)")
+    p.add_argument("--dfl", type=float, default=None, help="Optional DFL loss gain override")
+    p.add_argument("--eval-conf", type=float, default=0.001, help="Confidence threshold for evaluation")
+    p.add_argument("--eval-iou", type=float, default=0.5, help="IoU threshold for evaluation")
+    p.add_argument("--eval-split", default="test", help="Evaluation dataset split")
     p.add_argument("--device", default="0")
     p.add_argument("--workers", type=int, default=8)
     return p.parse_args()
 
 
 def evaluate_and_save(trainer, args):
-    """
-    Re-saves a clean checkpoint, evaluates it under the project's standard
-    protocol, and writes the results JSON.
-    """
-    import json
-    import time
-
     CLASS_NAMES = ["Capacitor", "Connector", "Electrolytic Capacitor", "IC"]
     results_dir = Path("/mnt/weka/etadevosyan/pcb-yolo/results")
 
@@ -263,7 +284,6 @@ def evaluate_and_save(trainer, args):
     clean = YOLO(str(clean_weights_path))
     print(f"Loaded clean checkpoint from: {clean_weights_path}")
 
-    # Evaluate under the specified protocol
     metrics = clean.val(
         data=args.data,
         split=args.eval_split,
@@ -326,7 +346,7 @@ def main():
     SRDetectionTrainer.sr_target_imgsz = args.sr_target_imgsz
 
     overrides = dict(
-        model="yolo26s.pt",
+        model=args.weights,
         data=args.data,
         epochs=args.epochs,
         imgsz=args.imgsz,
@@ -339,7 +359,7 @@ def main():
         name="pcb-filtered",
         exist_ok=True,
         val=True,
-        # Enforce spatial 1-to-1 pixel alignment with the HR target:
+        # Preserve exact pixel alignment for SR pairs:
         mosaic=0.0,
         mixup=0.0,
         degrees=0.0,
@@ -350,6 +370,14 @@ def main():
         fliplr=0.0,
         flipud=0.0,
     )
+
+    if args.cls is not None:
+        overrides["cls"] = args.cls
+    if args.box is not None:
+        overrides["box"] = args.box
+    if args.dfl is not None:
+        overrides["dfl"] = args.dfl
+
     trainer = SRDetectionTrainer(overrides=overrides)
     trainer.train()
     print("Training finished. Run saved to:", trainer.save_dir)
@@ -359,4 +387,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
