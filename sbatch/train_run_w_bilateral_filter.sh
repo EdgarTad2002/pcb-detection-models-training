@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=run_u_physics_spectral
+#SBATCH --job-name=run_w_bilateral
 #SBATCH --partition=research
 #SBATCH --mem=32G
 #SBATCH --cpus-per-task=8
@@ -16,32 +16,27 @@ conda activate /mnt/weka/etadevosyan/.conda/envs/pcb-yolo
 
 cd /mnt/weka/etadevosyan/pcb-yolo/pcb-detection-models-training
 
-# 1. Ensure laboratory optical contrast priors are computed
-if [ ! -f "data/pcb_spectral_priors.json" ]; then
-    python tools/extract_pcb_vision_spectrum.py --output data/pcb_spectral_priors.json
-fi
-
-# 2. Configure alpha parameter (pass as $1, defaults to 0.0)
-ALPHA="${1:-0.0}"
-
-if [ "$ALPHA" == "0.0" ] || [ "$ALPHA" == "0" ]; then
-    RUN_KEY="yolov26s_physics_spectral_640"
-else
-    RUN_KEY="yolov26s_physics_spectral_a${ALPHA}_640"
-fi
-
 echo "=========================================================="
-echo "Running Physics-Spectral YOLO26s with alpha = $ALPHA"
-echo "Run Key: $RUN_KEY"
+echo "Running Run W: Bilateral Edge-Preserving Filter on YOLO26s"
+echo "Filter Parameters: d=5, sigmaColor=75, sigmaSpace=75"
+echo "Dataset: datasets/pcb-bilateral-640"
+echo "Direct Baseline Comparison: yolov26s (51.68% mAP@0.5)"
 echo "=========================================================="
 
-# 3. Run U: Physics-Informed Spectral YOLO26s
-python physics_spectral_yolo26.py \
-    --run-key "$RUN_KEY" \
-    --alpha "$ALPHA" \
+# 1. Build bilateral dataset if not already present
+if [ ! -f "datasets/pcb-bilateral-640/data.yaml" ]; then
+    echo "Generating bilateral-filtered dataset from datasets/pcb-filtered-yolov8..."
+    python tools/build_bilateral_dataset.py \
+        --source datasets/pcb-filtered-yolov8 \
+        --dest datasets/pcb-bilateral-640 \
+        --workers 8
+fi
+
+# 2. Train standard YOLO26s (100% matched hyperparameters to baseline)
+python train.py \
+    --run-key yolov26s_bilateral_filter_640 \
     --weights yolo26s.pt \
-    --data datasets/pcb-filtered-yolov8/data.yaml \
-    --priors-path data/pcb_spectral_priors.json \
+    --data datasets/pcb-bilateral-640/data.yaml \
     --project-root /mnt/weka/etadevosyan/pcb-yolo/pcb-detection-models-training \
     --results-dir /mnt/weka/etadevosyan/pcb-yolo/results \
     --epochs 100 --imgsz 640 --batch 16 --workers 8 \

@@ -146,7 +146,7 @@ def build_train_kwargs(args, data_yaml):
         project=str(args.project_root / "runs" / args.run_key),
         name="pcb-filtered",
         exist_ok=True,
-        pretrained=not args.no_pretrained,
+        pretrained=args.pretrained_weights if args.pretrained_weights else (not args.no_pretrained),
         optimizer=args.optimizer,
         verbose=True,
         device=args.device,

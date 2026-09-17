@@ -46,9 +46,10 @@ class PhysicsSpectralReconstructor(nn.Module):
     circuit board materials.
     """
 
-    def __init__(self, priors_path="data/pcb_spectral_priors.json"):
+    def __init__(self, priors_path="data/pcb_spectral_priors.json", alpha=0.0):
         super().__init__()
         self.num_bands = 31
+        self.alpha = float(alpha)
         self.spectral_conv = nn.Sequential(
             nn.Conv2d(3, 31, kernel_size=3, padding=1, bias=False),
             nn.BatchNorm2d(31),
@@ -57,14 +58,20 @@ class PhysicsSpectralReconstructor(nn.Module):
             nn.BatchNorm2d(31),
             nn.Sigmoid(),
         )
-        self._init_from_priors(priors_path)
+        self._init_from_priors(priors_path, alpha=self.alpha)
 
-    def _init_from_priors(self, priors_path):
+    def _init_from_priors(self, priors_path, alpha=0.0):
         priors_file = Path(priors_path)
         if priors_file.exists():
             with open(priors_file, "r") as f:
                 priors = json.load(f)
             weights = torch.tensor(priors["normalized_contrast_weights"], dtype=torch.float32)
+            if alpha > 0.0:
+                # Information-theoretic entropy-weighted contrast modulation:
+                # W(lambda; alpha) = C(lambda) * [1 + alpha * ln(1 + C(lambda))]
+                c_scaled = weights * 31.0
+                weights = weights * (1.0 + alpha * torch.log(1.0 + c_scaled))
+                weights = weights / weights.sum()
         else:
             weights = torch.ones(31) / 31.0
 
@@ -97,28 +104,33 @@ class PhysicsSpectralInputBlock(nn.Module):
     where capacitors are physically most distinct from the substrate.
     """
 
-    def __init__(self, orig_conv, priors_path="data/pcb_spectral_priors.json"):
+    def __init__(self, orig_conv, priors_path="data/pcb_spectral_priors.json", alpha=0.0):
         super().__init__()
         self.orig_conv = orig_conv
         self.f = getattr(orig_conv, "f", -1)
         self.i = getattr(orig_conv, "i", 0)
         self.type = getattr(orig_conv, "type", "Conv")
+        self.alpha = float(alpha)
 
-        self.spectral_net = PhysicsSpectralReconstructor(priors_path=priors_path)
+        self.spectral_net = PhysicsSpectralReconstructor(priors_path=priors_path, alpha=self.alpha)
         self.adapter = nn.Sequential(
             nn.Conv2d(31, 16, kernel_size=1, bias=False),
             nn.BatchNorm2d(16),
             nn.SiLU(inplace=True),
             nn.Conv2d(16, 3, kernel_size=1, bias=False),
         )
-        self._init_adapter_weights(priors_path)
+        self._init_adapter_weights(priors_path, alpha=self.alpha)
 
-    def _init_adapter_weights(self, priors_path):
+    def _init_adapter_weights(self, priors_path, alpha=0.0):
         priors_file = Path(priors_path)
         if priors_file.exists():
             with open(priors_file, "r") as f:
                 priors = json.load(f)
             weights = torch.tensor(priors["normalized_contrast_weights"], dtype=torch.float32)
+            if alpha > 0.0:
+                c_scaled = weights * 31.0
+                weights = weights * (1.0 + alpha * torch.log(1.0 + c_scaled))
+                weights = weights / weights.sum()
         else:
             weights = torch.ones(31) / 31.0
 
@@ -143,11 +155,12 @@ class PhysicsSpectralInputBlock(nn.Module):
 # ---------------------------------------------------------------------------
 class PhysicsSpectralDetectionTrainer(DetectionTrainer):
     priors_path = "data/pcb_spectral_priors.json"
+    alpha = 0.0
 
     def get_model(self, cfg=None, weights=None, verbose=True):
         model = super().get_model(cfg, weights, verbose)
-        print("Injecting PhysicsSpectralInputBlock (PCB-Vision calibrated priors) into Layer 0...")
-        model.model[0] = PhysicsSpectralInputBlock(model.model[0], priors_path=self.priors_path)
+        print(f"Injecting PhysicsSpectralInputBlock (alpha={self.alpha}, PCB-Vision calibrated priors) into Layer 0...")
+        model.model[0] = PhysicsSpectralInputBlock(model.model[0], priors_path=self.priors_path, alpha=self.alpha)
         return model
 
 
@@ -170,6 +183,7 @@ def parse_args():
     p.add_argument("--eval-conf", type=float, default=0.001)
     p.add_argument("--eval-iou", type=float, default=0.5)
     p.add_argument("--eval-split", default="test")
+    p.add_argument("--alpha", type=float, default=0.0, help="Entropy-weighted contrast parameter alpha (0.0 = baseline contrast).")
     p.add_argument("--skip-train", action="store_true")
     return p.parse_args()
 
@@ -208,6 +222,7 @@ def evaluate_and_save(weights_path, args):
         "total_time_ms": float(total_time_ms),
         "fps": float(fps),
         "per_class_ap50": per_class_ap,
+        "alpha": float(args.alpha),
         "eval_conf": args.eval_conf,
         "eval_iou": args.eval_iou,
         "eval_split": args.eval_split,
@@ -235,6 +250,7 @@ def evaluate_and_save(weights_path, args):
 def main():
     args = parse_args()
     PhysicsSpectralDetectionTrainer.priors_path = args.priors_path
+    PhysicsSpectralDetectionTrainer.alpha = args.alpha
     run_dir = args.project_root / "runs" / args.run_key / "pcb-filtered"
     weights_path = run_dir / "weights" / "best.pt"
 
