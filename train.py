@@ -189,8 +189,15 @@ def build_train_kwargs(args, data_yaml):
     return kwargs
 
 
+def load_model(weights_or_yaml):
+    if "rtdetr" in str(weights_or_yaml).lower():
+        from ultralytics import RTDETR
+        return RTDETR(str(weights_or_yaml))
+    return YOLO(str(weights_or_yaml))
+
+
 def evaluate(weights_path, args, data_yaml):
-    model = YOLO(str(weights_path))
+    model = load_model(str(weights_path))
 
     metrics = model.val(
         data=str(data_yaml),
@@ -254,7 +261,7 @@ def main():
         print(f"Data: {data_yaml}")
         print("=" * 70)
 
-        model = YOLO(args.weights)
+        model = load_model(args.weights)
         if args.pretrained_weights:
             print(f"Loading/transferring pretrained weights from: {args.pretrained_weights}")
             model.load(args.pretrained_weights)

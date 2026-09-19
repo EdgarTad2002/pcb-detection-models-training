@@ -25,12 +25,21 @@ results/
 slurm_*.out
 printed-circuit-board-3/
 
-REPOSITORY_OVERVIEW.md
-
 comparison_table.csv
 comparison_table.xlsx
-comparison_table.md
 
-presentation.tex
+# Presentation assets, bundles, and LaTeX sources
+presentation_assets/
+overleaf_bundle/
+*.tex
+**/*.tex
+
+# Markdown files (except project README)
+*.md
+**/*.md
+!README.md
+!**/README.md
+!readme.md
+!**/readme.md
 
 tools/remote_*.sh

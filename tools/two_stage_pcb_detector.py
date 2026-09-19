@@ -21,7 +21,7 @@ Usage:
 """
 
 import argparse
-import os
+import sys
 import urllib.request
 from pathlib import Path
 
@@ -29,6 +29,15 @@ import cv2
 import numpy as np
 import torch
 from ultralytics import YOLO
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+try:
+    from tools.sahi_pcb_inference import sahi_predict
+except ImportError:
+    from sahi_pcb_inference import sahi_predict
 
 DEFAULT_OBB_URL = "https://huggingface.co/SanderGi/PCB-OBB/resolve/main/best.pt?download=true"
 
@@ -111,11 +120,19 @@ class TwoStagePCBDetector:
         obb_conf: float = 0.25,
         comp_conf: float = 0.10,
         pad_ratio: float = 0.15,
+        use_sahi: bool = False,
+        slice_size: int = 480,
+        overlap_ratio: float = 0.25,
+        nms_type: str = "diou",
     ):
         self.device = device
         self.obb_conf = obb_conf
         self.comp_conf = comp_conf
         self.pad_ratio = pad_ratio
+        self.use_sahi = use_sahi
+        self.slice_size = slice_size
+        self.overlap_ratio = overlap_ratio
+        self.nms_type = nms_type
 
         print(f"Loading Stage 1 OBB model: {obb_weights}")
         self.obb_model = YOLO(obb_weights)
@@ -171,8 +188,28 @@ class TwoStagePCBDetector:
 
     def detect_components(self, rectified_img: np.ndarray):
         """Runs Stage 2: Detects components on rectified board."""
-        res = self.comp_model.predict(rectified_img, conf=self.comp_conf, verbose=False)
-        return res[0]
+        if self.use_sahi:
+            detections = sahi_predict(
+                self.comp_model,
+                rectified_img,
+                slice_height=self.slice_size,
+                slice_width=self.slice_size,
+                overlap_ratio=self.overlap_ratio,
+                conf_threshold=self.comp_conf,
+                nms_type=self.nms_type,
+            )
+            if not detections:
+                return np.zeros((0, 4), dtype=np.float32), np.zeros((0,), dtype=np.float32), np.zeros((0,), dtype=int)
+            boxes_xyxy = np.array([[d[3], d[4], d[5], d[6]] for d in detections], dtype=np.float32)
+            scores = np.array([d[2] for d in detections], dtype=np.float32)
+            clses = np.array([d[0] for d in detections], dtype=int)
+            return boxes_xyxy, scores, clses
+        else:
+            comp_res = self.comp_model.predict(rectified_img, conf=self.comp_conf, verbose=False)[0]
+            boxes_xyxy = comp_res.boxes.xyxy.cpu().numpy()
+            scores = comp_res.boxes.conf.cpu().numpy()
+            clses = comp_res.boxes.cls.cpu().numpy().astype(int)
+            return boxes_xyxy, scores, clses
 
     def reproject_boxes(self, boxes_xyxy: np.ndarray, M_warp: np.ndarray):
         """
@@ -200,11 +237,7 @@ class TwoStagePCBDetector:
     def predict_full_pipeline(self, img_bgr: np.ndarray):
         """Runs complete 2-stage inference pipeline."""
         rect_img, M_warp, corners_orig, angle_deg, obb_conf = self.detect_and_rectify(img_bgr)
-        comp_res = self.detect_components(rect_img)
-
-        boxes_xyxy = comp_res.boxes.xyxy.cpu().numpy()
-        scores = comp_res.boxes.conf.cpu().numpy()
-        clses = comp_res.boxes.cls.cpu().numpy().astype(int)
+        boxes_xyxy, scores, clses = self.detect_components(rect_img)
 
         reprojected_polys = self.reproject_boxes(boxes_xyxy, M_warp)
 
@@ -329,6 +362,16 @@ def main():
     )
     p.add_argument("--obb-conf", type=float, default=0.25, help="Stage 1 confidence threshold")
     p.add_argument("--comp-conf", type=float, default=0.15, help="Stage 2 confidence threshold")
+    p.add_argument("--use-sahi", action="store_true", help="Enable SAHI Hyper-Inference for micro-components")
+    p.add_argument("--slice-size", type=int, default=480, help="SAHI tile window size (pixels)")
+    p.add_argument("--overlap", type=float, default=0.25, help="SAHI tile overlap ratio")
+    p.add_argument(
+        "--nms-type",
+        type=str,
+        choices=["diou", "soft", "hard"],
+        default="diou",
+        help="NMS algorithm for component detection (diou: Distance-IoU NMS for touching components, soft: Soft-NMS, hard: Standard NMS)",
+    )
     p.add_argument("--out-dir", type=str, default="runs/two_stage_demo", help="Output directory")
     args = p.parse_args()
 
@@ -338,6 +381,10 @@ def main():
         comp_weights=args.comp_weights,
         obb_conf=args.obb_conf,
         comp_conf=args.comp_conf,
+        use_sahi=args.use_sahi,
+        slice_size=args.slice_size,
+        overlap_ratio=args.overlap,
+        nms_type=args.nms_type,
     )
 
     source_path = Path(args.source)

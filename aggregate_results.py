@@ -49,9 +49,12 @@ def main():
     for jf in json_files:
         with open(jf) as f:
             data = json.load(f)
+        if "model" not in data or "mAP50" not in data:
+            continue
         row = {k: v for k, v in data.items() if k != "per_class_ap50"}
         for cls, ap in data.get("per_class_ap50", {}).items():
-            row[f"AP50_{cls.replace(' ', '_')}"] = ap
+            if isinstance(ap, (int, float)):
+                row[f"AP50_{cls.replace(' ', '_')}"] = ap
         rows.append(row)
 
     df = pd.DataFrame(rows)
