@@ -19,7 +19,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from tools.sahi_pcb_inference import EVAL_CLASSES, get_color
+from tools.sahi_pcb_inference import EVAL_CLASSES, UNIFIED_CLASSES, NAME_TO_UNIFIED_ID, get_color, parse_label_file
 from tools.eval_tta_benchmark import predict_with_tta, draw_bounding_boxes
 from tools.eval_unified_pipeline import unified_predict
 
@@ -32,24 +32,8 @@ def generate_comparisons():
     rgb = cv2.cvtColor(raw_bgr, cv2.COLOR_BGR2RGB)
     h, w = rgb.shape[:2]
 
-    # 1. Load Ground Truth
-    gt_boxes = []
-    with open(lbl_path) as f:
-        for line in f:
-            parts = line.strip().split()
-            if len(parts) >= 5:
-                cid = int(parts[0])
-                if cid == 1:
-                    cid = 2
-                if cid in EVAL_CLASSES:
-                    cx, cy, bw, bh = map(float, parts[1:5])
-                    x1 = int((cx - bw / 2) * w)
-                    y1 = int((cy - bh / 2) * h)
-                    x2 = int((cx + bw / 2) * w)
-                    y2 = int((cy + bh / 2) * h)
-                    cname = EVAL_CLASSES[cid]
-                    gt_boxes.append((cid, cname, x1, y1, x2, y2))
-
+    # 1. Load Ground Truth via universal parser
+    gt_boxes = parse_label_file(lbl_path, w, h)
     print(f"Loaded {len(gt_boxes)} ground-truth annotations.")
 
     def draw_gt(img, boxes):
@@ -87,11 +71,13 @@ def generate_comparisons():
     res_base = model.predict(raw_bgr, imgsz=640, conf=0.15, verbose=False)[0]
     base_boxes_tta = []
     for b in res_base.boxes:
-        cid = int(b.cls[0])
-        if cid in EVAL_CLASSES:
+        raw_cid = int(b.cls[0])
+        raw_name = model.names.get(raw_cid, f"Class_{raw_cid}")
+        cid = NAME_TO_UNIFIED_ID.get(raw_name)
+        if cid is not None:
             sc = float(b.conf[0])
             bx1, by1, bx2, by2 = map(int, b.xyxy[0].tolist())
-            cname = EVAL_CLASSES[cid]
+            cname = UNIFIED_CLASSES[cid]
             base_boxes_tta.append((cid, cname, sc, bx1, by1, bx2, by2))
 
     tta_boxes = predict_with_tta(
@@ -103,8 +89,14 @@ def generate_comparisons():
         iou_threshold=0.45,
         nms_type="diou",
     )
-    # Filter TTA to eval classes
-    tta_boxes = [b for b in tta_boxes if b[0] in EVAL_CLASSES]
+    # Normalize TTA predictions
+    norm_tta_boxes = []
+    for b in tta_boxes:
+        cid, cname, sc, bx1, by1, bx2, by2 = b
+        u_cid = NAME_TO_UNIFIED_ID.get(cname)
+        if u_cid is not None:
+            norm_tta_boxes.append((u_cid, UNIFIED_CLASSES[u_cid], sc, bx1, by1, bx2, by2))
+    tta_boxes = norm_tta_boxes
 
     vis_base_tta = draw_pred(rgb, base_boxes_tta)
     vis_tta = draw_pred(rgb, tta_boxes)
@@ -134,11 +126,13 @@ def generate_comparisons():
     res_base_unified = model.predict(raw_bgr, imgsz=640, conf=0.25, verbose=False)[0]
     base_boxes_uni = []
     for b in res_base_unified.boxes:
-        cid = int(b.cls[0])
-        if cid in EVAL_CLASSES:
+        raw_cid = int(b.cls[0])
+        raw_name = model.names.get(raw_cid, f"Class_{raw_cid}")
+        cid = NAME_TO_UNIFIED_ID.get(raw_name)
+        if cid is not None:
             sc = float(b.conf[0])
             bx1, by1, bx2, by2 = map(int, b.xyxy[0].tolist())
-            cname = EVAL_CLASSES[cid]
+            cname = UNIFIED_CLASSES[cid]
             base_boxes_uni.append((cid, cname, sc, bx1, by1, bx2, by2))
 
     unified_boxes = unified_predict(
@@ -151,7 +145,13 @@ def generate_comparisons():
         iou_threshold=0.45,
         imgsz=640,
     )
-    unified_boxes = [b for b in unified_boxes if b[0] in EVAL_CLASSES]
+    norm_uni_boxes = []
+    for b in unified_boxes:
+        cid, cname, sc, bx1, by1, bx2, by2 = b
+        u_cid = NAME_TO_UNIFIED_ID.get(cname)
+        if u_cid is not None:
+            norm_uni_boxes.append((u_cid, UNIFIED_CLASSES[u_cid], sc, bx1, by1, bx2, by2))
+    unified_boxes = norm_uni_boxes
 
     vis_base_uni = draw_pred(rgb, base_boxes_uni)
     vis_uni = draw_pred(rgb, unified_boxes)

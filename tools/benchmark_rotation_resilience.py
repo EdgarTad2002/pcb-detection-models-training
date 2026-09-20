@@ -49,22 +49,15 @@ def compute_iou_polygon(poly1: np.ndarray, poly2: np.ndarray) -> float:
     return inter_area / union_area
 
 
+from tools.sahi_pcb_inference import parse_label_file, NAME_TO_UNIFIED_ID, UNIFIED_CLASSES
+
+
 def load_ground_truth(label_file: Path, img_w: int, img_h: int):
-    """Loads YOLO format labels into bounding boxes [cls, x1, y1, x2, y2]."""
+    """Loads YOLO format labels into bounding boxes [cls, polygon]."""
     boxes = []
-    if not label_file.exists():
-        return boxes
-    with open(label_file) as f:
-        for line in f:
-            parts = line.strip().split()
-            if len(parts) >= 5:
-                cls_id = int(parts[0])
-                xc, yc, w, h = map(float, parts[1:5])
-                x1 = (xc - w / 2) * img_w
-                y1 = (yc - h / 2) * img_h
-                x2 = (xc + w / 2) * img_w
-                y2 = (yc + h / 2) * img_h
-                boxes.append((cls_id, np.array([[x1, y1], [x2, y1], [x2, y2], [x1, y2]], dtype=np.float32)))
+    parsed = parse_label_file(label_file, img_w, img_h)
+    for norm_cid, cname, x1, y1, x2, y2 in parsed:
+        boxes.append((norm_cid, np.array([[x1, y1], [x2, y1], [x2, y2], [x1, y2]], dtype=np.float32)))
     return boxes
 
 
@@ -183,7 +176,7 @@ def main():
             res_ss = single_model.predict(rot_img, conf=0.15, verbose=False)[0]
             boxes_ss = res_ss.boxes.xyxy.cpu().numpy()
             scores_ss = res_ss.boxes.conf.cpu().numpy()
-            clses_ss = res_ss.boxes.cls.cpu().numpy().astype(int)
+            clses_ss = [NAME_TO_UNIFIED_ID.get(single_model.names.get(int(c), ""), -1) for c in res_ss.boxes.cls.cpu().numpy()]
 
             ss_polys = []
             for b in boxes_ss:
@@ -197,9 +190,11 @@ def main():
 
             # 2. Two-Stage Evaluation (OBB Rectification + Inverse Projection)
             pipe_res = detector.predict_full_pipeline(rot_img)
+            ts_names = [detector.comp_detector.model.names.get(int(c), "") if hasattr(detector.comp_detector, 'model') else "" for c in pipe_res["comp_classes"]]
+            clses_ts = [NAME_TO_UNIFIED_ID.get(n, int(c)) for n, c in zip(ts_names, pipe_res["comp_classes"])]
             p_ts, r_ts, f1_ts = evaluate_detections(
                 pipe_res["comp_polys_original"],
-                pipe_res["comp_classes"],
+                clses_ts,
                 pipe_res["comp_scores"],
                 rot_gt,
             )

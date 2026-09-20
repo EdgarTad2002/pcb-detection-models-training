@@ -34,7 +34,19 @@ import torch
 import torchvision
 from ultralytics import YOLO
 
-EVAL_CLASSES = {2: "Capacitor", 4: "Connector", 7: "Electrolytic Capacitor", 9: "IC"}
+EVAL_CLASSES = {0: "Capacitor", 1: "Connector", 2: "Electrolytic Capacitor", 3: "IC"}
+UNIFIED_CLASSES = EVAL_CLASSES
+LEGACY_EVAL_CLASSES = {2: "Capacitor", 4: "Connector", 7: "Electrolytic Capacitor", 9: "IC"}
+
+NAME_TO_UNIFIED_ID = {
+    "Capacitor": 0,
+    "Capacitor Jumper": 0,
+    "Connector": 1,
+    "Electrolytic Capacitor": 2,
+    "IC": 3,
+    "iC": 3,
+}
+
 CLASS_COLORS = {
     "Capacitor": (0, 220, 255),               # Cyan
     "Connector": (255, 190, 0),               # Gold
@@ -46,6 +58,59 @@ CLASS_COLORS = {
 
 def get_color(cls_name: str) -> Tuple[int, int, int]:
     return CLASS_COLORS.get(cls_name, CLASS_COLORS["Other"])
+
+
+def parse_label_file(label_path, img_w: int, img_h: int) -> list:
+    """
+    Loads YOLO format label file, auto-detecting Unified 4-Class vs Legacy 23-Class format.
+    Returns: list of (norm_cid, cname, x1, y1, x2, y2)
+    """
+    label_path = Path(label_path)
+    boxes = []
+    if not label_path.exists():
+        return boxes
+    raw_lines = []
+    with open(label_path) as f:
+        for line in f:
+            parts = line.strip().split()
+            if len(parts) >= 5:
+                raw_lines.append((int(parts[0]), [float(x) for x in parts[1:5]]))
+    if not raw_lines:
+        return boxes
+
+    # If any class index is >= 4, it is definitely a Legacy 23-class file
+    is_legacy = any(cid >= 4 for cid, _ in raw_lines)
+
+    for cid, (cx, cy, bw, bh) in raw_lines:
+        x1 = int((cx - bw / 2) * img_w)
+        y1 = int((cy - bh / 2) * img_h)
+        x2 = int((cx + bw / 2) * img_w)
+        y2 = int((cy + bh / 2) * img_h)
+
+        if is_legacy:
+            if cid in (1, 2):
+                norm_cid = 0
+                cname = "Capacitor"
+            elif cid == 4:
+                norm_cid = 1
+                cname = "Connector"
+            elif cid == 7:
+                norm_cid = 2
+                cname = "Electrolytic Capacitor"
+            elif cid in (9, 22):
+                norm_cid = 3
+                cname = "IC"
+            else:
+                continue
+        else:
+            if cid in UNIFIED_CLASSES:
+                norm_cid = cid
+                cname = UNIFIED_CLASSES[cid]
+            else:
+                continue
+
+        boxes.append((norm_cid, cname, x1, y1, x2, y2))
+    return boxes
 
 
 def diou_nms(
@@ -300,17 +365,16 @@ def draw_detections(img_bgr: np.ndarray, detections: list, filter_eval_only: boo
     canvas = img_bgr.copy()
     for d in detections:
         cls_id, cls_name, score, x1, y1, x2, y2 = d
+        canonical_name = "Capacitor" if cls_name in ("Capacitor", "Capacitor Jumper") else cls_name
         if filter_eval_only:
-            effective_id = 2 if cls_id == 1 else cls_id
-            effective_name = "Capacitor" if cls_name == "Capacitor Jumper" else cls_name
-            if effective_id not in EVAL_CLASSES and effective_name not in EVAL_CLASSES.values():
+            if canonical_name not in UNIFIED_CLASSES.values():
                 continue
 
-        color = get_color(cls_name)
+        color = get_color(canonical_name)
         cv2.rectangle(canvas, (x1, y1), (x2, y2), color, 2)
 
         # Label tag
-        label = f"{cls_name[:3]}:{score:.2f}"
+        label = f"{canonical_name[:3]}:{score:.2f}"
         (tw, th), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.4, 1)
         y_label = max(y1 - 4, th + 4)
         cv2.rectangle(canvas, (x1, y_label - th - 2), (x1 + tw + 2, y_label + 2), color, -1)
@@ -443,9 +507,9 @@ def evaluate_sahi_benchmark(
     print(f"📊 Running mAP50 Benchmark Evaluation across {len(images)} PCB samples...")
     print(f"   Conf threshold: {conf_thresh}, IoU threshold: {iou_thresh}, Slice: {slice_size}px (overlap={int(overlap*100)}%)")
 
-    gts = {c: [] for c in EVAL_CLASSES}
-    preds_std = {c: [] for c in EVAL_CLASSES}
-    preds_sahi = {c: [] for c in EVAL_CLASSES}
+    gts = {c: [] for c in UNIFIED_CLASSES}
+    preds_std = {c: [] for c in UNIFIED_CLASSES}
+    preds_sahi = {c: [] for c in UNIFIED_CLASSES}
 
     for img_id, img_path in enumerate(images):
         raw = cv2.imread(img_path)
@@ -453,27 +517,19 @@ def evaluate_sahi_benchmark(
             continue
         h, w = raw.shape[:2]
 
-        # 1. Load GT
+        # 1. Load GT via universal parser
         lbl_file = lbl_dir / (Path(img_path).stem + ".txt")
-        if lbl_file.exists():
-            with open(lbl_file) as f:
-                for line in f:
-                    parts = line.strip().split()
-                    if len(parts) >= 5:
-                        cid = int(parts[0])
-                        if cid in EVAL_CLASSES:
-                            cx, cy, bw, bh = map(float, parts[1:5])
-                            x1 = (cx - bw / 2) * w
-                            y1 = (cy - bh / 2) * h
-                            x2 = (cx + bw / 2) * w
-                            y2 = (cy + bh / 2) * h
-                            gts[cid].append((img_id, x1, y1, x2, y2))
+        gt_boxes = parse_label_file(lbl_file, w, h)
+        for cid, cname, x1, y1, x2, y2 in gt_boxes:
+            gts[cid].append((img_id, x1, y1, x2, y2))
 
         # 2. Standard YOLO
         res_std = model.predict(raw, imgsz=imgsz, conf=conf_thresh, verbose=False)[0]
         for b in res_std.boxes:
-            cid = int(b.cls[0])
-            if cid in EVAL_CLASSES:
+            raw_cid = int(b.cls[0])
+            raw_name = model.names.get(raw_cid, f"Class_{raw_cid}")
+            cid = NAME_TO_UNIFIED_ID.get(raw_name)
+            if cid is not None:
                 sc = float(b.conf[0])
                 bx1, by1, bx2, by2 = b.xyxy[0].tolist()
                 preds_std[cid].append((img_id, sc, bx1, by1, bx2, by2))
@@ -489,8 +545,9 @@ def evaluate_sahi_benchmark(
             iou_threshold=0.45,
             include_full_image=True,
         )
-        for cid, cname, sc, bx1, by1, bx2, by2 in s_dets:
-            if cid in EVAL_CLASSES:
+        for _, cname, sc, bx1, by1, bx2, by2 in s_dets:
+            cid = NAME_TO_UNIFIED_ID.get(cname)
+            if cid is not None:
                 preds_sahi[cid].append((img_id, sc, bx1, by1, bx2, by2))
 
     # Compute metrics

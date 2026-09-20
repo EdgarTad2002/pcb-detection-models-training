@@ -39,6 +39,9 @@ from tools.sahi_pcb_inference import (
     compute_ap,
     sahi_predict,
     EVAL_CLASSES,
+    UNIFIED_CLASSES,
+    NAME_TO_UNIFIED_ID,
+    parse_label_file,
     get_color
 )
 RAW_CLASSES = [
@@ -197,29 +200,21 @@ def run_tta_benchmark(
             continue
         h, w = raw.shape[:2]
 
-        # Load GT
+        # Load GT via parse_label_file
         lbl_file = lbl_dir / (Path(img_path).stem + ".txt")
-        if lbl_file.exists():
-            with open(lbl_file) as f:
-                for line in f:
-                    parts = line.strip().split()
-                    if len(parts) >= 5:
-                        cid = int(parts[0])
-                        if cid in EVAL_CLASSES:
-                            cx, cy, bw, bh = map(float, parts[1:5])
-                            x1 = (cx - bw / 2) * w
-                            y1 = (cy - bh / 2) * h
-                            x2 = (cx + bw / 2) * w
-                            y2 = (cy + bh / 2) * h
-                            gts[cid].append((img_id, x1, y1, x2, y2))
+        gt_boxes = parse_label_file(lbl_file, w, h)
+        for cid, cname, x1, y1, x2, y2 in gt_boxes:
+            gts[cid].append((img_id, x1, y1, x2, y2))
 
         # 1. Baseline Standard YOLO (Single scale 640px)
         t0 = time.time()
         res = model.predict(raw, imgsz=640, conf=conf_thresh, verbose=False)[0]
         time_baseline += (time.time() - t0)
         for b in res.boxes:
-            cid = int(b.cls[0])
-            if cid in EVAL_CLASSES:
+            raw_cid = int(b.cls[0])
+            raw_name = model.names.get(raw_cid, f"Class_{raw_cid}")
+            cid = NAME_TO_UNIFIED_ID.get(raw_name)
+            if cid is not None:
                 sc = float(b.conf[0])
                 bx1, by1, bx2, by2 = b.xyxy[0].tolist()
                 preds_baseline[cid].append((img_id, sc, bx1, by1, bx2, by2))
@@ -236,8 +231,9 @@ def run_tta_benchmark(
             nms_type="diou",
         )
         time_tta += (time.time() - t0)
-        for cid, cname, sc, bx1, by1, bx2, by2 in dets_tta:
-            if cid in EVAL_CLASSES:
+        for _, cname, sc, bx1, by1, bx2, by2 in dets_tta:
+            cid = NAME_TO_UNIFIED_ID.get(cname)
+            if cid is not None:
                 preds_tta[cid].append((img_id, sc, bx1, by1, bx2, by2))
 
     # Compute PASCAL VOC / COCO AP50

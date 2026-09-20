@@ -31,6 +31,9 @@ if str(PROJECT_ROOT) not in sys.path:
 from tools.sahi_pcb_inference import (
     sahi_predict,
     EVAL_CLASSES,
+    UNIFIED_CLASSES,
+    NAME_TO_UNIFIED_ID,
+    parse_label_file,
     CLASS_COLORS,
     get_color
 )
@@ -139,20 +142,11 @@ def calibrate_thresholds(
         h, w = raw.shape[:2]
 
         # Load GT
+        # Load GT via parse_label_file
         lbl_file = lbl_dir / (Path(img_path).stem + ".txt")
-        if lbl_file.exists():
-            with open(lbl_file) as f:
-                for line in f:
-                    parts = line.strip().split()
-                    if len(parts) >= 5:
-                        cid = int(parts[0])
-                        if cid in EVAL_CLASSES:
-                            cx, cy, bw, bh = map(float, parts[1:5])
-                            x1 = int((cx - bw / 2) * w)
-                            y1 = int((cy - bh / 2) * h)
-                            x2 = int((cx + bw / 2) * w)
-                            y2 = int((cy + bh / 2) * h)
-                            gts[cid].append((img_id, x1, y1, x2, y2))
+        gt_boxes = parse_label_file(lbl_file, w, h)
+        for cid, cname, x1, y1, x2, y2 in gt_boxes:
+            gts[cid].append((img_id, x1, y1, x2, y2))
 
         # Infer with low threshold to capture full range [0.01..1.0]
         if use_sahi:
@@ -167,14 +161,16 @@ def calibrate_thresholds(
                 nms_type="diou",
                 include_full_image=True,
             )
-            for cid, cname, sc, bx1, by1, bx2, by2 in dets:
-                if cid in EVAL_CLASSES:
+            for _, cname, sc, bx1, by1, bx2, by2 in dets:
+                cid = NAME_TO_UNIFIED_ID.get(cname)
+                if cid is not None:
                     preds_pool[cid].append((img_id, sc, bx1, by1, bx2, by2))
         else:
             res = model.predict(raw, imgsz=640, conf=0.01, verbose=False)[0]
             for b in res.boxes:
-                cid = int(b.cls[0])
-                if cid in EVAL_CLASSES:
+                raw_name = model.names.get(int(b.cls[0]), "")
+                cid = NAME_TO_UNIFIED_ID.get(raw_name)
+                if cid is not None:
                     sc = float(b.conf[0])
                     bx1, by1, bx2, by2 = map(int, b.xyxy[0].tolist())
                     preds_pool[cid].append((img_id, sc, bx1, by1, bx2, by2))

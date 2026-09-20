@@ -34,6 +34,9 @@ from tools.sahi_pcb_inference import (
     sahi_predict,
     compute_ap,
     EVAL_CLASSES,
+    UNIFIED_CLASSES,
+    NAME_TO_UNIFIED_ID,
+    parse_label_file,
     get_color
 )
 
@@ -99,29 +102,20 @@ def run_sharpening_benchmark(
             continue
         h, w = raw.shape[:2]
 
-        # Load Ground Truth
+        # Load Ground Truth via parse_label_file
         lbl_file = lbl_dir / (Path(img_path).stem + ".txt")
-        if lbl_file.exists():
-            with open(lbl_file) as f:
-                for line in f:
-                    parts = line.strip().split()
-                    if len(parts) >= 5:
-                        cid = int(parts[0])
-                        if cid in EVAL_CLASSES:
-                            cx, cy, bw, bh = map(float, parts[1:5])
-                            x1 = (cx - bw / 2) * w
-                            y1 = (cy - bh / 2) * h
-                            x2 = (cx + bw / 2) * w
-                            y2 = (cy + bh / 2) * h
-                            gts[cid].append((img_id, x1, y1, x2, y2))
+        gt_boxes = parse_label_file(lbl_file, w, h)
+        for cid, cname, x1, y1, x2, y2 in gt_boxes:
+            gts[cid].append((img_id, x1, y1, x2, y2))
 
         # 1. Baseline Raw Image
         t0 = time.time()
         res_raw = model.predict(raw, imgsz=640, conf=conf_thresh, verbose=False)[0]
         t_raw += (time.time() - t0)
         for b in res_raw.boxes:
-            cid = int(b.cls[0])
-            if cid in EVAL_CLASSES:
+            raw_name = model.names.get(int(b.cls[0]), "")
+            cid = NAME_TO_UNIFIED_ID.get(raw_name)
+            if cid is not None:
                 sc = float(b.conf[0])
                 bx1, by1, bx2, by2 = b.xyxy[0].tolist()
                 preds_raw[cid].append((img_id, sc, bx1, by1, bx2, by2))
@@ -132,8 +126,9 @@ def run_sharpening_benchmark(
         res_sharp = model.predict(img_sharp, imgsz=640, conf=conf_thresh, verbose=False)[0]
         t_sharp += (time.time() - t0)
         for b in res_sharp.boxes:
-            cid = int(b.cls[0])
-            if cid in EVAL_CLASSES:
+            raw_name = model.names.get(int(b.cls[0]), "")
+            cid = NAME_TO_UNIFIED_ID.get(raw_name)
+            if cid is not None:
                 sc = float(b.conf[0])
                 bx1, by1, bx2, by2 = b.xyxy[0].tolist()
                 preds_sharp[cid].append((img_id, sc, bx1, by1, bx2, by2))
@@ -144,8 +139,9 @@ def run_sharpening_benchmark(
         res_clahe = model.predict(img_clahe, imgsz=640, conf=conf_thresh, verbose=False)[0]
         t_clahe += (time.time() - t0)
         for b in res_clahe.boxes:
-            cid = int(b.cls[0])
-            if cid in EVAL_CLASSES:
+            raw_name = model.names.get(int(b.cls[0]), "")
+            cid = NAME_TO_UNIFIED_ID.get(raw_name)
+            if cid is not None:
                 sc = float(b.conf[0])
                 bx1, by1, bx2, by2 = b.xyxy[0].tolist()
                 preds_clahe[cid].append((img_id, sc, bx1, by1, bx2, by2))

@@ -35,6 +35,9 @@ from tools.sahi_pcb_inference import (
     batched_diou_nms,
     compute_ap,
     EVAL_CLASSES,
+    UNIFIED_CLASSES,
+    NAME_TO_UNIFIED_ID,
+    parse_label_file,
     get_color
 )
 
@@ -176,11 +179,13 @@ def run_unified_evaluation(
         res_base = model.predict(raw_demo, imgsz=640, conf=0.25, verbose=False)[0]
         base_boxes = []
         for b in res_base.boxes:
-            cid = int(b.cls[0])
-            if cid in EVAL_CLASSES:
+            raw_cid = int(b.cls[0])
+            raw_name = model.names.get(raw_cid, f"Class_{raw_cid}")
+            cid = NAME_TO_UNIFIED_ID.get(raw_name)
+            if cid is not None:
                 sc = float(b.conf[0])
                 bx1, by1, bx2, by2 = map(int, b.xyxy[0].tolist())
-                cname = EVAL_CLASSES[cid]
+                cname = UNIFIED_CLASSES[cid]
                 base_boxes.append((cid, cname, sc, bx1, by1, bx2, by2))
         t_base = time.time() - t0
 
@@ -196,6 +201,13 @@ def run_unified_evaluation(
             iou_threshold=0.45,
             imgsz=640,
         )
+        norm_uni_boxes = []
+        for b in unified_boxes:
+            cid, cname, sc, bx1, by1, bx2, by2 = b
+            u_cid = NAME_TO_UNIFIED_ID.get(cname)
+            if u_cid is not None:
+                norm_uni_boxes.append((u_cid, UNIFIED_CLASSES[u_cid], sc, bx1, by1, bx2, by2))
+        unified_boxes = norm_uni_boxes
         t_unified = time.time() - t0
 
         def draw(img, boxes):
