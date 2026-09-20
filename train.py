@@ -70,7 +70,7 @@ def parse_args():
         "--data",
         type=Path,
         default=None,
-        help="Path to data.yaml. Defaults to <project-root>/datasets/pcb-filtered-yolov8/data.yaml",
+        help="Path to data.yaml. Defaults to pcb-unified-4class/data.yaml (or pcb-filtered-yolov8/data.yaml if unified missing).",
     )
 
     # --- core training hyperparameters ---
@@ -78,7 +78,8 @@ def parse_args():
     p.add_argument("--imgsz", type=int, default=640)
     p.add_argument("--batch", type=int, default=16)
     p.add_argument(
-        "--classes", type=int, nargs="+", default=DEFAULT_CLASSES
+        "--classes", type=int, nargs="+", default=None,
+        help="Explicit class indices to train/val on. Defaults to None (all classes if nc==4, or [2,4,7,9] if legacy 23-class).",
     )
     p.add_argument("--optimizer", default="SGD")
     p.add_argument(
@@ -136,10 +137,9 @@ def parse_args():
     return p.parse_args()
 
 
-def build_train_kwargs(args, data_yaml):
+def build_train_kwargs(args, data_yaml, effective_classes=None):
     kwargs = dict(
         data=str(data_yaml),
-        classes=args.classes,
         epochs=args.epochs,
         imgsz=args.imgsz,
         batch=args.batch,
@@ -158,6 +158,8 @@ def build_train_kwargs(args, data_yaml):
         save_period=args.save_period,
         val=True,
     )
+    if effective_classes is not None:
+        kwargs["classes"] = effective_classes
 
     # Only pass augmentation and loss params the user explicitly set, so everything
     # else falls back to Ultralytics' own defaults rather than us silently
@@ -196,18 +198,21 @@ def load_model(weights_or_yaml):
     return YOLO(str(weights_or_yaml))
 
 
-def evaluate(weights_path, args, data_yaml):
+def evaluate(weights_path, args, data_yaml, effective_classes=None):
     model = load_model(str(weights_path))
 
-    metrics = model.val(
+    val_kwargs = dict(
         data=str(data_yaml),
         split=args.eval_split,
-        classes=args.classes,
         conf=args.eval_conf,
         iou=args.eval_iou,
         imgsz=args.imgsz,
         device=args.device,
     )
+    if effective_classes is not None:
+        val_kwargs["classes"] = effective_classes
+
+    metrics = model.val(**val_kwargs)
 
     speed = metrics.speed
     total_time_ms = (
@@ -246,10 +251,28 @@ def evaluate(weights_path, args, data_yaml):
 def main():
     args = parse_args()
 
-    data_yaml = args.data or (
-        args.project_root / "datasets" / "pcb-filtered-yolov8" / "data.yaml"
-    )
+    if args.data:
+        data_yaml = args.data
+    else:
+        unified_yaml = args.project_root / "datasets" / "pcb-unified-4class" / "data.yaml"
+        if unified_yaml.exists():
+            data_yaml = unified_yaml
+        else:
+            data_yaml = args.project_root / "datasets" / "pcb-filtered-yolov8" / "data.yaml"
     assert data_yaml.exists(), f"data.yaml not found at {data_yaml}"
+
+    # Auto-detect native 4-class vs legacy 23-class
+    import yaml
+    with open(data_yaml) as f:
+        data_cfg = yaml.safe_load(f)
+    nc = data_cfg.get("nc", len(data_cfg.get("names", [])))
+
+    if args.classes is not None:
+        effective_classes = args.classes
+    elif nc == 4:
+        effective_classes = None  # Native 4-class: train on all classes
+    else:
+        effective_classes = DEFAULT_CLASSES  # Legacy 23-class: filter [2, 4, 7, 9]
 
     run_dir = args.project_root / "runs" / args.run_key / "pcb-filtered"
     weights_path = run_dir / "weights" / "best.pt"
@@ -258,14 +281,14 @@ def main():
         print("=" * 70)
         print(f"Training run: {args.run_key}")
         print(f"Weights/config: {args.weights}")
-        print(f"Data: {data_yaml}")
+        print(f"Data: {data_yaml} (nc={nc}, effective_classes={effective_classes})")
         print("=" * 70)
 
         model = load_model(args.weights)
         if args.pretrained_weights:
             print(f"Loading/transferring pretrained weights from: {args.pretrained_weights}")
             model.load(args.pretrained_weights)
-        train_kwargs = build_train_kwargs(args, data_yaml)
+        train_kwargs = build_train_kwargs(args, data_yaml, effective_classes=effective_classes)
         results = model.train(**train_kwargs)
         print("Training finished. Run saved to:", results.save_dir)
     else:
@@ -277,7 +300,7 @@ def main():
     print("\n" + "=" * 70)
     print(f"Evaluating {args.run_key} on '{args.eval_split}' split")
     print("=" * 70)
-    summary = evaluate(weights_path, args, data_yaml)
+    summary = evaluate(weights_path, args, data_yaml, effective_classes=effective_classes)
 
     print("\n--- Overall Metrics ---")
     for k, v in summary.items():
