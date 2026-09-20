@@ -39,6 +39,8 @@ def generate_comparisons():
             parts = line.strip().split()
             if len(parts) >= 5:
                 cid = int(parts[0])
+                if cid == 1:
+                    cid = 2
                 if cid in EVAL_CLASSES:
                     cx, cy, bw, bh = map(float, parts[1:5])
                     x1 = int((cx - bw / 2) * w)

@@ -300,8 +300,11 @@ def draw_detections(img_bgr: np.ndarray, detections: list, filter_eval_only: boo
     canvas = img_bgr.copy()
     for d in detections:
         cls_id, cls_name, score, x1, y1, x2, y2 = d
-        if filter_eval_only and cls_id not in EVAL_CLASSES and cls_name not in EVAL_CLASSES.values():
-            continue
+        if filter_eval_only:
+            effective_id = 2 if cls_id == 1 else cls_id
+            effective_name = "Capacitor" if cls_name == "Capacitor Jumper" else cls_name
+            if effective_id not in EVAL_CLASSES and effective_name not in EVAL_CLASSES.values():
+                continue
 
         color = get_color(cls_name)
         cv2.rectangle(canvas, (x1, y1), (x2, y2), color, 2)
