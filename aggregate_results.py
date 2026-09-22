@@ -49,6 +49,41 @@ def main():
     for jf in json_files:
         with open(jf) as f:
             data = json.load(f)
+        # Handle SAHI benchmark format
+        if "sahi" in data and isinstance(data["sahi"], dict):
+            sahi_data = data["sahi"]
+            model_name = data.get("model", "")
+            if not model_name or model_name == "best":
+                # Deduce clean model name from weights path or filename
+                weights_path = Path(data.get("weights", ""))
+                for p in weights_path.parents:
+                    if p.name not in ("weights", "pcb-filtered", "runs", ""):
+                        model_name = p.name
+                        break
+                if not model_name:
+                    model_name = jf.stem.replace("sahi_benchmark_", "").replace("_test", "")
+
+            slice_sz = data.get("slice_size", 480)
+            sahi_model_key = f"{model_name}_sahi_{slice_sz}"
+            fps_val = sahi_data.get("fps", 0.0)
+            row = {
+                "model": sahi_model_key,
+                "weights": data.get("weights", ""),
+                "imgsz": slice_sz,
+                "mAP50": sahi_data.get("mAP50", 0.0),
+                "mAP50_95": sahi_data.get("mAP50_95", None),
+                "precision": sahi_data.get("precision", 0.0),
+                "recall": sahi_data.get("recall", 0.0),
+                "fps": fps_val,
+                "total_time_ms": (1000.0 / fps_val) if fps_val > 0 else 0.0,
+                "timestamp": data.get("timestamp", ""),
+            }
+            for cls, ap in sahi_data.get("per_class_ap", {}).items():
+                if isinstance(ap, (int, float)):
+                    row[f"AP50_{cls.replace(' ', '_')}"] = ap
+            rows.append(row)
+            continue
+
         if "model" not in data or "mAP50" not in data:
             continue
         row = {k: v for k, v in data.items() if k != "per_class_ap50"}
