@@ -210,10 +210,12 @@ def export_excel(df: pd.DataFrame, out_path: Path):
                     max_len = max(max_len, len(str(cell.value)))
             ws.column_dimensions[col_letter].width = min(max_len + 4, 40)
 
-        wb.save(out_path)
-    except Exception as e:
-        # Fallback to standard pandas to_excel
-        df.to_excel(out_path, index=False)
+    except Exception:
+        try:
+            df.to_excel(out_path, index=False)
+        except Exception:
+            # openpyxl not installed in conda environment; csv and markdown are already saved
+            pass
 
 
 if __name__ == "__main__":

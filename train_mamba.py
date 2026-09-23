@@ -73,6 +73,7 @@ def parse_args():
     p.add_argument("--epochs", type=int, default=100)
     p.add_argument("--imgsz", type=int, default=640)
     p.add_argument("--batch", type=int, default=16)
+    p.add_argument("--grad-accum", type=int, default=1, help="Gradient accumulation steps.")
     p.add_argument("--lr", type=float, default=1e-4)
     p.add_argument("--weight-decay", type=float, default=0.01)
     p.add_argument("--warmup-epochs", type=int, default=3)
@@ -319,7 +320,7 @@ def main():
             return 0.5 * (1.0 + math.cos(math.pi * progress))
 
         scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lr_lambda)
-        scaler = torch.cuda.amp.GradScaler(enabled=(not args.no_amp and device.type == "cuda"))
+        scaler = torch.amp.GradScaler("cuda", enabled=(not args.no_amp and device.type == "cuda"))
 
         best_map = 0.0
 
@@ -331,22 +332,25 @@ def main():
             epoch_box_loss = 0.0
             epoch_ctr_loss = 0.0
 
-            for images, gt_boxes, _ in train_loader:
+            optimizer.zero_grad()
+            for step_idx, (images, gt_boxes, _) in enumerate(train_loader):
                 images = images.to(device)
                 gt_boxes = [g.to(device) for g in gt_boxes]
 
-                optimizer.zero_grad()
-                with torch.cuda.amp.autocast(enabled=(not args.no_amp and device.type == "cuda")):
+                with torch.amp.autocast("cuda", enabled=(not args.no_amp and device.type == "cuda")):
                     loss_dict = model(images, gt_boxes)
-                    loss = loss_dict["loss"]
+                    loss = loss_dict["loss"] / args.grad_accum
 
                 scaler.scale(loss).backward()
-                scaler.unscale_(optimizer)
-                nn.utils.clip_grad_norm_(model.parameters(), max_norm=10.0)
-                scaler.step(optimizer)
-                scaler.update()
 
-                epoch_loss += loss.item()
+                if (step_idx + 1) % args.grad_accum == 0 or (step_idx + 1) == len(train_loader):
+                    scaler.unscale_(optimizer)
+                    nn.utils.clip_grad_norm_(model.parameters(), max_norm=10.0)
+                    scaler.step(optimizer)
+                    scaler.update()
+                    optimizer.zero_grad()
+
+                epoch_loss += loss.item() * args.grad_accum
                 epoch_cls_loss += loss_dict["loss_cls"].item()
                 epoch_box_loss += loss_dict["loss_box"].item()
                 epoch_ctr_loss += loss_dict["loss_ctr"].item()

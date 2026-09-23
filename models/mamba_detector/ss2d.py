@@ -19,6 +19,13 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
+try:
+    import selective_scan_cuda
+    HAS_SELECTIVE_SCAN_CUDA = True
+except ImportError:
+    HAS_SELECTIVE_SCAN_CUDA = False
+
+
 def selective_scan_pure_pytorch(
     u: torch.Tensor,       # (B, D, L)
     delta: torch.Tensor,   # (B, D, L)
@@ -26,43 +33,40 @@ def selective_scan_pure_pytorch(
     B: torch.Tensor,       # (B, N, L)
     C: torch.Tensor,       # (B, N, L)
     D: Optional[torch.Tensor] = None, # (D,)
+    chunk_size: int = 128,
 ) -> torch.Tensor:
     """
-    Pure PyTorch implementation of the selective scan recurrence.
-
-    h_t = exp(delta_t * A) * h_{t-1} + (delta_t * B_t) * u_t
-    y_t = C_t * h_t + D * u_t
+    Memory-efficient chunked PyTorch implementation of selective scan recurrence.
+    Processes sequence in small chunks (chunk_size=128) to prevent allocating
+    gigabytes of intermediate (B, D, L, N) tensors in CUDA VRAM.
     """
     b, d, l = u.shape
     n = A.shape[1]
 
-    # Compute discretized A: exp(delta * A) -> (B, D, L, N)
-    # delta: (B, D, L, 1), A: (1, D, 1, N)
-    delta_A = torch.exp(delta.unsqueeze(-1) * A.view(1, d, 1, n)) # (B, D, L, N)
-
-    # Compute discretized B * u: (delta * u) * B
-    # delta_u: (B, D, L, 1), B: (B, 1, L, N) -> (B, D, L, N)
-    delta_u = (delta * u).unsqueeze(-1)
-    B_expanded = B.transpose(1, 2).unsqueeze(1) # (B, 1, L, N)
-    delta_B_u = delta_u * B_expanded # (B, D, L, N)
-
-    # Recurrence along sequence length L
-    # We maintain hidden state h of shape (B, D, N)
+    A_reshaped = A.view(1, d, 1, n)
     h = torch.zeros(b, d, n, dtype=u.dtype, device=u.device)
-    ys = []
+    y_chunks = []
 
-    C_transposed = C.transpose(1, 2) # (B, L, N)
+    for start in range(0, l, chunk_size):
+        end = min(start + chunk_size, l)
+        u_chunk = u[:, :, start:end]         # (B, D, chunk_len)
+        delta_chunk = delta[:, :, start:end] # (B, D, chunk_len)
+        B_chunk = B[:, :, start:end]         # (B, N, chunk_len)
+        C_chunk = C[:, :, start:end]         # (B, N, chunk_len)
 
-    for t in range(l):
-        # h_t = delta_A_t * h_{t-1} + delta_B_u_t
-        h = delta_A[:, :, t, :] * h + delta_B_u[:, :, t, :]
-        # y_t = sum_n (h_{t, n} * C_{t, n}) -> (B, D)
-        # h: (B, D, N), C_t: (B, 1, N)
-        C_t = C_transposed[:, t:t+1, :] # (B, 1, N)
-        y_t = torch.sum(h * C_t, dim=-1) # (B, D)
-        ys.append(y_t)
+        # Micro-chunk allocation: only (B, D, chunk_len, N) - tiny memory footprint (~10-30 MB)
+        delta_A_chunk = torch.exp(delta_chunk.unsqueeze(-1) * A_reshaped)
+        delta_B_u_chunk = (delta_chunk * u_chunk).unsqueeze(-1) * B_chunk.transpose(1, 2).unsqueeze(1)
+        C_tr_chunk = C_chunk.transpose(1, 2)
 
-    y = torch.stack(ys, dim=-1) # (B, D, L)
+        chunk_len = end - start
+        ys_chunk = []
+        for t in range(chunk_len):
+            h = delta_A_chunk[:, :, t, :] * h + delta_B_u_chunk[:, :, t, :]
+            ys_chunk.append(torch.sum(h * C_tr_chunk[:, t:t+1, :], dim=-1))
+        y_chunks.append(torch.stack(ys_chunk, dim=-1))
+
+    y = torch.cat(y_chunks, dim=-1)
 
     if D is not None:
         y = y + u * D.view(1, d, 1)
