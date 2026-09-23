@@ -53,7 +53,11 @@ def parse_args():
         help="Path to data.yaml. Defaults to datasets/pcb-unified-4class/data.yaml (or pcb-filtered-yolov8/data.yaml).",
     )
     p.add_argument("--pretrained-backbone", type=str, default=None, help="Path to pre-trained VMamba weights.")
-    p.add_argument("--project-root", type=Path, default=Path("."))
+    p.add_argument(
+        "--project-root",
+        type=Path,
+        default=Path(os.environ.get("PCB_PROJECT_ROOT", ".")),
+    )
     p.add_argument(
         "--results-dir",
         type=Path,

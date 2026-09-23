@@ -16,12 +16,23 @@ mkdir -p "$YOLO_CONFIG_DIR"
 source /mnt/weka/shared-cache/miniforge3/etc/profile.d/conda.sh
 conda activate /mnt/weka/etadevosyan/.conda/envs/pcb-yolo
 
-# 3. Navigate to remote workspace
-cd /mnt/weka/etadevosyan/pcb-yolo/pcb-detection-models-training
+# 3. Dedicated Isolated Workspace on Weka
+# By default, uses an isolated folder to prevent touching or overwriting other codes/runs
+WORKSPACE_DIR=${PCB_MAMBA_WORKSPACE:-"/mnt/weka/etadevosyan/pcb-yolo/pcb-mamba-standalone"}
+mkdir -p "$WORKSPACE_DIR"
+cd "$WORKSPACE_DIR"
 
-# 4. Train Standalone VMamba Object Detector (Non-YOLO State Space Model)
+# 4. Link shared datasets if not present in the isolated workspace
+DATASET_SOURCE="/mnt/weka/etadevosyan/pcb-yolo/pcb-detection-models-training/datasets"
+if [ ! -d "datasets" ] && [ -d "$DATASET_SOURCE" ]; then
+    echo "🔗 Symlinking shared PCB datasets from $DATASET_SOURCE..."
+    ln -s "$DATASET_SOURCE" datasets
+fi
+
+# 5. Train Standalone VMamba Object Detector (Non-YOLO State Space Model)
 echo "=========================================================================="
 echo "🚀 Training Standalone VMamba Object Detector on NVIDIA H100 (YSU Cluster)"
+echo "   Workspace: $WORKSPACE_DIR"
 echo "=========================================================================="
 python train_mamba.py \
     --run-key vmamba_standalone_tiny \
@@ -34,5 +45,7 @@ python train_mamba.py \
     --eval-conf 0.001 \
     --eval-iou 0.50
 
-# 5. Automatically refresh benchmark comparison tables
-python aggregate_results.py
+# 6. Aggregate results within the workspace
+if [ -f "aggregate_results.py" ]; then
+    python aggregate_results.py
+fi
