@@ -99,9 +99,9 @@ class AnchorFreeHead(nn.Module):
             cls_score = self.cls_pred(cls_feat)
             # Centerness
             centerness = self.centerness_pred(reg_feat)
-            # Regression distances (l, t, r, b) - enforce positive distances via exp/relu
+            # Regression distances (l, t, r, b) - enforce positive distances via exp
             reg_out = scale(self.reg_pred(reg_feat))
-            bbox_pred = F.relu(reg_out) * stride
+            bbox_pred = torch.exp(reg_out).clamp(max=100.0) * stride
 
             cls_scores.append(cls_score)
             bbox_preds.append(bbox_pred)

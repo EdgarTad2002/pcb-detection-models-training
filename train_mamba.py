@@ -66,7 +66,7 @@ def parse_args():
 
     # Architecture Capacity
     p.add_argument("--backbone-dims", type=int, nargs="+", default=[96, 192, 384, 768])
-    p.add_argument("--backbone-depths", type=int, nargs="+", default=[2, 2, 9, 2])
+    p.add_argument("--backbone-depths", type=int, nargs="+", default=[2, 2, 2, 2])
     p.add_argument(
         "--stage-types",
         nargs="+",
@@ -93,6 +93,7 @@ def parse_args():
     p.add_argument("--eval-iou", type=float, default=0.50)
     p.add_argument("--eval-split", default="test")
     p.add_argument("--skip-train", action="store_true", help="Skip training and evaluate existing best.pt.")
+    p.add_argument("--resume", action="store_true", help="Resume training from runs/<run-key>/weights/last.pt if it exists.")
 
     return p.parse_args()
 
@@ -334,9 +335,30 @@ def main():
         scaler = torch.amp.GradScaler("cuda", enabled=(not args.no_amp and device.type == "cuda"))
 
         best_map = 0.0
+        start_epoch = 1
+        last_weights_path = run_dir / "last.pt"
 
-        print(f"\n🚀 Commencing training for {args.epochs} epochs...")
-        for epoch in range(1, total_epochs + 1):
+        if args.resume and last_weights_path.exists():
+            print(f"🔄 Resuming training from checkpoint: {last_weights_path}")
+            ckpt = torch.load(last_weights_path, map_location=device)
+            if isinstance(ckpt, dict) and "model_state_dict" in ckpt:
+                model.load_state_dict(ckpt["model_state_dict"])
+                optimizer.load_state_dict(ckpt["optimizer_state_dict"])
+                if "scheduler_state_dict" in ckpt:
+                    scheduler.load_state_dict(ckpt["scheduler_state_dict"])
+                if "scaler_state_dict" in ckpt:
+                    scaler.load_state_dict(ckpt["scaler_state_dict"])
+                start_epoch = ckpt["epoch"] + 1
+                best_map = ckpt.get("best_map", 0.0)
+                print(f"   Successfully resumed at epoch {start_epoch}/{total_epochs} (Previous Best mAP: {best_map*100:.2f}%)")
+            else:
+                model.load_state_dict(ckpt)
+                print(f"   Loaded raw weights from {last_weights_path} into model.")
+        elif args.resume:
+            print(f"⚠️ --resume was specified, but {last_weights_path} does not exist. Starting training from epoch 1.")
+
+        print(f"\n🚀 Commencing training for {args.epochs} epochs (starting at epoch {start_epoch})...")
+        for epoch in range(start_epoch, total_epochs + 1):
             model.train()
             epoch_loss = 0.0
             epoch_cls_loss = 0.0
@@ -373,13 +395,33 @@ def main():
             avg_loss = epoch_loss / n_batches
             cur_lr = optimizer.param_groups[0]["lr"]
 
-            if epoch % 5 == 0 or epoch == total_epochs:
-                val_stats = evaluate_model(model, val_loader, device, conf_thresh=0.05)
+            # Always save last.pt as full checkpoint for seamless resumption
+            torch.save(
+                {
+                    "epoch": epoch,
+                    "model_state_dict": model.state_dict(),
+                    "optimizer_state_dict": optimizer.state_dict(),
+                    "scheduler_state_dict": scheduler.state_dict(),
+                    "scaler_state_dict": scaler.state_dict(),
+                    "best_map": best_map,
+                },
+                last_weights_path,
+            )
+
+            if epoch % 10 == 0 or epoch == total_epochs:
+                val_stats = evaluate_model(model, val_loader, device, conf_thresh=args.eval_conf, iou_thresh=args.eval_iou)
                 val_map = val_stats["mAP50"]
                 is_best = val_map > best_map
-                if is_best:
-                    best_map = val_map
-                    torch.save(model.state_dict(), best_weights_path)
+                if is_best or not best_weights_path.exists():
+                    best_map = max(val_map, best_map)
+                    torch.save(
+                        {
+                            "epoch": epoch,
+                            "model_state_dict": model.state_dict(),
+                            "best_map": best_map,
+                        },
+                        best_weights_path,
+                    )
                     star = " ⭐ (Best)"
                 else:
                     star = ""
@@ -395,7 +437,9 @@ def main():
 
     # Final Test Set Evaluation
     if best_weights_path.exists():
-        model.load_state_dict(torch.load(best_weights_path, map_location=device))
+        ckpt = torch.load(best_weights_path, map_location=device)
+        state_dict = ckpt["model_state_dict"] if (isinstance(ckpt, dict) and "model_state_dict" in ckpt) else ckpt
+        model.load_state_dict(state_dict)
         print(f"\nEvaluating clean best checkpoint: {best_weights_path}")
     else:
         print("\nEvaluating current model checkpoint...")

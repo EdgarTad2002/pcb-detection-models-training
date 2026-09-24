@@ -25,12 +25,12 @@ class VMambaDetector(nn.Module):
         self,
         num_classes: int = 4,
         backbone_dims: List[int] = [96, 192, 384, 768],
-        backbone_depths: List[int] = [2, 2, 9, 2],
+        backbone_depths: List[int] = [2, 2, 2, 2],
         stage_types: Optional[List[str]] = None,
         fpn_channels: int = 128,
         strides: List[int] = [4, 8, 16, 32],
         pretrained_backbone: Optional[str] = None,
-        use_checkpoint: bool = True,
+        use_checkpoint: bool = False,
     ):
         super().__init__()
         self.num_classes = num_classes

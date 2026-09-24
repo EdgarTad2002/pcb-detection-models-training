@@ -118,12 +118,12 @@ class VMambaBackbone(nn.Module):
         self,
         in_chans: int = 3,
         dims: List[int] = [96, 192, 384, 768],
-        depths: List[int] = [2, 2, 9, 2],
+        depths: List[int] = [2, 2, 2, 2],
         stage_types: Optional[List[str]] = None,
         d_state: int = 16,
         ssm_ratio: float = 2.0,
         out_indices: List[int] = [0, 1, 2, 3],
-        use_checkpoint: bool = True,
+        use_checkpoint: bool = False,
     ):
         super().__init__()
         self.dims = dims

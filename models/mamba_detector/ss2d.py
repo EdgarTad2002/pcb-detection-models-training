@@ -29,10 +29,10 @@ except ImportError:
 def selective_scan_pure_pytorch(
     u: torch.Tensor,       # (B, D, L)
     delta: torch.Tensor,   # (B, D, L)
-    A: torch.Tensor,       # (D, N)
+    A: torch.Tensor,       # (D, N) or (B, D, N)
     B: torch.Tensor,       # (B, N, L)
     C: torch.Tensor,       # (B, N, L)
-    D: Optional[torch.Tensor] = None, # (D,)
+    D: Optional[torch.Tensor] = None, # (D,) or (B, D)
     chunk_size: int = 128,
 ) -> torch.Tensor:
     """
@@ -41,9 +41,13 @@ def selective_scan_pure_pytorch(
     gigabytes of intermediate (B, D, L, N) tensors in CUDA VRAM.
     """
     b, d, l = u.shape
-    n = A.shape[1]
+    n = A.shape[-1]
 
-    A_reshaped = A.view(1, d, 1, n)
+    if A.dim() == 2:
+        A_reshaped = A.view(1, d, 1, n)
+    else:
+        A_reshaped = A.unsqueeze(2) # (B, D, 1, N)
+
     h = torch.zeros(b, d, n, dtype=u.dtype, device=u.device)
     y_chunks = []
 
@@ -69,7 +73,10 @@ def selective_scan_pure_pytorch(
     y = torch.cat(y_chunks, dim=-1)
 
     if D is not None:
-        y = y + u * D.view(1, d, 1)
+        if D.dim() == 1:
+            y = y + u * D.view(1, d, 1)
+        else:
+            y = y + u * D.unsqueeze(-1)
 
     return y
 
@@ -198,19 +205,25 @@ class SS2D(nn.Module):
         dts_proj = torch.einsum("k d r, k b r l -> k b d l", self.dt_projs, dts)
         dts_proj = F.softplus(dts_proj + self.dt_bias.unsqueeze(1).unsqueeze(-1))
 
-        # 5. Execute Selective Scan across all 4 directions
-        ys = []
-        for k in range(4):
-            A_k = -torch.exp(self.A_logs[k].float()) # (d_inner, d_state)
-            y_k = selective_scan_pure_pytorch(
-                u=xs[k],
-                delta=dts_proj[k],
-                A=A_k,
-                B=Bs[k],
-                C=Cs[k],
-                D=self.D[k],
-            )
-            ys.append(y_k)
+        # 5. Execute Batched Selective Scan across all 4 directions simultaneously
+        xs_batched = xs.reshape(4 * B, self.d_inner, L)
+        dts_batched = dts_proj.reshape(4 * B, self.d_inner, L)
+        Bs_batched = Bs.reshape(4 * B, self.d_state, L)
+        Cs_batched = Cs.reshape(4 * B, self.d_state, L)
+
+        A_k = -torch.exp(self.A_logs.float()) # (4, d_inner, d_state)
+        A_batched = A_k.unsqueeze(1).repeat(1, B, 1, 1).reshape(4 * B, self.d_inner, self.d_state)
+        D_batched = self.D.unsqueeze(1).repeat(1, B, 1).reshape(4 * B, self.d_inner)
+
+        ys_batched = selective_scan_pure_pytorch(
+            u=xs_batched,
+            delta=dts_batched,
+            A=A_batched,
+            B=Bs_batched,
+            C=Cs_batched,
+            D=D_batched,
+        )
+        ys = ys_batched.reshape(4, B, self.d_inner, L)
 
         # 6. Reverse and merge 4 scans back into 2D canvas
         out1 = ys[0].view(B, self.d_inner, H, W)
