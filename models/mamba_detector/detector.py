@@ -26,20 +26,24 @@ class VMambaDetector(nn.Module):
         num_classes: int = 4,
         backbone_dims: List[int] = [96, 192, 384, 768],
         backbone_depths: List[int] = [2, 2, 9, 2],
+        stage_types: Optional[List[str]] = None,
         fpn_channels: int = 128,
         strides: List[int] = [4, 8, 16, 32],
         pretrained_backbone: Optional[str] = None,
+        use_checkpoint: bool = True,
     ):
         super().__init__()
         self.num_classes = num_classes
         self.strides = strides
 
-        # 1. Hierarchical VMamba Backbone
+        # 1. Hierarchical VMamba Backbone (MambaVision Hybrid: Conv early, Mamba deep)
         self.backbone = VMambaBackbone(
             in_chans=3,
             dims=backbone_dims,
             depths=backbone_depths,
+            stage_types=stage_types,
             out_indices=[0, 1, 2, 3],
+            use_checkpoint=use_checkpoint,
         )
         if pretrained_backbone:
             self.backbone.load_pretrained(pretrained_backbone)

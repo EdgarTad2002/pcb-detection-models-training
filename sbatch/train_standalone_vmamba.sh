@@ -51,6 +51,8 @@ echo "==========================================================================
 python train_mamba.py \
     --run-key vmamba_standalone_tiny \
     $DATA_ARG \
+    --backbone-depths 2 2 4 2 \
+    --stage-types conv conv mamba mamba \
     --epochs 100 \
     --imgsz 640 \
     --batch 8 \

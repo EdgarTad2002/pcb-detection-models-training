@@ -48,25 +48,69 @@ class Downsample2D(nn.Module):
         return self.norm(x)
 
 
-class VMambaStage(nn.Module):
-    """A stage consisting of stacked VSSBlocks."""
+class ConvNeXtBlock(nn.Module):
+    """
+    ConvNeXt Block for High-Resolution Early Stages (MambaVision architecture).
+    Captures fine spatial patterns (e.g. 0402 ceramic chip capacitors) with zero
+    sequential recurrence overhead, O(1) memory, and high throughput.
+    """
 
-    def __init__(self, dim: int, depth: int, d_state: int = 16, ssm_ratio: float = 2.0):
+    def __init__(self, dim: int, mlp_ratio: float = 4.0, drop: float = 0.0):
         super().__init__()
-        self.blocks = nn.ModuleList([
-            VSSBlock(dim=dim, d_state=d_state, ssm_ratio=ssm_ratio)
-            for _ in range(depth)
-        ])
+        self.dwconv = nn.Conv2d(dim, dim, kernel_size=7, padding=3, groups=dim)
+        self.norm = nn.GroupNorm(1, dim)
+        self.pwconv1 = nn.Conv2d(dim, int(mlp_ratio * dim), kernel_size=1)
+        self.act = nn.GELU()
+        self.pwconv2 = nn.Conv2d(int(mlp_ratio * dim), dim, kernel_size=1)
+        self.drop = nn.Dropout(drop) if drop > 0.0 else nn.Identity()
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        residual = x
+        x = self.dwconv(x)
+        x = self.norm(x)
+        x = self.pwconv1(x)
+        x = self.act(x)
+        x = self.pwconv2(x)
+        x = self.drop(x)
+        return residual + x
+
+
+class VMambaStage(nn.Module):
+    """A stage consisting of stacked ConvNeXtBlocks or VSSBlocks."""
+
+    def __init__(
+        self,
+        dim: int,
+        depth: int,
+        stage_type: str = "mamba",
+        d_state: int = 16,
+        ssm_ratio: float = 2.0,
+        use_checkpoint: bool = True,
+    ):
+        super().__init__()
+        self.use_checkpoint = use_checkpoint
+        self.blocks = nn.ModuleList()
+        for _ in range(depth):
+            if stage_type == "conv":
+                block = ConvNeXtBlock(dim=dim)
+            else:
+                block = VSSBlock(dim=dim, d_state=d_state, ssm_ratio=ssm_ratio)
+            self.blocks.append(block)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         for block in self.blocks:
-            x = block(x)
+            if self.use_checkpoint and self.training and x.requires_grad:
+                x = torch.utils.checkpoint.checkpoint(block, x, use_reentrant=False)
+            else:
+                x = block(x)
         return x
 
 
 class VMambaBackbone(nn.Module):
     """
-    Hierarchical Visual State Space Model Backbone.
+    Hierarchical Visual State Space Model Backbone (MambaVision Hybrid Architecture).
+    - Early stages (stride 4 & 8): ConvNeXt blocks for micro-geometry & 0402 chip capacitors.
+    - Deep stages (stride 16 & 32): 2D Selective Scan (SS2D) for global context across the PCB.
     Outputs multi-scale feature maps [C2, C3, C4, C5] for dense object detection.
     """
 
@@ -75,14 +119,17 @@ class VMambaBackbone(nn.Module):
         in_chans: int = 3,
         dims: List[int] = [96, 192, 384, 768],
         depths: List[int] = [2, 2, 9, 2],
+        stage_types: Optional[List[str]] = None,
         d_state: int = 16,
         ssm_ratio: float = 2.0,
         out_indices: List[int] = [0, 1, 2, 3],
+        use_checkpoint: bool = True,
     ):
         super().__init__()
         self.dims = dims
         self.out_indices = out_indices
         self.num_stages = len(depths)
+        self.stage_types = stage_types or ["conv", "conv", "mamba", "mamba"]
 
         # 1. Stem: Patch embedding (stride 4)
         self.patch_embed = PatchEmbed2D(in_chans=in_chans, embed_dim=dims[0], patch_size=4)
@@ -92,11 +139,14 @@ class VMambaBackbone(nn.Module):
         self.downsamples = nn.ModuleList()
 
         for i in range(self.num_stages):
+            st = self.stage_types[i] if i < len(self.stage_types) else "mamba"
             stage = VMambaStage(
                 dim=dims[i],
                 depth=depths[i],
+                stage_type=st,
                 d_state=d_state,
                 ssm_ratio=ssm_ratio,
+                use_checkpoint=use_checkpoint,
             )
             self.stages.append(stage)
 

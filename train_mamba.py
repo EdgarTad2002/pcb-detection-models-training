@@ -67,7 +67,14 @@ def parse_args():
     # Architecture Capacity
     p.add_argument("--backbone-dims", type=int, nargs="+", default=[96, 192, 384, 768])
     p.add_argument("--backbone-depths", type=int, nargs="+", default=[2, 2, 9, 2])
+    p.add_argument(
+        "--stage-types",
+        nargs="+",
+        default=["conv", "conv", "mamba", "mamba"],
+        help="Stage block types: conv or mamba (MambaVision hybrid default).",
+    )
     p.add_argument("--fpn-channels", type=int, default=128)
+    p.add_argument("--no-checkpoint", action="store_true", help="Disable activation gradient checkpointing.")
 
     # Training Hyperparameters
     p.add_argument("--epochs", type=int, default=100)
@@ -261,10 +268,12 @@ def main():
 
     # Instantiate Model
     print("=" * 75)
-    print(f"🏗️  Initializing Standalone VMamba Detector: {args.run_key}")
+    print(f"🏗️  Initializing Standalone VMamba/MambaVision Detector: {args.run_key}")
     print(f"   Backbone Dims:   {args.backbone_dims}")
     print(f"   Backbone Depths: {args.backbone_depths}")
+    print(f"   Stage Types:     {args.stage_types}")
     print(f"   FPN Channels:    {args.fpn_channels}")
+    print(f"   Checkpointing:   {not args.no_checkpoint}")
     print(f"   Device:          {device} ({torch.cuda.get_device_name(0) if torch.cuda.is_available() and device.type=='cuda' else 'CPU'})")
     print(f"   Dataset:         {data_yaml}")
     print("=" * 75)
@@ -273,8 +282,10 @@ def main():
         num_classes=4,
         backbone_dims=args.backbone_dims,
         backbone_depths=args.backbone_depths,
+        stage_types=args.stage_types,
         fpn_channels=args.fpn_channels,
         pretrained_backbone=args.pretrained_backbone,
+        use_checkpoint=(not args.no_checkpoint),
     ).to(device)
 
     # Calculate model parameters
