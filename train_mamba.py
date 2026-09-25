@@ -94,6 +94,8 @@ def parse_args():
     p.add_argument("--eval-split", default="test")
     p.add_argument("--skip-train", action="store_true", help="Skip training and evaluate existing best.pt.")
     p.add_argument("--resume", action="store_true", help="Resume training from runs/<run-key>/weights/last.pt if it exists.")
+    p.add_argument("--start-epoch", type=int, default=1, help="Starting epoch when resuming from raw weights.")
+    p.add_argument("--best-map", type=float, default=0.0, help="Initial best validation mAP (e.g., 0.1911) when resuming from raw weights.")
 
     return p.parse_args()
 
@@ -334,7 +336,7 @@ def main():
         scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lr_lambda)
         scaler = torch.amp.GradScaler("cuda", enabled=(not args.no_amp and device.type == "cuda"))
 
-        best_map = 0.0
+        best_map = args.best_map
         start_epoch = 1
         last_weights_path = run_dir / "last.pt"
 
@@ -348,12 +350,15 @@ def main():
                     scheduler.load_state_dict(ckpt["scheduler_state_dict"])
                 if "scaler_state_dict" in ckpt:
                     scaler.load_state_dict(ckpt["scaler_state_dict"])
-                start_epoch = ckpt["epoch"] + 1
-                best_map = ckpt.get("best_map", 0.0)
-                print(f"   Successfully resumed at epoch {start_epoch}/{total_epochs} (Previous Best mAP: {best_map*100:.2f}%)")
+                start_epoch = ckpt.get("epoch", args.start_epoch) + 1
+                best_map = ckpt.get("best_map", args.best_map)
+                print(f"   Successfully resumed full checkpoint at epoch {start_epoch}/{total_epochs} (Previous Best mAP: {best_map*100:.2f}%)")
             else:
                 model.load_state_dict(ckpt)
-                print(f"   Loaded raw weights from {last_weights_path} into model.")
+                start_epoch = args.start_epoch
+                for _ in range(1, start_epoch):
+                    scheduler.step()
+                print(f"   Loaded raw weights from {last_weights_path}. Resuming at epoch {start_epoch}/{total_epochs} (Baseline Best mAP: {best_map*100:.2f}%).")
         elif args.resume:
             print(f"⚠️ --resume was specified, but {last_weights_path} does not exist. Starting training from epoch 1.")
 
@@ -395,7 +400,7 @@ def main():
             avg_loss = epoch_loss / n_batches
             cur_lr = optimizer.param_groups[0]["lr"]
 
-            # Always save last.pt as full checkpoint for seamless resumption
+            # Save last.pt as full checkpoint dict for seamless resumption
             torch.save(
                 {
                     "epoch": epoch,

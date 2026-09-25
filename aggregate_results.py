@@ -210,12 +210,15 @@ def export_excel(df: pd.DataFrame, out_path: Path):
                     max_len = max(max_len, len(str(cell.value)))
             ws.column_dimensions[col_letter].width = min(max_len + 4, 40)
 
+        wb.save(out_path)
+        print(f"📊 Styled Excel report saved to: {out_path}")
     except Exception:
         try:
             df.to_excel(out_path, index=False)
+            print(f"📊 Plain Excel report saved to: {out_path}")
         except Exception:
             # openpyxl not installed in conda environment; csv and markdown are already saved
-            pass
+            print("⚠️ openpyxl not installed. Skipping Excel export (CSV and Markdown tables are saved).")
 
 
 if __name__ == "__main__":

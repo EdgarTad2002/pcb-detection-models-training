@@ -4,7 +4,7 @@
 #SBATCH --mem=32G
 #SBATCH --cpus-per-task=8
 #SBATCH --gres=gpu:1
-#SBATCH --time=04:00:00
+#SBATCH --time=12:00:00
 #SBATCH --output=slurm_vmamba_%j.out
 
 set -e
@@ -54,6 +54,9 @@ python train_mamba.py \
     --backbone-depths 2 2 2 2 \
     --stage-types conv conv mamba mamba \
     --no-checkpoint \
+    --resume \
+    --start-epoch 66 \
+    --best-map 0.1911 \
     --epochs 100 \
     --imgsz 640 \
     --batch 8 \
