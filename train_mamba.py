@@ -164,9 +164,18 @@ def compute_ap(preds_by_class: dict, gts_by_class: dict, iou_thresh: float = 0.5
             indices = np.where(mrec[1:] != mrec[:-1])[0]
             ap = float(np.sum((mrec[indices + 1] - mrec[indices]) * mpre[indices + 1]))
 
-        prec_final = float(precision[-1]) if len(precision) > 0 else 0.0
-        rec_final = float(recall[-1]) if len(recall) > 0 else 0.0
-        res[cid] = {"ap50": ap, "precision": prec_final, "recall": rec_final}
+        f1_curve = 2 * precision * recall / np.maximum(precision + recall, 1e-16)
+        best_idx = int(np.argmax(f1_curve)) if len(f1_curve) > 0 else -1
+        prec_best = float(precision[best_idx]) if best_idx >= 0 else 0.0
+        rec_best = float(recall[best_idx]) if best_idx >= 0 else 0.0
+        best_conf = float(preds[best_idx][1]) if (best_idx >= 0 and len(preds) > best_idx) else 0.0
+
+        res[cid] = {
+            "ap50": ap,
+            "precision": prec_best,
+            "recall": rec_best,
+            "best_conf": best_conf,
+        }
 
     return res
 

@@ -63,10 +63,15 @@ class VMambaDetector(nn.Module):
             strides=strides,
         )
 
-        # 4. Training Loss Criterion
+        # 4. Training Loss Criterion (Enhanced with micro-target assignment & reweighted loss)
         self.criterion = DetectionLoss(
             num_classes=num_classes,
             strides=strides,
+            loss_cls_weight=1.5,
+            loss_box_weight=5.0,
+            loss_ctr_weight=1.0,
+            focal_gamma=2.5,
+            label_smoothing=0.10,
         )
 
     def forward(
