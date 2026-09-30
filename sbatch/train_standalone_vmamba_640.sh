@@ -1,11 +1,11 @@
 #!/bin/bash
-#SBATCH --job-name=vmamba_tiny
+#SBATCH --job-name=vmamba_640
 #SBATCH --partition=research
 #SBATCH --mem=32G
 #SBATCH --cpus-per-task=8
 #SBATCH --gres=gpu:1
 #SBATCH --time=12:00:00
-#SBATCH --output=slurm_vmamba_%j.out
+#SBATCH --output=slurm_vmamba_640_%j.out
 
 set -e
 
@@ -21,7 +21,6 @@ source /mnt/weka/shared-cache/miniforge3/etc/profile.d/conda.sh
 conda activate /mnt/weka/etadevosyan/.conda/envs/pcb-yolo
 
 # 3. Dedicated Isolated Workspace on Weka
-# By default, uses an isolated folder to prevent touching or overwriting other codes/runs
 WORKSPACE_DIR=${PCB_MAMBA_WORKSPACE:-"/mnt/weka/etadevosyan/pcb-yolo/pcb-mamba-standalone"}
 mkdir -p "$WORKSPACE_DIR"
 cd "$WORKSPACE_DIR"
@@ -41,9 +40,9 @@ if [ ! -f "$DATA_PATH" ]; then
 fi
 DATA_ARG="--data $DATA_PATH"
 
-# 5. Train Standalone VMamba Object Detector (Non-YOLO State Space Model)
+# 5. Train Standalone VMamba Object Detector (640px Best-of-Both-Worlds)
 echo "=========================================================================="
-echo "🚀 Training Standalone VMamba Object Detector on NVIDIA H100 (YSU Cluster)"
+echo "🚀 Training Standalone VMamba Object Detector (640px) on NVIDIA H100"
 echo "   Workspace: $WORKSPACE_DIR"
 echo "   Data Arg:  $DATA_ARG"
 echo "   Run Key:   vmamba_standalone_640_v3"

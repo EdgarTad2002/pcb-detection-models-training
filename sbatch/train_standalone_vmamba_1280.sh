@@ -1,11 +1,11 @@
 #!/bin/bash
-#SBATCH --job-name=vmamba_tiny
+#SBATCH --job-name=vmamba_1280
 #SBATCH --partition=research
-#SBATCH --mem=32G
+#SBATCH --mem=48G
 #SBATCH --cpus-per-task=8
 #SBATCH --gres=gpu:1
 #SBATCH --time=12:00:00
-#SBATCH --output=slurm_vmamba_%j.out
+#SBATCH --output=slurm_vmamba_1280_%j.out
 
 set -e
 
@@ -21,7 +21,6 @@ source /mnt/weka/shared-cache/miniforge3/etc/profile.d/conda.sh
 conda activate /mnt/weka/etadevosyan/.conda/envs/pcb-yolo
 
 # 3. Dedicated Isolated Workspace on Weka
-# By default, uses an isolated folder to prevent touching or overwriting other codes/runs
 WORKSPACE_DIR=${PCB_MAMBA_WORKSPACE:-"/mnt/weka/etadevosyan/pcb-yolo/pcb-mamba-standalone"}
 mkdir -p "$WORKSPACE_DIR"
 cd "$WORKSPACE_DIR"
@@ -33,31 +32,35 @@ if [ ! -d "datasets" ] && [ -d "$DATASET_SOURCE" ]; then
     ln -s "$DATASET_SOURCE" datasets
 fi
 
-# Enforce canonical 640px dataset specified by project guidelines
-DATA_PATH="datasets/pcb-unified-4class/data.yaml"
-if [ ! -f "$DATA_PATH" ]; then
-    echo "❌ ERROR: Canonical 640px dataset not found at $DATA_PATH"
+# Enforce canonical native-resolution dataset (1280px)
+if [ -f "datasets/pcb-native-res-unified-4class/data.yaml" ]; then
+    DATA_PATH="datasets/pcb-native-res-unified-4class/data.yaml"
+elif [ -f "datasets/pcb-native-res/data.yaml" ]; then
+    DATA_PATH="datasets/pcb-native-res/data.yaml"
+else
+    echo "❌ ERROR: Canonical native-resolution dataset not found in datasets/!"
     exit 1
 fi
 DATA_ARG="--data $DATA_PATH"
 
-# 5. Train Standalone VMamba Object Detector (Non-YOLO State Space Model)
+# 5. Train Standalone VMamba Object Detector (1280px High-Resolution Variant)
+# Uses batch=4 with grad-accum=4 to maintain effective batch size of 16 safely in H100 GPU memory
 echo "=========================================================================="
-echo "🚀 Training Standalone VMamba Object Detector on NVIDIA H100 (YSU Cluster)"
+echo "🚀 Training Standalone VMamba Object Detector (1280px Native) on NVIDIA H100"
 echo "   Workspace: $WORKSPACE_DIR"
 echo "   Data Arg:  $DATA_ARG"
-echo "   Run Key:   vmamba_standalone_640_v3"
+echo "   Run Key:   vmamba_standalone_1280_v3"
 echo "=========================================================================="
 python train_mamba.py \
-    --run-key vmamba_standalone_640_v3 \
+    --run-key vmamba_standalone_1280_v3 \
     $DATA_ARG \
     --backbone-depths 2 2 2 2 \
     --stage-types conv conv mamba mamba \
     --no-checkpoint \
     --epochs 100 \
-    --imgsz 640 \
-    --batch 8 \
-    --grad-accum 2 \
+    --imgsz 1280 \
+    --batch 4 \
+    --grad-accum 4 \
     --lr 0.0001 \
     --workers 8 \
     --eval-conf 0.001 \

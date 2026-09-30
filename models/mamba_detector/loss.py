@@ -77,14 +77,14 @@ class DetectionLoss(nn.Module):
         self,
         num_classes: int = 4,
         strides: List[int] = [4, 8, 16, 32],
-        reg_ranges: List[Tuple[float, float]] = [(-1, 48), (24, 96), (64, 192), (128, 100000)],
+        reg_ranges: List[Tuple[float, float]] = [(-1, 64), (32, 128), (64, 256), (128, 100000)],
         center_radius: float = 1.5,
-        loss_cls_weight: float = 1.5,
-        loss_box_weight: float = 5.0,
+        loss_cls_weight: float = 1.0,
+        loss_box_weight: float = 3.0,
         loss_ctr_weight: float = 1.0,
         focal_alpha: float = 0.25,
-        focal_gamma: float = 2.5,
-        label_smoothing: float = 0.10,
+        focal_gamma: float = 2.0,
+        label_smoothing: float = 0.08,
     ):
         super().__init__()
         self.num_classes = num_classes

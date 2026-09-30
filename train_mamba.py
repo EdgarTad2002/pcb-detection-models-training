@@ -515,6 +515,15 @@ def main():
         json.dump(summary, f, indent=2)
 
     print(f"\n💾 Saved standardized results JSON to: {out_json}")
+
+    # Mirror to shared project results directory if present (appends this model without touching others)
+    shared_results_dir = Path("/mnt/weka/etadevosyan/pcb-yolo/results")
+    if shared_results_dir.exists():
+        shared_json = shared_results_dir / f"{args.run_key}.json"
+        with open(shared_json, "w") as f:
+            json.dump(summary, f, indent=2)
+        print(f"📋 Appended run to shared project results directory: {shared_json}")
+
     print("Run 'python aggregate_results.py' to update comparison tables.")
 
 
