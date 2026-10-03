@@ -16,13 +16,11 @@ from pathlib import Path
 
 import cv2
 
-CAPACITOR_CLASS_ID = 2  # raw dataset class id
-
-
 def parse_args():
     p = argparse.ArgumentParser()
     p.add_argument("--source", type=Path, required=True, help="Dataset root (containing train/images, train/labels)")
     p.add_argument("--dest", type=Path, required=True, help="Output folder for cropped capacitor images")
+    p.add_argument("--class-id", type=int, default=0, help="Class ID to crop (default 0 for unified 4-class Capacitor)")
     p.add_argument("--margin", type=float, default=0.4, help="Extra margin around each box, as a fraction of box size")
     p.add_argument("--min-crop-size", type=int, default=32, help="Force crops to be at least this many pixels on each side")
     p.add_argument("--min-size", type=int, default=8, help="Skip crops smaller than this many pixels on either side")
@@ -52,7 +50,7 @@ def main():
                 continue
             parts = line.split()
             cls_id = int(parts[0])
-            if cls_id != CAPACITOR_CLASS_ID:
+            if cls_id != args.class_id:
                 continue
 
             if img is None:

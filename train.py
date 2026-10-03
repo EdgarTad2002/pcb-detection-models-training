@@ -30,6 +30,12 @@ from pathlib import Path
 
 from ultralytics import YOLO
 
+# Register LUMA modules (SimAM, AConv, LIAM)
+try:
+    import luma_modules
+except ImportError:
+    pass
+
 # ---------------------------------------------------------------------------
 # Paths -- override via environment variables if your layout differs.
 # Large files (datasets, checkpoints, results) belong under /mnt/weka/, per
@@ -44,7 +50,7 @@ DEFAULT_PROJECT_ROOT = Path(
 DEFAULT_RESULTS_DIR = Path(
     os.environ.get("PCB_RESULTS_DIR", "/mnt/weka/etadevosyan/pcb-yolo/results")
 )
-DEFAULT_CLASSES = [2, 4, 7, 9]  # Capacitor, Connector, Electrolytic Capacitor, IC
+LEGACY_23_CLASSES = [2, 4, 7, 9]  # Capacitor, Connector, Electrolytic Capacitor, IC in 23-class dataset
 CLASS_NAMES = ["Capacitor", "Connector", "Electrolytic Capacitor", "IC"]
 
 
@@ -69,8 +75,8 @@ def parse_args():
     p.add_argument(
         "--data",
         type=Path,
-        default=None,
-        help="Path to data.yaml. Defaults to pcb-unified-4class/data.yaml (or pcb-filtered-yolov8/data.yaml if unified missing).",
+        required=True,
+        help="Path to data.yaml (e.g. datasets/pcb-unified-4class/data.yaml or datasets/pcb-filtered-yolov8/data.yaml).",
     )
 
     # --- core training hyperparameters ---
@@ -251,14 +257,7 @@ def evaluate(weights_path, args, data_yaml, effective_classes=None):
 def main():
     args = parse_args()
 
-    if args.data:
-        data_yaml = args.data
-    else:
-        unified_yaml = args.project_root / "datasets" / "pcb-unified-4class" / "data.yaml"
-        if unified_yaml.exists():
-            data_yaml = unified_yaml
-        else:
-            data_yaml = args.project_root / "datasets" / "pcb-filtered-yolov8" / "data.yaml"
+    data_yaml = args.data
     assert data_yaml.exists(), f"data.yaml not found at {data_yaml}"
 
     # Auto-detect native 4-class vs legacy 23-class
@@ -272,10 +271,19 @@ def main():
     elif nc == 4:
         effective_classes = None  # Native 4-class: train on all classes
     else:
-        effective_classes = DEFAULT_CLASSES  # Legacy 23-class: filter [2, 4, 7, 9]
+        effective_classes = LEGACY_23_CLASSES  # Legacy 23-class: filter [2, 4, 7, 9]
 
     run_dir = args.project_root / "runs" / args.run_key / "pcb-filtered"
-    weights_path = run_dir / "weights" / "best.pt"
+    if args.skip_train and args.weights:
+        wp = Path(args.weights)
+        if wp.exists():
+            weights_path = wp
+        elif (args.project_root / wp).exists():
+            weights_path = args.project_root / wp
+        else:
+            weights_path = wp
+    else:
+        weights_path = run_dir / "weights" / "best.pt"
 
     if not args.skip_train:
         print("=" * 70)

@@ -1,0 +1,51 @@
+# Ultralytics YOLO26-LUMA-PCB for Micro-SMD PCB Component Detection under Solder Glare
+# Architecture inspired by Feng et al. (2026) LUMA-YOLO & YOLO26
+# Incorporates:
+#   1. LIAM: Lightweight Illumination & Glare-Adaptive Calibration
+#   2. AConv: Average-Pooling Convolution (Anti-Aliasing to preserve 0402 micro-passives)
+#   3. SPPELAN: Replaces standard SPPF for richer multi-scale receptive field
+#   4. SimAM: Parameter-free 3D attention (replaces heavy C2PSA) in backbone and neck
+
+nc: 4 # unified 4-class PCB dataset
+end2end: True
+reg_max: 1
+scales:
+  # [depth, width, max_channels]
+  s: [0.50, 0.50, 1024]
+  n: [0.50, 0.25, 1024]
+
+backbone:
+  # [from, repeats, module, args]
+  - [-1, 1, LIAM, [3]] # 0: Front-end Illumination & Glare Calibration
+  - [-1, 1, Conv, [64, 3, 2]] # 1-P1/2
+  - [-1, 1, AConv, [128, 3, 2]] # 2-P2/4 (Anti-aliased downsampling)
+  - [-1, 2, C3k2, [256, False, 0.25]] # 3
+  - [-1, 1, AConv, [256, 3, 2]] # 4-P3/8 (Anti-aliased downsampling)
+  - [-1, 2, C3k2, [512, False, 0.25]] # 5 (Backbone P3)
+  - [-1, 1, AConv, [512, 3, 2]] # 6-P4/16 (Anti-aliased downsampling)
+  - [-1, 2, C3k2, [512, True]] # 7 (Backbone P4)
+  - [-1, 1, AConv, [1024, 3, 2]] # 8-P5/32 (Anti-aliased downsampling)
+  - [-1, 2, C3k2, [1024, True]] # 9
+  - [-1, 1, SPPELAN, [1024, 512, 5]] # 10: SPPELAN replacing SPPF
+  - [-1, 1, SimAM, []] # 11: Parameter-free 3D attention on P5
+
+head:
+  - [-1, 1, nn.Upsample, [None, 2, "nearest"]] # 12
+  - [[-1, 7], 1, Concat, [1]] # 13: cat backbone P4
+  - [-1, 2, C3k2, [512, True]] # 14
+  - [-1, 1, SimAM, []] # 15: SimAM attention on P4
+
+  - [-1, 1, nn.Upsample, [None, 2, "nearest"]] # 16
+  - [[-1, 5], 1, Concat, [1]] # 17: cat backbone P3
+  - [-1, 2, C3k2, [256, True]] # 18 (P3/8-small)
+  - [-1, 1, SimAM, []] # 19: SimAM attention on P3 (boosts 0402 micro-passives)
+
+  - [-1, 1, AConv, [256, 3, 2]] # 20
+  - [[-1, 15], 1, Concat, [1]] # 21: cat head P4
+  - [-1, 2, C3k2, [512, True]] # 22 (P4/16-medium)
+
+  - [-1, 1, AConv, [512, 3, 2]] # 23
+  - [[-1, 11], 1, Concat, [1]] # 24: cat head P5
+  - [-1, 1, C3k2, [1024, True, 0.5, True]] # 25 (P5/32-large)
+
+  - [[19, 22, 25], 1, Detect, [nc]] # 26: Detect(P3, P4, P5)

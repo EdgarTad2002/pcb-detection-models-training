@@ -1,10 +1,10 @@
 #!/bin/bash
-#SBATCH --job-name=superyolo26s_1280
+#SBATCH --job-name=mf_yolo26s_1280
 #SBATCH --partition=research
-#SBATCH --mem=48G
+#SBATCH --mem=32G
 #SBATCH --cpus-per-task=8
 #SBATCH --gres=gpu:1
-#SBATCH --output=slurm_%j.out
+#SBATCH --output=slurm_mf_1280_%j.out
 
 export CONDA_PKGS_DIRS=/mnt/weka/etadevosyan/.conda/pkgs
 export CONDA_ENVS_PATH=/mnt/weka/etadevosyan/.conda/envs
@@ -16,15 +16,9 @@ conda activate /mnt/weka/etadevosyan/.conda/envs/pcb-yolo
 
 cd /mnt/weka/etadevosyan/pcb-yolo/pcb-detection-models-training
 
-# Train SuperYOLO at 1280px (YOLO26s with Auxiliary PixelShuffle Super-Resolution Head)
-# Uses genuine native-resolution rectified dataset with 1280px input and lambda_sr=0.10
-python superyolo_pcb.py \
-    --run-key superyolo26s_rectified_1280 \
+python matched_filter_yolo26.py \
+    --run-key rectified_yolov26s_matched_filter_1280 \
     --weights yolo26s.pt \
-    --data datasets/pcb-native-res-unified-4class/data.yaml \
-    --lambda-sr 0.10 \
-    --cls-weight 1.5 \
-    --box-weight 5.0 \
-    --dfl-weight 2.0 \
+    --data datasets/pcb-unified-4class/data.yaml \
     --epochs 100 --imgsz 1280 --batch 8 --workers 8 \
     --eval-conf 0.001

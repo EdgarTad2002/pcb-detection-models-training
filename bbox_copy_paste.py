@@ -30,21 +30,20 @@ import cv2
 import numpy as np
 import yaml
 
-CAPACITOR_CLASS_ID = 2
-
-
 def parse_args():
     p = argparse.ArgumentParser()
     p.add_argument("--source", type=Path, required=True)
     p.add_argument("--bank", type=Path, required=True)
     p.add_argument("--dest", type=Path, required=True)
+    p.add_argument("--class-id", type=int, default=0, help="Class ID for pasted component (default 0 for unified 4-class Capacitor)")
     p.add_argument("--paste-prob", type=float, default=0.7, help="Probability of creating an augmented sibling per source image")
     p.add_argument("--min-pastes", type=int, default=1)
     p.add_argument("--max-pastes", type=int, default=4)
     p.add_argument("--scale-jitter", type=float, nargs=2, default=[0.7, 1.3])
-    p.add_argument("--max-iou-overlap", type=float, default=0.05, help="Reject a paste position if it overlaps an existing box more than this")
+    p.add_argument("--max-overlap", "--max-iou-overlap", dest="max_overlap", type=float, default=0.05, help="Reject paste if intersection over existing box area exceeds this (prevents occluding small objects)")
     p.add_argument("--max-attempts", type=int, default=15, help="Position-sampling attempts per paste before giving up")
     p.add_argument("--feather-px", type=int, default=6, help="Alpha-blend edge width, in pixels, to avoid a hard paste seam")
+    p.add_argument("--eval-source", type=Path, default=None, help="Optional separate dataset to use for val/test splits in data.yaml")
     p.add_argument("--seed", type=int, default=0)
     return p.parse_args()
 
@@ -72,17 +71,31 @@ def to_xyxy_px(box, img_w, img_h):
     return x1, y1, x2, y2
 
 
-def iou_xyxy(a, b):
-    ax1, ay1, ax2, ay2 = a
-    bx1, by1, bx2, by2 = b
+def overlap_over_box(candidate, existing):
+    """
+    Computes intersection over the existing box's area (inter / area(existing)).
+    Also checks inter / area(candidate) to ensure symmetric non-occlusion.
+
+    Using intersection over the existing box's area (instead of standard IoU)
+    guarantees that a large pasted crop will NEVER land on top of a small
+    labeled component (where IoU would be below 0.05 despite total occlusion).
+    """
+    ax1, ay1, ax2, ay2 = candidate
+    bx1, by1, bx2, by2 = existing
     ix1, iy1 = max(ax1, bx1), max(ay1, by1)
     ix2, iy2 = min(ax2, bx2), min(ay2, by2)
     iw, ih = max(ix2 - ix1, 0), max(iy2 - iy1, 0)
     inter = iw * ih
-    area_a = max(ax2 - ax1, 0) * max(ay2 - ay1, 0)
-    area_b = max(bx2 - bx1, 0) * max(by2 - by1, 0)
-    union = area_a + area_b - inter
-    return inter / union if union > 0 else 0.0
+    if inter <= 0:
+        return 0.0
+
+    area_candidate = max(ax2 - ax1, 0) * max(ay2 - ay1, 0)
+    area_existing = max(bx2 - bx1, 0) * max(by2 - by1, 0)
+    if area_existing <= 0 or area_candidate <= 0:
+        return 0.0
+
+    # Overlap fraction: must not occlude existing box, and existing box must not engulf candidate
+    return max(inter / area_existing, inter / area_candidate)
 
 
 def feathered_paste(base_img, crop, x1, y1, feather_px=6):
@@ -158,10 +171,10 @@ def paste_crops(img, existing_boxes_px, bank_paths, bank_metadata, args, rng):
             x1 = rng.randint(0, w - cw)
             y1 = rng.randint(0, h - ch)
             candidate_box = (x1, y1, x1 + cw, y1 + ch)
-            max_iou = max(
-                [iou_xyxy(candidate_box, b) for b in existing_boxes_px] or [0.0]
+            max_overlap = max(
+                [overlap_over_box(candidate_box, b) for b in existing_boxes_px] or [0.0]
             )
-            if max_iou <= args.max_iou_overlap:
+            if max_overlap <= args.max_overlap:
                 crop = match_brightness(crop, img, x1, y1)
                 feathered_paste(img, crop, x1, y1, feather_px=args.feather_px)
                 existing_boxes_px.append(candidate_box)
@@ -182,7 +195,7 @@ def paste_crops(img, existing_boxes_px, bank_paths, bank_metadata, args, rng):
                 nw = cap_w / w
                 nh = cap_h / h
 
-                new_labels.append(f"{CAPACITOR_CLASS_ID} {cx:.6f} {cy:.6f} {nw:.6f} {nh:.6f}")
+                new_labels.append(f"{args.class_id} {cx:.6f} {cy:.6f} {nw:.6f} {nh:.6f}")
                 placed = True
                 break
         # if not placed after max_attempts, just skip this paste -- no space found
@@ -254,16 +267,17 @@ def main():
         n_augmented += 1
         n_pasted_boxes += len(new_labels)
 
-    # valid/test stay untouched, pointed at the ORIGINAL source
-    src_yaml = args.source / "data.yaml"
+    # valid/test stay untouched, pointed at eval_source or source
+    eval_src = args.eval_source if args.eval_source is not None else args.source
+    src_yaml = eval_src / "data.yaml"
     with open(src_yaml) as f:
         src_cfg = yaml.safe_load(f)
 
     new_cfg = {
         "path": str(args.dest.resolve()),
         "train": "train/images",
-        "val": str((args.source / "valid" / "images").resolve()),
-        "test": str((args.source / "test" / "images").resolve()),
+        "val": str((eval_src / "valid" / "images").resolve()),
+        "test": str((eval_src / "test" / "images").resolve()),
         "nc": src_cfg["nc"],
         "names": src_cfg["names"],
     }

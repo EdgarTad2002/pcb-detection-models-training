@@ -8,7 +8,7 @@ PCB-Vision benchmark (Arbash et al., IEEE Sensors J. 2024).
 Key Innovation:
 Instead of relying on heuristic color-space assumptions or unconstrained black-box
 learning, this model initializes its 31-band spectral reconstructor and learned
-1x1 adapter with laboratory-calibrated optical contrast weights:
+1x1 adapter with literature-derived physical spectral contrast priors:
     contrast(lambda) = |S_cap(lambda) - S_substrate(lambda)| / S_substrate(lambda)
 
 This directly primes YOLO26s Layer 0 to amplify wavelengths where ceramic
@@ -17,13 +17,15 @@ achieving higher small-object precision on standard 640px RGB images.
 
 Usage:
     python physics_spectral_yolo26.py \
-        --run-key yolov26s_physics_spectral_640 \
-        --data datasets/pcb-filtered-yolov8/data.yaml \
+        --run-key rectified_yolov26s_physics_spectral_a0.25_640 \
+        --data datasets/pcb-unified-4class/data.yaml \
+        --alpha 0.25 \
         --epochs 100 --imgsz 640 --batch 16 --workers 8 --eval-conf 0.001
 """
 
 import argparse
 import json
+import sys
 import time
 from pathlib import Path
 
@@ -32,8 +34,13 @@ import torch.nn as nn
 from ultralytics import YOLO
 from ultralytics.models.yolo.detect import DetectionTrainer
 
+# Canonical module registration so PyTorch checkpoints serialize as
+# 'physics_spectral_yolo26.<Class>' rather than '__main__.<Class>'
+if __name__ == "__main__":
+    sys.modules["physics_spectral_yolo26"] = sys.modules[__name__]
+
 CLASS_NAMES = ["Capacitor", "Connector", "Electrolytic Capacitor", "IC"]
-DEFAULT_CLASSES = [2, 4, 7, 9]
+LEGACY_23_CLASSES = [2, 4, 7, 9]  # 4 target PCB classes in original 23-class dataset
 
 
 # ---------------------------------------------------------------------------
@@ -45,6 +52,7 @@ class PhysicsSpectralReconstructor(nn.Module):
     Initialized using physical optical absorption & reflectance curves of
     circuit board materials.
     """
+    __module__ = "physics_spectral_yolo26"
 
     def __init__(self, priors_path="data/pcb_spectral_priors.json", alpha=0.0):
         super().__init__()
@@ -67,10 +75,10 @@ class PhysicsSpectralReconstructor(nn.Module):
                 priors = json.load(f)
             weights = torch.tensor(priors["normalized_contrast_weights"], dtype=torch.float32)
             if alpha > 0.0:
-                # Information-theoretic entropy-weighted contrast modulation:
-                # W(lambda; alpha) = C(lambda) * [1 + alpha * ln(1 + C(lambda))]
+                # Agaian Logarithmic Alpha-Rooting Contrast Modulation:
+                # W(lambda; alpha) = C(lambda) * [1 + ln(1 + C(lambda))]^alpha
                 c_scaled = weights * 31.0
-                weights = weights * (1.0 + alpha * torch.log(1.0 + c_scaled))
+                weights = weights * torch.pow(1.0 + torch.log(1.0 + c_scaled), alpha)
                 weights = weights / weights.sum()
         else:
             weights = torch.ones(31) / 31.0
@@ -99,10 +107,11 @@ class PhysicsSpectralReconstructor(nn.Module):
 # ---------------------------------------------------------------------------
 class PhysicsSpectralInputBlock(nn.Module):
     """
-    Wraps YOLO26s Layer 0. Its 1x1 adapter is initialized using the laboratory
-    measured spectral contrast weights, giving high positive gain to bands
+    Wraps YOLO26s Layer 0. Its 1x1 adapter is initialized using physical
+    optical contrast weights, giving high positive gain to bands
     where capacitors are physically most distinct from the substrate.
     """
+    __module__ = "physics_spectral_yolo26"
 
     def __init__(self, orig_conv, priors_path="data/pcb_spectral_priors.json", alpha=0.0):
         super().__init__()
@@ -129,18 +138,22 @@ class PhysicsSpectralInputBlock(nn.Module):
             weights = torch.tensor(priors["normalized_contrast_weights"], dtype=torch.float32)
             if alpha > 0.0:
                 c_scaled = weights * 31.0
-                weights = weights * (1.0 + alpha * torch.log(1.0 + c_scaled))
+                weights = weights * torch.pow(1.0 + torch.log(1.0 + c_scaled), alpha)
                 weights = weights / weights.sum()
         else:
             weights = torch.ones(31) / 31.0
 
-        # Prime the first 1x1 layer with normalized optical contrast weights
+        # Prime the first 1x1 layer with normalized optical contrast weights.
+        # Break symmetry across the 16 hidden channels by injecting small random Gaussian noise.
+        # Without noise, identical weights across all 16 rows + zero-initialized downstream layer
+        # result in identical gradients, preventing channels from differentiating (effectively 1 channel).
         with torch.no_grad():
-            w1 = torch.zeros(16, 31, 1, 1)
-            for i in range(16):
-                w1[i, :, 0, 0] = weights * 0.1  # gentle physical prior initialization
+            base_w = (weights * 0.1).view(1, 31, 1, 1).repeat(16, 1, 1, 1)
+            # Small Gaussian perturbation (std = 5% of mean weight) to break inter-channel symmetry
+            noise = torch.randn_like(base_w) * (0.05 * base_w.abs().mean().clamp(min=1e-5))
+            w1 = base_w + noise
             self.adapter[0].weight.copy_(w1)
-            # Initialize final layer with small positive weight to smoothly inject residual
+            # Initialize final layer with zeros so the model smoothly begins from the identity/residual baseline
             nn.init.zeros_(self.adapter[-1].weight)
 
     def forward(self, x):
@@ -148,6 +161,16 @@ class PhysicsSpectralInputBlock(nn.Module):
         spectral_residual = self.adapter(spectral_cube)
         enhanced_x = x + spectral_residual
         return self.orig_conv(enhanced_x)
+
+
+# Register safe globals for PyTorch 2.6+ weights_only unpickler
+try:
+    torch.serialization.add_safe_globals([
+        PhysicsSpectralInputBlock,
+        PhysicsSpectralReconstructor,
+    ])
+except Exception:
+    pass
 
 
 # ---------------------------------------------------------------------------
@@ -159,7 +182,7 @@ class PhysicsSpectralDetectionTrainer(DetectionTrainer):
 
     def get_model(self, cfg=None, weights=None, verbose=True):
         model = super().get_model(cfg, weights, verbose)
-        print(f"Injecting PhysicsSpectralInputBlock (alpha={self.alpha}, PCB-Vision calibrated priors) into Layer 0...")
+        print(f"Injecting PhysicsSpectralInputBlock (alpha={self.alpha}, PCB-Vision literature-derived priors) into Layer 0...")
         model.model[0] = PhysicsSpectralInputBlock(model.model[0], priors_path=self.priors_path, alpha=self.alpha)
         return model
 
@@ -183,23 +206,28 @@ def parse_args():
     p.add_argument("--eval-conf", type=float, default=0.001)
     p.add_argument("--eval-iou", type=float, default=0.5)
     p.add_argument("--eval-split", default="test")
-    p.add_argument("--alpha", type=float, default=0.0, help="Entropy-weighted contrast parameter alpha (0.0 = baseline contrast).")
+    p.add_argument("--alpha", type=float, default=0.0, help="Logarithmic alpha-rooting contrast parameter alpha (0.0 = baseline contrast).")
+    p.add_argument("--classes", type=int, nargs="+", default=None, help="Optional class indices filter.")
     p.add_argument("--skip-train", action="store_true")
     return p.parse_args()
 
 
-def evaluate_and_save(weights_path, args):
+def evaluate_and_save(weights_path, args, effective_classes=None):
     print(f"\nEvaluating clean checkpoint: {weights_path} at conf={args.eval_conf} on '{args.eval_split}' split")
     clean = YOLO(str(weights_path))
 
-    metrics = clean.val(
+    val_kwargs = dict(
         data=args.data,
         split=args.eval_split,
-        classes=DEFAULT_CLASSES,
         conf=args.eval_conf,
         iou=args.eval_iou,
+        imgsz=args.imgsz,
         device=args.device,
     )
+    if effective_classes is not None:
+        val_kwargs["classes"] = effective_classes
+
+    metrics = clean.val(**val_kwargs)
 
     speed = metrics.speed
     total_time_ms = (
@@ -208,8 +236,24 @@ def evaluate_and_save(weights_path, args):
         + speed.get("postprocess", 0.0)
     )
     fps = 1000.0 / total_time_ms if total_time_ms > 0 else 0.0
+
+    # Resolve per-class names dynamically matching effective_classes
+    names_map = getattr(clean, "names", None) or getattr(metrics, "names", None)
+    if isinstance(names_map, dict):
+        if effective_classes is not None:
+            class_names = [names_map[i] for i in effective_classes if i in names_map]
+        else:
+            class_names = [names_map[i] for i in sorted(names_map.keys())]
+    elif isinstance(names_map, list):
+        if effective_classes is not None:
+            class_names = [names_map[i] for i in effective_classes if i < len(names_map)]
+        else:
+            class_names = names_map
+    else:
+        class_names = CLASS_NAMES
+
     per_class_ap = {
-        name: float(ap) for name, ap in zip(CLASS_NAMES, metrics.box.ap50)
+        name: float(ap) for name, ap in zip(class_names, metrics.box.ap50)
     }
 
     summary = {
@@ -254,6 +298,20 @@ def main():
     run_dir = args.project_root / "runs" / args.run_key / "pcb-filtered"
     weights_path = run_dir / "weights" / "best.pt"
 
+    import yaml
+    with open(args.data) as f:
+        cfg = yaml.safe_load(f)
+    raw_names = cfg.get("names", [])
+    nc = cfg.get("nc", len(raw_names) if isinstance(raw_names, (list, dict)) else 4)
+
+    # Auto-detect native 4-class vs legacy 23-class (matching train.py)
+    if args.classes is not None:
+        effective_classes = args.classes
+    elif nc == 4:
+        effective_classes = None  # Native 4-class: train and evaluate on all classes
+    else:
+        effective_classes = LEGACY_23_CLASSES  # Legacy 23-class: filter [2, 4, 7, 9]
+
     if not args.skip_train:
         overrides = dict(
             model=args.weights,
@@ -263,19 +321,20 @@ def main():
             batch=args.batch,
             device=args.device,
             workers=args.workers,
-            classes=DEFAULT_CLASSES,
             optimizer="SGD",
             project=str(args.project_root / "runs" / args.run_key),
             name="pcb-filtered",
             exist_ok=True,
             val=True,
         )
+        if effective_classes is not None:
+            overrides["classes"] = effective_classes
         trainer = PhysicsSpectralDetectionTrainer(overrides=overrides)
         trainer.train()
         print("Training finished. Run saved to:", trainer.save_dir)
         weights_path = trainer.save_dir / "weights" / "best.pt"
 
-    evaluate_and_save(weights_path, args)
+    evaluate_and_save(weights_path, args, effective_classes=effective_classes)
 
 
 if __name__ == "__main__":

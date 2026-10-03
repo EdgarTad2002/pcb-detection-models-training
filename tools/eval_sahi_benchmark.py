@@ -82,6 +82,35 @@ def parse_args():
         default=None,
         help="Optional directory to save comparison visualization images",
     )
+    p.add_argument(
+        "--max-vis",
+        type=int,
+        default=10,
+        help="Maximum number of comparison images to save if --save-vis is enabled",
+    )
+    p.add_argument(
+        "--run-key",
+        type=str,
+        default=None,
+        help="Optional custom identifier for model and saved results file",
+    )
+    p.add_argument(
+        "--full-frame-weights",
+        type=Path,
+        default=None,
+        help="Optional separate checkpoint for full-frame macro pass (e.g. whole-image model)",
+    )
+    p.add_argument(
+        "--full-frame-imgsz",
+        type=int,
+        default=None,
+        help="Resolution for full-frame macro pass (defaults to --imgsz)",
+    )
+    p.add_argument(
+        "--no-full-frame",
+        action="store_true",
+        help="Disable the full-frame pass, evaluating slices only",
+    )
     return p.parse_args()
 
 
@@ -190,6 +219,8 @@ def sahi_predict_tiles(
     nms_type: str = "diou",
     imgsz: int = 640,
     device: str = "0",
+    full_frame_model: Optional[YOLO] = None,
+    include_full_frame: bool = True,
 ) -> List[Tuple[int, float, float, float, float, float]]:
     h, w = img_bgr.shape[:2]
     step_y = max(1, int(slice_h * (1.0 - overlap)))
@@ -199,14 +230,16 @@ def sahi_predict_tiles(
     all_scores = []
     all_clses = []
 
-    # 1. Full-frame pass
-    res_full = model.predict(img_bgr, imgsz=imgsz, conf=conf_thresh, device=device, verbose=False)[0]
-    for b in res_full.boxes:
-        all_boxes.append(b.xyxy[0].tolist())
-        all_scores.append(float(b.conf[0]))
-        all_clses.append(int(b.cls[0]))
+    # 1. Full-frame macro pass (captures global context, large ICs/Connectors)
+    if include_full_frame:
+        ff_m = full_frame_model if full_frame_model is not None else model
+        res_full = ff_m.predict(img_bgr, imgsz=imgsz, conf=conf_thresh, device=device, verbose=False)[0]
+        for b in res_full.boxes:
+            all_boxes.append(b.xyxy[0].tolist())
+            all_scores.append(float(b.conf[0]))
+            all_clses.append(int(b.cls[0]))
 
-    # 2. Sliced passes
+    # 2. Sliced micro passes (uncovers chip capacitors & tiny components at native scale)
     y_starts = list(range(0, max(1, h - slice_h + 1), step_y))
     if len(y_starts) == 0 or y_starts[-1] + slice_h < h:
         y_starts.append(max(0, h - slice_h))
@@ -247,6 +280,58 @@ def sahi_predict_tiles(
         bx1, by1, bx2, by2 = t_boxes[idx].tolist()
         results.append((cid, sc, bx1, by1, bx2, by2))
     return results
+
+
+CLASS_COLORS = {
+    0: (0, 220, 255),    # Capacitor: Yellow/Cyan
+    1: (255, 165, 0),    # Connector: Blue/Orange
+    2: (255, 0, 255),    # Electrolytic Cap: Magenta
+    3: (0, 255, 100),    # IC: Green
+}
+
+
+def draw_triple_comparison(
+    img_bgr: np.ndarray,
+    gts: List[Tuple],
+    std_dets: List[Tuple],
+    sahi_dets: List[Tuple],
+    class_names: Dict[int, str],
+    out_path: Path,
+    min_conf: float = 0.25,
+):
+    h, w = img_bgr.shape[:2]
+    scale = min(1.0, 960 / max(h, w))
+    tw, th = max(1, int(w * scale)), max(1, int(h * scale))
+    base = cv2.resize(img_bgr, (tw, th))
+
+    def render_panel(boxes_with_info, title, is_gt=False):
+        canvas = base.copy()
+        for item in boxes_with_info:
+            if is_gt:
+                cid, x1, y1, x2, y2 = item
+                label = class_names.get(cid, str(cid))
+            else:
+                cid, sc, x1, y1, x2, y2 = item
+                if sc < min_conf:
+                    continue
+                label = f"{class_names.get(cid, str(cid))} {sc:.2f}"
+            color = CLASS_COLORS.get(cid, (200, 200, 200))
+            rx1, ry1 = int(x1 * scale), int(y1 * scale)
+            rx2, ry2 = int(x2 * scale), int(y2 * scale)
+            cv2.rectangle(canvas, (rx1, ry1), (rx2, ry2), color, 2)
+            cv2.putText(canvas, label, (rx1, max(14, ry1 - 5)), cv2.FONT_HERSHEY_SIMPLEX, 0.45, color, 1, cv2.LINE_AA)
+
+        cv2.rectangle(canvas, (0, 0), (tw, 34), (25, 25, 25), -1)
+        cv2.putText(canvas, title, (12, 24), cv2.FONT_HERSHEY_SIMPLEX, 0.70, (255, 255, 255), 2, cv2.LINE_AA)
+        return canvas
+
+    p_gt = render_panel(gts, "Ground Truth", is_gt=True)
+    p_std = render_panel(std_dets, "Standard Single-Pass YOLO")
+    p_sahi = render_panel(sahi_dets, "SAHI Dual-Stream Hybrid")
+
+    combined = np.hstack([p_gt, p_std, p_sahi])
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    cv2.imwrite(str(out_path), combined, [cv2.IMWRITE_JPEG_QUALITY, 90])
 
 
 def iou_xyxy(a: Tuple[float, float, float, float], b: Tuple[float, float, float, float]) -> float:
@@ -344,6 +429,15 @@ def main():
     print("=" * 75)
 
     model = YOLO(str(args.weights))
+    if args.full_frame_weights:
+        assert args.full_frame_weights.exists(), f"Full frame weights not found: {args.full_frame_weights}"
+        full_frame_model = YOLO(str(args.full_frame_weights))
+    else:
+        full_frame_model = None
+
+    ff_imgsz = args.full_frame_imgsz if args.full_frame_imgsz is not None else args.imgsz
+    if args.save_vis:
+        args.save_vis.mkdir(parents=True, exist_ok=True)
 
     gts = {c: [] for c in class_ids}
     preds_std = {c: [] for c in class_ids}
@@ -365,19 +459,22 @@ def main():
             if cid in gts:
                 gts[cid].append((img_id, x1, y1, x2, y2))
 
-        # 2. Standard YOLO inference
+        # 2. Standard YOLO inference (evaluates full_frame_model if specified, else model)
         t0 = time.perf_counter()
-        res_std = model.predict(img, imgsz=args.imgsz, conf=args.conf, device=args.device, verbose=False)[0]
+        std_m = full_frame_model if full_frame_model is not None else model
+        res_std = std_m.predict(img, imgsz=ff_imgsz, conf=args.conf, device=args.device, verbose=False)[0]
         time_std_total += (time.perf_counter() - t0)
 
+        curr_std_dets = []
         for b in res_std.boxes:
             cid = int(b.cls[0])
+            sc = float(b.conf[0])
+            bx1, by1, bx2, by2 = b.xyxy[0].tolist()
+            curr_std_dets.append((cid, sc, bx1, by1, bx2, by2))
             if cid in preds_std:
-                sc = float(b.conf[0])
-                bx1, by1, bx2, by2 = b.xyxy[0].tolist()
                 preds_std[cid].append((img_id, sc, bx1, by1, bx2, by2))
 
-        # 3. SAHI Sliced Hyper-Inference
+        # 3. SAHI Sliced Hyper-Inference (Dual-Stream Hybrid if full_frame_model set)
         t1 = time.perf_counter()
         s_dets = sahi_predict_tiles(
             model,
@@ -388,14 +485,23 @@ def main():
             conf_thresh=args.conf,
             nms_iou=args.nms_iou,
             nms_type=args.nms_type,
-            imgsz=args.imgsz,
+            imgsz=ff_imgsz,
             device=args.device,
+            full_frame_model=full_frame_model,
+            include_full_frame=(not args.no_full_frame),
         )
         time_sahi_total += (time.perf_counter() - t1)
 
         for cid, sc, bx1, by1, bx2, by2 in s_dets:
             if cid in preds_sahi:
                 preds_sahi[cid].append((img_id, sc, bx1, by1, bx2, by2))
+
+        # 4. Save visual comparison if requested
+        if args.save_vis and img_id < args.max_vis:
+            out_vis = args.save_vis / f"vis_{img_path.stem}.jpg"
+            draw_triple_comparison(
+                img, gt_boxes, curr_std_dets, s_dets, class_names, out_vis
+            )
 
     # Compute metrics
     n_images = len(image_paths)
@@ -443,6 +549,9 @@ def main():
     summary = {
         "model": args.weights.stem,
         "weights": str(args.weights),
+        "full_frame_weights": str(args.full_frame_weights) if args.full_frame_weights else None,
+        "full_frame_imgsz": ff_imgsz,
+        "include_full_frame": not args.no_full_frame,
         "dataset": str(args.data),
         "split": args.split,
         "n_images": n_images,
@@ -471,11 +580,15 @@ def main():
         "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
     }
 
-    model_name = args.weights.stem
-    for p in args.weights.parents:
-        if p.name not in ("weights", "pcb-filtered", "runs", ""):
-            model_name = p.name
-            break
+    if args.run_key:
+        model_name = args.run_key
+    else:
+        model_name = args.weights.stem
+        for p in args.weights.parents:
+            if p.name not in ("weights", "pcb-filtered", "runs", ""):
+                model_name = p.name
+                break
+    summary["model"] = model_name
     args.results_dir.mkdir(parents=True, exist_ok=True)
     out_json = args.results_dir / f"sahi_benchmark_{model_name}_{args.split}.json"
     with open(out_json, "w") as f:

@@ -23,14 +23,18 @@ import pandas as pd
 
 def main():
     p = argparse.ArgumentParser()
+    env_dir = __import__("os").environ.get("PCB_RESULTS_DIR")
+    if env_dir and Path(env_dir).exists():
+        default_dir = Path(env_dir)
+    elif Path("/mnt/weka/etadevosyan/pcb-yolo/results").exists():
+        default_dir = Path("/mnt/weka/etadevosyan/pcb-yolo/results")
+    else:
+        default_dir = Path(__file__).resolve().parent / "results"
+
     p.add_argument(
         "--results-dir",
         type=Path,
-        default=Path(
-            __import__("os").environ.get(
-                "PCB_RESULTS_DIR", "/mnt/weka/etadevosyan/pcb-yolo/results"
-            )
-        ),
+        default=default_dir,
     )
     p.add_argument(
         "--out-csv",
@@ -247,8 +251,11 @@ def export_excel(df: pd.DataFrame, out_path: Path):
 
         wb.save(out_path)
     except Exception as e:
-        # Fallback to standard pandas to_excel
-        df.to_excel(out_path, index=False)
+        # Fallback to standard pandas to_excel or skip if no excel engine installed
+        try:
+            df.to_excel(out_path, index=False)
+        except Exception:
+            pass
 
 
 if __name__ == "__main__":

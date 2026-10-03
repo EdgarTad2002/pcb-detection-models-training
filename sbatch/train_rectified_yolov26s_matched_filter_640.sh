@@ -1,10 +1,10 @@
 #!/bin/bash
-#SBATCH --job-name=y26_nat_rect_loss
+#SBATCH --job-name=mf_yolo26s_640
 #SBATCH --partition=research
-#SBATCH --mem=48G
+#SBATCH --mem=32G
 #SBATCH --cpus-per-task=8
 #SBATCH --gres=gpu:1
-#SBATCH --output=slurm_%j.out
+#SBATCH --output=slurm_mf_640_%j.out
 
 export CONDA_PKGS_DIRS=/mnt/weka/etadevosyan/.conda/pkgs
 export CONDA_ENVS_PATH=/mnt/weka/etadevosyan/.conda/envs
@@ -16,14 +16,9 @@ conda activate /mnt/weka/etadevosyan/.conda/envs/pcb-yolo
 
 cd /mnt/weka/etadevosyan/pcb-yolo/pcb-detection-models-training
 
-# Train YOLO26s with Loss Reweighting on the Genuine Native-Resolution Rectified 4-Class Dataset (1280px)
-# Boost classification loss (cls=1.5), tune box loss (box=5.0), dfl=2.0, label_smoothing=0.1
-python train.py \
-    --run-key yolov26s_native_res_rectified_loss_reweight_1280 \
+python matched_filter_yolo26.py \
+    --run-key rectified_yolov26s_matched_filter_640 \
     --weights yolo26s.pt \
-    --data datasets/pcb-native-res-unified-4class/data.yaml \
-    --cls 1.5 \
-    --box 5.0 \
-    --dfl 2.0 \
-    --epochs 100 --imgsz 1280 --batch 8 --workers 8 \
+    --data datasets/pcb-unified-4class/data.yaml \
+    --epochs 100 --imgsz 640 --batch 16 --workers 8 \
     --eval-conf 0.001

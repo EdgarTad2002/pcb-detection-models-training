@@ -56,7 +56,12 @@ def apply_unsharp_mask(image_bgr: np.ndarray, sigma: float = 1.0, strength: floa
     return np.clip(sharpened, 0, 255).astype(np.uint8)
 
 
-def apply_clahe_sharpen(image_bgr: np.ndarray, clip_limit: float = 1.5) -> np.ndarray:
+def apply_clahe_sharpen(
+    image_bgr: np.ndarray,
+    clip_limit: float = 1.5,
+    sigma: float = 1.0,
+    strength: float = 0.6,
+) -> np.ndarray:
     """Applies LAB-color CLAHE followed by unsharp masking."""
     lab = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2LAB)
     l, a, b = cv2.split(lab)
@@ -64,7 +69,7 @@ def apply_clahe_sharpen(image_bgr: np.ndarray, clip_limit: float = 1.5) -> np.nd
     cl = clahe.apply(l)
     enhanced_lab = cv2.merge((cl, a, b))
     enhanced_bgr = cv2.cvtColor(enhanced_lab, cv2.COLOR_LAB2BGR)
-    return apply_unsharp_mask(enhanced_bgr, sigma=1.0, strength=0.5)
+    return apply_unsharp_mask(enhanced_bgr, sigma=sigma, strength=strength)
 
 
 def run_sharpening_benchmark(
@@ -73,12 +78,16 @@ def run_sharpening_benchmark(
     max_images: int = 44,
     conf_thresh: float = 0.01,
     iou_thresh: float = 0.50,
+    sigma: float = 1.0,
+    gamma: float = 0.6,
+    clip_limit: float = 1.5,
 ):
     print("=" * 85)
     print("🔍 Edge-Sharpening & Contrast Pre-Processing Benchmark (mAP50 Evaluation)")
     print("=" * 85)
     print(f"Model Checkpoint: {model_path}")
     print(f"Sample Directory: {sample_dir} (Max images: {max_images})")
+    print(f"Filter Parameters: sigma={sigma}, gamma={gamma}, clipLimit={clip_limit}")
 
     model = YOLO(model_path)
     img_dir = Path(sample_dir) / "images"
@@ -122,7 +131,7 @@ def run_sharpening_benchmark(
 
         # 2. Unsharp Mask Sharpened Image
         t0 = time.time()
-        img_sharp = apply_unsharp_mask(raw, sigma=1.0, strength=0.6)
+        img_sharp = apply_unsharp_mask(raw, sigma=sigma, strength=gamma)
         res_sharp = model.predict(img_sharp, imgsz=640, conf=conf_thresh, verbose=False)[0]
         t_sharp += (time.time() - t0)
         for b in res_sharp.boxes:
@@ -135,7 +144,7 @@ def run_sharpening_benchmark(
 
         # 3. CLAHE + Sharpened Image
         t0 = time.time()
-        img_clahe = apply_clahe_sharpen(raw, clip_limit=1.5)
+        img_clahe = apply_clahe_sharpen(raw, clip_limit=clip_limit, sigma=sigma, strength=gamma)
         res_clahe = model.predict(img_clahe, imgsz=640, conf=conf_thresh, verbose=False)[0]
         t_clahe += (time.time() - t0)
         for b in res_clahe.boxes:
@@ -180,7 +189,7 @@ def run_sharpening_benchmark(
     target_demo = "data_samples/images/ATTIOT_Bottom_jpg.rf.8a97ad6664656973c60d95057d9d473c.jpg"
     if os.path.exists(target_demo):
         raw_demo = cv2.imread(target_demo)
-        sharp_demo = apply_unsharp_mask(raw_demo, sigma=1.0, strength=0.6)
+        sharp_demo = apply_unsharp_mask(raw_demo, sigma=sigma, strength=gamma)
 
         rgb_raw = cv2.cvtColor(raw_demo, cv2.COLOR_BGR2RGB)
         rgb_sharp = cv2.cvtColor(sharp_demo, cv2.COLOR_BGR2RGB)
@@ -277,4 +286,21 @@ def run_sharpening_benchmark(
 
 
 if __name__ == "__main__":
-    run_sharpening_benchmark(max_images=44)
+    import argparse
+    parser = argparse.ArgumentParser(description="Evaluate Edge-Sharpening & Contrast Benchmark")
+    parser.add_argument("--model-path", default="runs/yolov26s_loss_reweight/pcb-filtered/weights/best.pt", help="Path to YOLO weights")
+    parser.add_argument("--sample-dir", default="data_samples", help="Path to sample directory containing images/ and labels/")
+    parser.add_argument("--max-images", type=int, default=44, help="Max test images to evaluate")
+    parser.add_argument("--sigma", type=float, default=1.0, help="Gaussian blur standard deviation")
+    parser.add_argument("--gamma", type=float, default=0.6, help="Unsharp mask boost strength")
+    parser.add_argument("--clip-limit", type=float, default=1.5, help="CLAHE clip limit")
+    args = parser.parse_args()
+
+    run_sharpening_benchmark(
+        model_path=args.model_path,
+        sample_dir=args.sample_dir,
+        max_images=args.max_images,
+        sigma=args.sigma,
+        gamma=args.gamma,
+        clip_limit=args.clip_limit,
+    )

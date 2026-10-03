@@ -6,7 +6,7 @@ dependencies:
   - python=3.11
   - pip
   - pip:
-      - ultralytics
+      - ultralytics==8.4.126
       - opencv-python-headless
       - ensemble-boxes
       - roboflow
