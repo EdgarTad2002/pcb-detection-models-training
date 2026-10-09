@@ -24,12 +24,6 @@ conda activate /mnt/weka/etadevosyan/.conda/envs/pcb-yolo
 WORKSPACE_DIR=${PCB_YOLO_WORKSPACE:-"/mnt/weka/etadevosyan/pcb-yolo/pcb-yolo26n-gurgen"}
 cd "$WORKSPACE_DIR"
 
-SRC_DIR="/mnt/weka/etadevosyan/pcb-yolo/pcb-detection-models-training"
-if [ -d "$SRC_DIR" ]; then
-    cp "$SRC_DIR/train.py" . 2>/dev/null || true
-    cp "$SRC_DIR/aggregate_results.py" . 2>/dev/null || true
-fi
-
 AUG_DATA="datasets/pcb-retinex-cappaste-1280"
 [ -f "$AUG_DATA/data.yaml" ] || { echo "Missing $AUG_DATA (run train_yolov26s_ultimate_retinex_copypaste_1280.sh first)"; exit 1; }
 

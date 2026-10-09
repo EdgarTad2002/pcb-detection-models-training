@@ -24,13 +24,6 @@ conda activate /mnt/weka/etadevosyan/.conda/envs/pcb-yolo
 WORKSPACE_DIR=${PCB_YOLO_WORKSPACE:-"/mnt/weka/etadevosyan/pcb-yolo/pcb-yolo26n-gurgen"}
 cd "$WORKSPACE_DIR"
 
-SRC_DIR="/mnt/weka/etadevosyan/pcb-yolo/pcb-detection-models-training"
-if [ -d "$SRC_DIR" ]; then
-    cp -r "$SRC_DIR/tools" . 2>/dev/null || true
-    cp "$SRC_DIR/train.py" . 2>/dev/null || true
-    cp "$SRC_DIR/aggregate_results.py" . 2>/dev/null || true
-fi
-
 CHAMPION_RUN="yolov26s_ultimate_retinex_copypaste_1280"
 RUN_DIR="runs/$CHAMPION_RUN/pcb-filtered"
 WEIGHTS="$RUN_DIR/weights/best.pt"
