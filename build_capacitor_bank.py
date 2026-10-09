@@ -16,13 +16,14 @@ from pathlib import Path
 
 import cv2
 
-CAPACITOR_CLASS_ID = 2  # raw dataset class id
+CAPACITOR_CLASS_ID = 2  # default fallback for legacy 23-class dataset
 
 
 def parse_args():
     p = argparse.ArgumentParser()
     p.add_argument("--source", type=Path, required=True, help="Dataset root (containing train/images, train/labels)")
     p.add_argument("--dest", type=Path, required=True, help="Output folder for cropped capacitor images")
+    p.add_argument("--class-id", type=int, default=None, help="Target class ID to crop. Auto-detected from data.yaml if None (0 for 4-class, 2 for legacy).")
     p.add_argument("--margin", type=float, default=0.4, help="Extra margin around each box, as a fraction of box size")
     p.add_argument("--min-crop-size", type=int, default=32, help="Force crops to be at least this many pixels on each side")
     p.add_argument("--min-size", type=int, default=8, help="Skip crops smaller than this many pixels on either side")
@@ -34,6 +35,20 @@ def main():
     img_dir = args.source / "train" / "images"
     lbl_dir = args.source / "train" / "labels"
     args.dest.mkdir(parents=True, exist_ok=True)
+
+    # Auto-detect target class ID
+    target_class_id = args.class_id
+    if target_class_id is None:
+        yaml_path = args.source / "data.yaml"
+        if yaml_path.exists():
+            import yaml
+            with open(yaml_path) as f:
+                cfg = yaml.safe_load(f)
+            nc = cfg.get("nc", len(cfg.get("names", [])))
+            target_class_id = 0 if nc == 4 else 2
+        else:
+            target_class_id = 0
+    print(f"Targeting class ID: {target_class_id}")
 
     img_files = sorted(list(img_dir.glob("*.jpg")) + list(img_dir.glob("*.png")))
     n_crops = 0
@@ -52,7 +67,7 @@ def main():
                 continue
             parts = line.split()
             cls_id = int(parts[0])
-            if cls_id != CAPACITOR_CLASS_ID:
+            if cls_id != target_class_id:
                 continue
 
             if img is None:

@@ -30,7 +30,7 @@ import cv2
 import numpy as np
 import yaml
 
-CAPACITOR_CLASS_ID = 2
+CAPACITOR_CLASS_ID = 2  # default fallback for legacy 23-class dataset
 
 
 def parse_args():
@@ -38,6 +38,7 @@ def parse_args():
     p.add_argument("--source", type=Path, required=True)
     p.add_argument("--bank", type=Path, required=True)
     p.add_argument("--dest", type=Path, required=True)
+    p.add_argument("--class-id", type=int, default=None, help="Target class ID for pasted boxes (auto-detected from data.yaml if None)")
     p.add_argument("--paste-prob", type=float, default=0.7, help="Probability of creating an augmented sibling per source image")
     p.add_argument("--min-pastes", type=int, default=1)
     p.add_argument("--max-pastes", type=int, default=4)
@@ -127,7 +128,7 @@ def match_brightness(crop, base_img, x1, y1):
     return np.clip(matched, 0, 255).astype(np.uint8)
 
 
-def paste_crops(img, existing_boxes_px, bank_paths, bank_metadata, args, rng):
+def paste_crops(img, existing_boxes_px, bank_paths, bank_metadata, args, rng, target_class_id=0):
     h, w = img.shape[:2]
     n_pastes = rng.randint(args.min_pastes, args.max_pastes)
     new_labels = []
@@ -182,7 +183,7 @@ def paste_crops(img, existing_boxes_px, bank_paths, bank_metadata, args, rng):
                 nw = cap_w / w
                 nh = cap_h / h
 
-                new_labels.append(f"{CAPACITOR_CLASS_ID} {cx:.6f} {cy:.6f} {nw:.6f} {nh:.6f}")
+                new_labels.append(f"{target_class_id} {cx:.6f} {cy:.6f} {nw:.6f} {nh:.6f}")
                 placed = True
                 break
         # if not placed after max_attempts, just skip this paste -- no space found
@@ -193,6 +194,19 @@ def paste_crops(img, existing_boxes_px, bank_paths, bank_metadata, args, rng):
 def main():
     args = parse_args()
     rng = random.Random(args.seed)
+
+    # Auto-detect target class ID
+    target_class_id = args.class_id
+    if target_class_id is None:
+        yaml_path = args.source / "data.yaml"
+        if yaml_path.exists():
+            with open(yaml_path) as f:
+                cfg = yaml.safe_load(f)
+            nc = cfg.get("nc", len(cfg.get("names", [])))
+            target_class_id = 0 if nc == 4 else 2
+        else:
+            target_class_id = 0
+    print(f"Targeting class ID for copy-paste: {target_class_id}")
 
     bank_paths = sorted(
         [p for p in args.bank.glob("*") if p.suffix.lower() in (".png", ".jpg")]
@@ -240,7 +254,9 @@ def main():
         existing_boxes = load_labels(label_path)
         existing_boxes_px = [list(to_xyxy_px(b, w, h)) for b in existing_boxes]
 
-        aug_img, new_labels = paste_crops(img.copy(), existing_boxes_px, bank_paths, bank_metadata, args, rng)
+        aug_img, new_labels = paste_crops(
+            img.copy(), existing_boxes_px, bank_paths, bank_metadata, args, rng, target_class_id=target_class_id
+        )
         if not new_labels:
             continue  # no room found, skip this sibling
 
