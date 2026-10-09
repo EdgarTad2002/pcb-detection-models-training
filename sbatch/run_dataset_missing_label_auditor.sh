@@ -14,6 +14,8 @@ mkdir -p "$YOLO_CONFIG_DIR"
 source /mnt/weka/shared-cache/miniforge3/etc/profile.d/conda.sh
 conda activate /mnt/weka/etadevosyan/.conda/envs/pcb-yolo
 
+export PYTHONPATH="/mnt/weka/etadevosyan/pcb-yolo/pcb-detection-models-training:$PYTHONPATH"
+
 cd /mnt/weka/etadevosyan/pcb-yolo/pcb-detection-models-training
 
 echo "🔍 Running Full Train Split Missing-Label Auditor..."

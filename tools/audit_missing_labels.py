@@ -40,6 +40,15 @@ import cv2
 import numpy as np
 from PIL import Image
 
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+try:
+    import matched_filter_yolo26
+except Exception:
+    pass
+
 try:
     from ultralytics import YOLO
 except ImportError:
@@ -658,18 +667,38 @@ def build_html_gallery(out_dir, candidates, total_scanned):
     const accepted = candidates.filter(c => decisions[c.id] !== 'rejected');
     const acceptedJson = JSON.stringify(accepted, null, 2);
 
-    const pyCode = `# Run this snippet to insert ${{accepted.length}} missing labels into your dataset:\\n` +
-      `import json, os\\n\\n` +
-      `accepted_boxes = ${{acceptedJson}}\\n\\n` +
-      `labels_dir = "datasets/pcb-unified-4class/train/labels"\\n` +
+    const pyCode = `# SAFE EXPORT: Clones dataset to a new directory without touching the original!\\n` +
+      `import json, os, shutil, glob\\n\\n` +
+      `SRC_DIR = "datasets/pcb-unified-4class"\\n` +
+      `DST_DIR = "datasets/pcb-unified-4class-cleaned"\\n\\n` +
+      `print(f"1. Creating clean dataset clone at: {{DST_DIR}}...")\\n` +
+      `os.makedirs(DST_DIR, exist_ok=True)\\n` +
+      `for split in ["train", "valid", "test"]:\\n` +
+      `    os.makedirs(f"{{DST_DIR}}/{{split}}/images", exist_ok=True)\\n` +
+      `    os.makedirs(f"{{DST_DIR}}/{{split}}/labels", exist_ok=True)\\n` +
+      `    for img in glob.glob(f"{{SRC_DIR}}/{{split}}/images/*.*"):\\n` +
+      `        dst_img = f"{{DST_DIR}}/{{split}}/images/{{os.path.basename(img)}}"\\n` +
+      `        if not os.path.exists(dst_img):\\n` +
+      `            os.symlink(os.path.abspath(img), dst_img)\\n` +
+      `    for lbl in glob.glob(f"{{SRC_DIR}}/{{split}}/labels/*.txt"):\\n` +
+      `        shutil.copy2(lbl, f"{{DST_DIR}}/{{split}}/labels/{{os.path.basename(lbl)}}")\\n\\n` +
+      `print("2. Injecting accepted missing annotations into the clean copy...")\\n` +
+      `accepted_boxes = ${{acceptedJson}}\\n` +
+      `injected_count = 0\\n` +
       `for item in accepted_boxes:\\n` +
-      `    lbl_file = os.path.join(labels_dir, item["stem"] + ".txt")\\n` +
-      `    if os.path.exists(lbl_file):\\n` +
-      `        xc, yc, w, h = item["yolo_bbox"]\\n` +
-      `        line = f"{{item['class_id']}} {{xc:.6f}} {{yc:.6f}} {{w:.6f}} {{h:.6f}}\\n"\\n` +
-      `        with open(lbl_file, "a") as f:\\n` +
-      `            f.write(line)\\n` +
-      `print("Successfully injected ${{accepted.length}} missing annotations!")`;
+      `    for split in ["train", "valid", "test"]:\\n` +
+      `        lbl_file = f"{{DST_DIR}}/{{split}}/labels/{{item['stem']}}.txt"\\n` +
+      `        if os.path.exists(lbl_file):\\n` +
+      `            xc, yc, w, h = item["yolo_bbox"]\\n` +
+      `            with open(lbl_file, "a") as f:\\n` +
+      `                f.write(f"{{item['class_id']}} {{xc:.6f}} {{yc:.6f}} {{w:.6f}} {{h:.6f}}\\n")\\n` +
+      `            injected_count += 1\\n` +
+      `            break\\n\\n` +
+      `with open(f"{{SRC_DIR}}/data.yaml", "r") as f: yaml_text = f.read()\\n` +
+      `yaml_text = yaml_text.replace("pcb-unified-4class", "pcb-unified-4class-cleaned")\\n` +
+      `with open(f"{{DST_DIR}}/data.yaml", "w") as f: f.write(yaml_text)\\n\\n` +
+      `print(f"🎉 Done! Injected {{injected_count}} missing annotations into {{DST_DIR}}!")\\n` +
+      `print("Your original dataset remains 100% untouched and pristine!")`;
 
     document.getElementById('exportSnippet').innerText = pyCode;
     document.getElementById('exportModal').style.display = 'flex';

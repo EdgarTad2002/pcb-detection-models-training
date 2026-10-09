@@ -41,5 +41,6 @@ overleaf_bundle/
 !**/README.md
 !readme.md
 !**/readme.md
+!ARCHITECTURE_CHANGELOG.md
 
 tools/remote_*.sh

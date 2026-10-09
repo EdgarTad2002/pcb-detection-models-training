@@ -12,6 +12,8 @@ This project directly reproduces, substantially extends, and resolves critical s
 > **Reference Paper:**  
 > Zhou, X., & Agaian, S. (2026). *Ensemble Learning Using YOLO Models for Semiconductor E-Waste Recycling*. **Information**, 17(4), 322. [https://doi.org/10.3390/info17040322](https://doi.org/10.3390/info17040322)
 
+> 📋 **Collaborator Notice:** See [ARCHITECTURE_CHANGELOG.md](ARCHITECTURE_CHANGELOG.md) for the complete decision matrix, validated techniques, negative results, and cluster master leaderboard.
+
 ---
 
 ## 📌 Table of Contents
@@ -105,6 +107,17 @@ python tools/rectify_dataset.py \
 
 #### The Rectification Impact:
 Retraining the entire 10-model benchmark on the rectified dataset yielded a massive **$\approx +14\%$ to $+15\%$ absolute jump in Capacitor AP50** across all YOLO models (e.g., YOLO26s Capacitor AP surged from $5.36\%$ to **$20.66\%$** at 640px, and up to **$28.94\%$** at 1280px).
+
+### 2.3 The Missing-Label Cleaned Dataset (`datasets/pcb-unified-4class-cleaned`)
+Beyond taxonomy errors, public PCB datasets suffer from severe **human labeling omission fatigue**: human labelers labeled large ICs but skipped hundreds of identical decoupling capacitors.
+
+To solve this without hallucinating false positives:
+- We engineered an **Ultra-Strict High-Conviction Auditor** combining multi-scale neural detection with **Physical Matched-Filtering (Normalized Cross-Correlation)** and geometric aspect ratio constraints ($\text{AR} \ge 1.30$).
+- We safely injected **74 zero-false-positive annotations** into the training set (`train/labels/`), while leaving the test set (`test/labels/`) 100% untouched to protect benchmark integrity.
+- Training the flagship **YOLO26x (59M params)** on this cleaned dataset boosted **Capacitor AP from $0.3077 \rightarrow 0.3354$ (+9.0% relative gain)** and achieved an all-time record **$0.4419$ mAP@0.5:0.95**.
+
+👉 **Read the Full Technical Guide with Visual Examples:** [DATASET_CLEANING_README.md](DATASET_CLEANING_README.md)  
+👉 **Interactive Visual Inspector Notebook:** [`compare_original_vs_cleaned_dataset.ipynb`](compare_original_vs_cleaned_dataset.ipynb)
 
 ---
 

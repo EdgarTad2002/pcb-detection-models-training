@@ -260,7 +260,7 @@ def evaluate_and_save(weights_path, args):
         if k != "per_class_ap50":
             print(f"{k}: {v}")
     print("\n--- Per-Class AP@0.5 ---")
-    for name, ap in per_class_ap.items():
+    for name, ap in per_class_ap50.items():
         print(f"{name}: {ap:.4f}")
 
     args.results_dir.mkdir(parents=True, exist_ok=True)
