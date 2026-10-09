@@ -23,9 +23,22 @@ Usage:
 
 import argparse
 import json
+import sys
 import time
 from pathlib import Path
 from typing import Dict, List, Tuple
+
+# Ensure workspace root is in sys.path so custom modules (retinex_stem) unpickle properly
+repo_root = Path(__file__).resolve().parent.parent
+if str(repo_root) not in sys.path:
+    sys.path.insert(0, str(repo_root))
+if str(Path.cwd()) not in sys.path:
+    sys.path.insert(0, str(Path.cwd()))
+
+try:
+    import retinex_stem
+except ImportError:
+    pass
 
 import cv2
 import numpy as np

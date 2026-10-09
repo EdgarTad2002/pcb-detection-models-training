@@ -20,6 +20,7 @@ conda activate /mnt/weka/etadevosyan/.conda/envs/pcb-yolo
 
 WORKSPACE_DIR=${PCB_YOLO_WORKSPACE:-"/mnt/weka/etadevosyan/pcb-yolo/pcb-yolo26n-gurgen"}
 cd "$WORKSPACE_DIR"
+export PYTHONPATH="$WORKSPACE_DIR:$PYTHONPATH"
 
 # 2. Checkpoints
 W_CHAMP="runs/yolov26s_ultimate_retinex_copypaste_1280/pcb-filtered/weights/best.pt"
