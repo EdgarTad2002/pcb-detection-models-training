@@ -37,6 +37,7 @@ if str(REPO_ROOT) not in sys.path:
 from tools.weighted_variational_retinex import (
     process_rgb_batch,
     process_rgb_image,
+    process_rgb_channelwise_fusion,
 )
 
 
@@ -82,7 +83,7 @@ def verify_or_write_params(
         except Exception:
             existing_params = {}
 
-        compare_keys = ["c1", "c2", "lambd", "gamma", "max_iter", "eps1", "eps2", "retinex_script_sha256"]
+        compare_keys = ["mode", "alpha", "c1", "c2", "lambd", "gamma", "max_iter", "eps1", "eps2", "retinex_script_sha256"]
         mismatches = {}
         for k in compare_keys:
             if existing_params.get(k) != current_params.get(k):
@@ -108,6 +109,8 @@ def build_retinex_dataset(
     src_dir: str = "datasets/pcb-unified-4class-cleaned",
     dst_dir: str = "datasets/pcb-unified-4class-cleaned-retinex",
     device: str = "cuda",
+    mode: str = "rgb_fusion",
+    alpha: float = 0.30,
     c1: float = 0.01,
     c2: float = 0.1,
     lambd: float = 1.0,
@@ -130,6 +133,8 @@ def build_retinex_dataset(
     git_commit = get_git_commit()
 
     current_params = {
+        "mode": mode,
+        "alpha": alpha,
         "c1": c1,
         "c2": c2,
         "lambd": lambd,
@@ -286,18 +291,32 @@ def build_retinex_dataset(
                     continue
 
                 try:
-                    _, _, rgb_enhanced = process_rgb_image(
-                        img_bgr,
-                        device=compute_device,
-                        c1=c1,
-                        c2=c2,
-                        lambd=lambd,
-                        gamma=gamma,
-                        max_iter=max_iter,
-                        eps1=eps1,
-                        eps2=eps2,
-                    )
-                    bgr_enhanced = cv2.cvtColor(rgb_enhanced, cv2.COLOR_RGB2BGR)
+                    if mode == "rgb_fusion":
+                        _, _, bgr_enhanced = process_rgb_channelwise_fusion(
+                            img_bgr,
+                            alpha=alpha,
+                            device=compute_device,
+                            c1=c1,
+                            c2=c2,
+                            lambd=lambd,
+                            gamma=gamma,
+                            max_iter=max_iter,
+                            eps1=eps1,
+                            eps2=eps2,
+                        )
+                    else:
+                        _, _, rgb_enhanced = process_rgb_image(
+                            img_bgr,
+                            device=compute_device,
+                            c1=c1,
+                            c2=c2,
+                            lambd=lambd,
+                            gamma=gamma,
+                            max_iter=max_iter,
+                            eps1=eps1,
+                            eps2=eps2,
+                        )
+                        bgr_enhanced = cv2.cvtColor(rgb_enhanced, cv2.COLOR_RGB2BGR)
                     cv2.imwrite(str(dst_img_p), bgr_enhanced)
                     split_processed += 1
                     total_processed += 1
@@ -324,6 +343,7 @@ def build_retinex_dataset(
     print("\n" + "=" * 70)
     print("🎉 RETINEX DATASET PREPARATION COMPLETE!")
     print(f"📁 Dataset location:    {dst_path}")
+    print(f"🎨 Processing mode:     {mode} (alpha={alpha})")
     print(f"🖼️  Processed images:    {total_processed}")
     print(f"⏭️  Skipped images:      {total_skipped}")
     if total_errors > 0:
@@ -338,6 +358,8 @@ def main():
     p.add_argument("--src-dir", type=str, default="datasets/pcb-unified-4class-cleaned")
     p.add_argument("--dst-dir", type=str, default="datasets/pcb-unified-4class-cleaned-retinex")
     p.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu")
+    p.add_argument("--mode", type=str, default="rgb_fusion", choices=["rgb_fusion", "v_channel"], help="Enhancement mode: 'rgb_fusion' (per-channel RGB residual fusion) or 'v_channel' (HSV V-channel decomposition)")
+    p.add_argument("--alpha", type=float, default=0.30, help="Weight of reflectance in fusion (default: 0.30 = 30%%)")
     p.add_argument("--c1", type=float, default=0.01, help="Reflection penalty c1 (default: 0.01)")
     p.add_argument("--c2", type=float, default=0.1, help="Illumination penalty c2 (default: 0.1)")
     p.add_argument("--lambd", type=float, default=1.0, help="ADMM regularizer lambda (default: 1.0)")
@@ -353,6 +375,8 @@ def main():
         src_dir=args.src_dir,
         dst_dir=args.dst_dir,
         device=args.device,
+        mode=args.mode,
+        alpha=args.alpha,
         c1=args.c1,
         c2=args.c2,
         lambd=args.lambd,

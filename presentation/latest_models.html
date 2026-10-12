@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Latest Trained Models — PCB Detection</title>
+<meta name="description" content="Latest YOLO26 runs on bilateral-Retinex PCB data: YOLO26x, P2 head, copy-paste and seed ensemble.">
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;500;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0b1020;--card:rgba(255,255,255,.06);--line:rgba(255,255,255,.12);--txt:#e8ecf8;--mut:#9aa6c7;
+--a:#38bdf8;--b:#a78bfa;--g:#34d399;--w:#fbbf24;--r:#fb7185}
+*{box-sizing:border-box;margin:0}
+html,body{height:100%;background:var(--bg);color:var(--txt);font-family:Outfit,system-ui,sans-serif;overflow:hidden}
+body::before{content:"";position:fixed;inset:0;background:
+radial-gradient(900px 500px at 12% 8%,rgba(56,189,248,.18),transparent 60%),
+radial-gradient(800px 500px at 92% 92%,rgba(167,139,250,.18),transparent 60%);z-index:0}
+.slide{position:absolute;inset:0;padding:5vh 6vw;display:flex;flex-direction:column;justify-content:center;
+opacity:0;transform:translateY(24px) scale(.99);pointer-events:none;transition:all .55s cubic-bezier(.2,.8,.2,1);z-index:1}
+.slide{overflow-y:auto}.slide.active{opacity:1;transform:none;pointer-events:auto}
+h1{font-size:clamp(2.4rem,5.4vw,4.6rem);font-weight:800;line-height:1.05;letter-spacing:-.02em;
+background:linear-gradient(100deg,#fff,var(--a) 50%,var(--b));-webkit-background-clip:text;background-clip:text;color:transparent}
+h2{font-size:clamp(1.7rem,3.2vw,2.7rem);font-weight:700;margin-bottom:.35em}
+h2 small{display:block;font-size:.42em;font-weight:500;color:var(--a);letter-spacing:.18em;text-transform:uppercase;margin-bottom:.4em}
+p,li{font-size:clamp(1rem,1.55vw,1.35rem);line-height:1.5;color:var(--mut)}
+b,strong{color:var(--txt);font-weight:600}
+.sub{font-size:clamp(1.1rem,1.9vw,1.6rem);color:var(--mut);margin-top:1.2rem;max-width:62ch}
+.grid{display:grid;gap:1.4rem;margin-top:1rem}
+.g2{grid-template-columns:1fr 1fr}.g3{grid-template-columns:repeat(3,1fr)}.g4{grid-template-columns:repeat(4,1fr)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:1.3rem 1.5rem;backdrop-filter:blur(10px);
+transition:transform .25s,border-color .25s}
+.card:hover{transform:translateY(-4px);border-color:var(--a)}
+.card h3{font-size:1.15rem;margin-bottom:.4rem;color:#fff}
+.big{font-size:clamp(2rem,4vw,3.4rem);font-weight:800;line-height:1}
+.lbl{font-size:.8rem;letter-spacing:.14em;text-transform:uppercase;color:var(--mut);margin-top:.5rem}
+.c-a{color:var(--a)}.c-g{color:var(--g)}.c-w{color:var(--w)}.c-r{color:var(--r)}.c-b{color:var(--b)}
+.fig{max-height:68vh;max-width:100%;object-fit:contain;border-radius:14px;border:1px solid var(--line);
+box-shadow:0 20px 60px rgba(0,0,0,.45);background:#fff}
+.figwrap{display:flex;flex-direction:column;align-items:center;gap:.8rem}
+.cap{font-size:.95rem;color:var(--mut);text-align:center;max-width:90ch}
+code,.mono{font-family:"JetBrains Mono",monospace;font-size:.92em;color:var(--g)}
+.eq{font-family:"JetBrains Mono",monospace;background:rgba(0,0,0,.35);border:1px solid var(--line);border-radius:12px;
+padding:.9rem 1.2rem;color:#d5defa;font-size:clamp(.85rem,1.3vw,1.1rem);margin:.7rem 0;line-height:1.7}
+table{border-collapse:collapse;width:100%;font-size:clamp(.85rem,1.35vw,1.15rem)}
+th,td{padding:.55rem .8rem;border-bottom:1px solid var(--line);text-align:right}
+th:first-child,td:first-child{text-align:left}
+th{color:var(--a);font-weight:600;font-size:.85em;letter-spacing:.08em;text-transform:uppercase}
+td{color:var(--txt)}tr.hl td{background:rgba(52,211,153,.10)}tr.dim td{color:var(--mut)}
+.tag{display:inline-block;padding:.15rem .6rem;border-radius:99px;font-size:.78rem;font-weight:600;border:1px solid}
+.t-ok{color:var(--g);border-color:var(--g)}.t-no{color:var(--r);border-color:var(--r)}.t-na{color:var(--w);border-color:var(--w)}
+ul{padding-left:1.2rem;display:grid;gap:.55rem}
+.nav{position:fixed;bottom:2.2vh;left:0;right:0;display:flex;justify-content:center;align-items:center;gap:1rem;z-index:5}
+.bar{width:min(420px,60vw);height:4px;background:var(--line);border-radius:4px;overflow:hidden}
+.bar i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--a),var(--b));transition:width .4s}
+.nav span{font-size:.85rem;color:var(--mut);font-family:"JetBrains Mono",monospace}
+.hint{position:fixed;top:2vh;right:2vw;font-size:.75rem;color:var(--mut);z-index:5}
+.pipe{display:flex;align-items:center;gap:.8rem;flex-wrap:wrap;margin-top:1.2rem}
+.pipe .card{padding:.9rem 1.1rem;font-size:1rem;color:#fff}
+.pipe .ar{color:var(--a);font-size:1.6rem}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:1.2rem;align-items:start;margin-top:.6rem}
+.two img{width:100%;max-height:50vh;object-fit:contain;border-radius:12px;border:1px solid var(--line);background:#fff}
+.two .lab{font-size:.8rem;color:var(--mut);letter-spacing:.1em;text-transform:uppercase;margin-bottom:.3rem}
+.kpis{display:flex;gap:1rem;flex-wrap:wrap;margin:.4rem 0}.kpis .card{padding:.7rem 1.1rem}.kpis .big{font-size:clamp(1.4rem,2.6vw,2.2rem)}
+
+/* Publication-grade Mathematics Styling */
+.math-var {
+  font-family: "Cambria Math", "Latin Modern Math", "STIX Two Math", "Georgia", "Times New Roman", serif;
+  font-style: italic;
+  font-weight: 500;
+  color: #fff;
+}
+.math-frac {
+  display: inline-flex;
+  flex-direction: column;
+  vertical-align: -0.45em;
+  text-align: center;
+  font-size: 0.88em;
+  line-height: 1;
+  padding: 0 0.2em;
+}
+.math-frac .num {
+  border-bottom: 1.5px solid currentColor;
+  padding-bottom: 0.1em;
+  display: block;
+}
+.math-frac .den {
+  padding-top: 0.15em;
+  display: block;
+}
+.math-norm {
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+}
+.math-norm .bar {
+  font-size: 1.25em;
+  font-weight: 300;
+  color: var(--a);
+  margin: 0 1px;
+}
+.math-card {
+  background: linear-gradient(135deg, rgba(15, 23, 42, 0.9), rgba(30, 41, 59, 0.8));
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  border-left: 4px solid var(--a);
+  border-radius: 14px;
+  padding: 1rem 1.4rem;
+  margin: 0.7rem 0;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+}
+.math-card-green {
+  border-left-color: var(--g);
+  border-color: rgba(52, 211, 153, 0.35);
+}
+.math-title {
+  font-size: 0.76rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--mut);
+  margin-bottom: 0.4rem;
+  font-weight: 700;
+}
+.math-eq {
+  font-family: "Cambria Math", "Latin Modern Math", "STIX Two Math", "Georgia", "Times New Roman", serif;
+  font-size: 1.2rem;
+  color: #f8fafc;
+  line-height: 1.6;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+.math-subtext {
+  font-size: 0.84rem;
+  color: var(--mut);
+  margin-top: 0.45rem;
+  line-height: 1.4;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  padding-top: 0.4rem;
+}
+.channel-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.4rem 0.85rem;
+  border-radius: 999px;
+  font-size: 0.92rem;
+  font-weight: 600;
+  border: 1px solid;
+  letter-spacing: 0.02em;
+}
+.badge-red {
+  background: rgba(239, 68, 68, 0.18);
+  color: #fca5a5;
+  border-color: rgba(239, 68, 68, 0.45);
+}
+.badge-green {
+  background: rgba(34, 197, 94, 0.18);
+  color: #86efac;
+  border-color: rgba(34, 197, 94, 0.45);
+}
+.badge-blue {
+  background: rgba(59, 130, 246, 0.18);
+  color: #93c5fd;
+  border-color: rgba(59, 130, 246, 0.45);
+}
+</style>
+</head>
+<body>
+<div class="hint">← → / space to navigate · F fullscreen</div>
+
+<!-- 1 --><section class="slide"><p class="mono c-a" style="letter-spacing:.2em">YSU · PCB INSPECTION · LATEST RUNS</p>
+<h1 style="margin-top:1rem">Latest trained models</h1>
+<p class="sub">YOLO26 on bilateral-Retinex PCB data: bigger model, P2 head, capacitor copy-paste, and a 3-seed ensemble. 4 classes, 1280px, 42 test images.</p>
+<p class="mono" style="margin-top:2rem;color:var(--mut)">Edgar Tadevosyan · runs from 10 Oct 2026</p></section>
+<!-- 2 --><section class="slide"><h2><small>Setup</small>What was trained</h2>
+<div class="grid g4"><div class="card"><div class="big c-a">11</div><div class="lbl">runs shown in this round</div></div>
+<div class="card"><div class="big c-b">3</div><div class="lbl">seeds: baseline & bilateral</div></div>
+<div class="card"><div class="big c-g">1000</div><div class="lbl">max_det</div></div>
+<div class="card"><div class="big c-w">100</div><div class="lbl">epochs · batch 8 · 1280px</div></div></div>
+<div class="grid g2" style="margin-top:1.4rem"><div class="card"><h3>Comparison arms</h3><p>Raw baseline vs bilateral Retinex (α=0.3, β=0.1), 3 seeds each, plus <code>hsv_v=0.1</code> and four single-seed variants on the bilateral data.</p></div>
+<div class="card"><h3>Test protocol</h3><p>Same cleaned dataset, same test split (42 evaluated images), conf 0.001. A final WBF ensemble over the 3 bilateral seeds.</p></div></div></section>
+<!-- 3 --><section class="slide"><h2><small>Scoreboard</small>All runs ranked by mAP50</h2>
+<div class="figwrap"><img class="fig" src="assets/comprehensive_ablation_benchmarks.png" alt="ranked runs"><div class="cap">Single seeds are within ≈0.03 of each other; seed noise alone spans 0.5705–0.6042 for the raw baseline.</div></div></section>
+<section class="slide"><h2><small>Model 1</small>YOLO26x on bilateral data</h2><div class="kpis"><div class="card"><div class="big c-a">0.5975</div><div class="lbl">mAP50</div></div><div class="card"><div class="big c-b">0.4266</div><div class="lbl">mAP50-95</div></div><div class="card"><div class="big c-w">0.5616</div><div class="lbl">recall</div></div><div class="card"><div class="big c-r">0.2973</div><div class="lbl">capacitor AP50</div></div></div>
+<div class="two"><div><div class="lab">Confusion matrix</div><img src="assets/cm_yolo26x.png" alt="confusion matrix"></div>
+<div><div class="lab">Training curves</div><img src="assets/curves_yolo26x.png" alt="training curves"></div></div>
+<p style="margin-top:.7rem;font-size:1rem">mAP50-95 of 0.4266 is near the best small-model run (0.4289), and mAP50 sits inside the seed range of the small model. Validation mAP50 peaked at epoch 34 (0.627) and ended at 0.605, so 100 epochs may be more than needed. One seed only.</p></section>
+
+<section class="slide"><h2><small>Model 2</small>YOLO26s with P2 (stride-4) head</h2><div class="kpis"><div class="card"><div class="big c-r">0.5670</div><div class="lbl">mAP50</div></div><div class="card"><div class="big c-b">0.3641</div><div class="lbl">mAP50-95</div></div><div class="card"><div class="big c-w">0.5714</div><div class="lbl">recall</div></div><div class="card"><div class="big c-r">0.2402</div><div class="lbl">capacitor AP50</div></div></div>
+<div class="two"><div><div class="lab">Confusion matrix</div><img src="assets/cm_yolo26s-p2.png" alt="confusion matrix"></div>
+<div><div class="lab">Training curves</div><img src="assets/curves_yolo26s-p2.png" alt="training curves"></div></div>
+<p style="margin-top:.7rem;font-size:1rem">Lowest of the new runs, including on capacitors (0.240), the class it was meant to help. Electrolytic capacitor AP50 is high (0.754) but Connector fell to 0.648. One seed; whether the cause is the head or the training setup was not tested.</p></section>
+
+<section class="slide"><h2><small>Model 3</small>Bilateral data + capacitor copy-paste</h2><div class="kpis"><div class="card"><div class="big c-w">0.5790</div><div class="lbl">mAP50</div></div><div class="card"><div class="big c-b">0.4060</div><div class="lbl">mAP50-95</div></div><div class="card"><div class="big c-w">0.5498</div><div class="lbl">recall</div></div><div class="card"><div class="big c-r">0.2438</div><div class="lbl">capacitor AP50</div></div></div>
+<div class="two"><div><div class="lab">Confusion matrix</div><img src="assets/cm_cappaste.png" alt="confusion matrix"></div>
+<div><div class="lab">Training curves</div><img src="assets/curves_cappaste.png" alt="training curves"></div></div>
+<p style="margin-top:.7rem;font-size:1rem">Copy-pasting capacitors did not raise capacitor AP50 (0.244 vs ≈0.28–0.30 for bilateral runs). One seed, so small per-class differences (e.g. IC 0.657) are not conclusive.</p></section>
+
+<!-- 7 --><section class="slide"><h2><small>Model 4</small>3-seed bilateral WBF ensemble</h2>
+<div class="kpis"><div class="card"><div class="big c-g">0.6191</div><div class="lbl">mAP50</div></div><div class="card"><div class="big c-a">0.4344</div><div class="lbl">mAP50-95</div></div><div class="card"><div class="big c-b">0.6336</div><div class="lbl">recall</div></div><div class="card"><div class="big c-w">≈1.3 s</div><div class="lbl">per image (3 models)</div></div></div>
+<table><tr><th>AP50</th><th>Capacitor</th><th>Connector</th><th>Electrolytic</th><th>IC</th></tr>
+<tr class="dim"><td>Raw baseline (mean of 3)</td><td>0.300</td><td>0.708</td><td>0.708</td><td>0.629</td></tr>
+<tr class="dim"><td>Bilateral (mean of 3)</td><td>0.283</td><td>0.716</td><td>0.742</td><td>0.630</td></tr>
+<tr class="hl"><td>Bilateral 3-seed ensemble</td><td>0.312</td><td>0.737</td><td>0.760</td><td>0.667</td></tr></table>
+<p style="margin-top:1rem">Best mAP50 of this round and above the 3-seed means on every class (single seeds can still beat it on one class, e.g. raw seed 2 on Capacitor at 0.325). A raw-image seed ensemble has not been evaluated yet, so the gain cannot be attributed to Retinex rather than to ensembling.</p></section>
+<!-- 8 --><section class="slide"><h2><small>Error analysis</small>Capacitor errors are detection errors, not class confusion</h2>
+<div class="two"><div><div class="lab">Confusion matrix · bilateral + copy-paste run</div><img src="assets/cm_cappaste.png" alt="confusion matrix"></div>
+<div><ul><li>Confusions between real classes are tiny (single digits to a few).</li>
+<li>Nearly all errors are against <b>background</b>: missed components and spurious boxes.</li>
+<li>Capacitor has by far the largest background counts, in both directions.</li>
+<li>So gains must come from finding/localising small, dense parts, not from better classification.</li></ul>
+<p style="margin-top:1rem;font-size:.9rem">Matrix is Ultralytics' default (conf 0.25), so counts differ from the conf 0.001 mAP evaluation.</p></div></div></section>
+<!-- 8b --><section class="slide"><h2><small>Method Implementation</small>Fu et al. (CVPR 2016) Weighted Variational Retinex: Separate Channel-wise Decomposition</h2>
+<div class="grid g2" style="margin-top:.4rem">
+  <div class="card">
+    <h3 class="c-a">1. Theory & Mathematical Formulation</h3>
+    <p>Observed physical image <span class="math-var">S = R · L</span> (Reflectance <span class="math-var">R</span>, Illumination <span class="math-var">L</span>). In conventional log-domain <span class="math-var">s = r + l</span>, the spatial gradient is:
+      <span class="math-var">∇(log x) = <span class="math-frac"><span class="num">1</span><span class="den">x</span></span> ∇x</span>.
+    </p>
+    <p style="margin-top:.45rem">
+      When <span class="math-var">x</span> is small (dark regions), the factor <span class="math-frac"><span class="num">1</span><span class="den">x</span></span> explodes and over-penalizes gradients, burying subtle component edges in bright regions. Fu et al. eliminate this with a <b>weighted objective function</b>:
+    </p>
+    <div class="math-card">
+      <div class="math-title">Weighted Variational Energy Functional</div>
+      <div class="math-eq">
+        <span class="math-var">min<sub>r, l</sub></span> &nbsp;
+        <span class="math-norm"><span class="bar">‖</span><span class="math-var">r + l − s</span><span class="bar">‖</span><sub>2</sub><sup>2</sup></span>
+        &nbsp;+&nbsp; <span class="math-var">c</span><sub>1</sub> <span class="math-norm"><span class="bar">‖</span><span class="math-var">e<sup>r</sup> · ∇r</span><span class="bar">‖</span><sub>1</sub></span>
+        &nbsp;+&nbsp; <span class="math-var">c</span><sub>2</sub> <span class="math-norm"><span class="bar">‖</span><span class="math-var">e<sup>l</sup> · ∇l</span><span class="bar">‖</span><sub>2</sub><sup>2</sup></span>
+      </div>
+      <div class="math-subtext">
+        <b>Constraints:</b> <span class="math-var">r ≤ 0</span> &nbsp;and&nbsp; <span class="math-var">s ≤ l</span> &nbsp;&nbsp;|&nbsp;&nbsp;
+        <span style="color:var(--g)">Weights <span class="math-var">e<sup>r</sup> = R</span> and <span class="math-var">e<sup>l</sup> = L</span> directly cancel the <span class="math-frac"><span class="num">1</span><span class="den">R</span></span> and <span class="math-frac"><span class="num">1</span><span class="den">L</span></span> gradient distortion!</span>
+      </div>
+    </div>
+    <p style="font-size:.9rem;color:var(--mut);margin-top:.4rem">
+      Solved via <b>ADMM</b> in 3 sub-problems: <b>(P1)</b> <span class="math-var">L</span><sub>1</sub> shrinkage soft-thresholding, <b>(P2)</b> 2D FFT closed-form solver for reflectance <span class="math-var">r</span>, <b>(P3)</b> 2D FFT closed-form solver for illumination <span class="math-var">l</span>.
+    </p>
+  </div>
+
+  <div class="card">
+    <h3 class="c-g">2. Our Implementation: Separate RGB Channel Decomposition</h3>
+    <p>Rather than standard grayscale/HSV V-channel processing (which discards color albedo), we implemented Fu et al. in PyTorch with <b>independent 3-channel execution</b>:</p>
+    
+    <div style="display:flex;gap:0.6rem;flex-wrap:wrap;margin:0.7rem 0;">
+      <span class="channel-badge badge-red">🔴 <b>Red:</b> <span class="math-var">S</span><sub>R</sub> &rarr; (<span class="math-var">R</span><sub>R</sub>, <span class="math-var">L</span><sub>R</sub>)</span>
+      <span class="channel-badge badge-green">🟢 <b>Green:</b> <span class="math-var">S</span><sub>G</sub> &rarr; (<span class="math-var">R</span><sub>G</sub>, <span class="math-var">L</span><sub>G</sub>)</span>
+      <span class="channel-badge badge-blue">🔵 <b>Blue:</b> <span class="math-var">S</span><sub>B</sub> &rarr; (<span class="math-var">R</span><sub>B</sub>, <span class="math-var">L</span><sub>B</sub>)</span>
+    </div>
+
+    <div class="math-card math-card-green">
+      <div class="math-title">Channel-wise Residual Albedo Fusion</div>
+      <div class="math-eq">
+        <span class="math-var">I</span><sub>fused, <span class="math-var">c</span></sub> &nbsp;=&nbsp;
+        (1 − α) · <span class="math-var">I</span><sub>orig, <span class="math-var">c</span></sub> &nbsp;+&nbsp;
+        α · <span class="math-var">R</span><sub>refl, <span class="math-var">c</span></sub>
+        &nbsp;&nbsp;&nbsp;<span style="color:var(--w);font-size:0.95rem;font-weight:600">(α = 0.30)</span>
+      </div>
+      <div class="math-subtext">
+        Preserves natural PCB copper/substrate colors while extracting shadow-invariant surface albedo across Red, Green, and Blue planes.
+      </div>
+    </div>
+    <p style="font-size:.9rem;color:var(--mut);margin-top:.4rem">
+      Fully vectorized GPU/CPU execution using PyTorch 2D Fast Fourier Transforms (FFT).
+    </p>
+  </div>
+</div>
+
+<div class="card" style="margin-top:.8rem;padding:.9rem 1.2rem">
+  <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.8rem">
+    <div>
+      <h3 class="c-w" style="margin-bottom:.2rem">Training Result & Physical Finding on YOLO26s (1280px)</h3>
+      <p style="font-size:.95rem">Trained on full 4-class PCB dataset: <b>mAP50 = 0.5591</b> · mAP50-95 = 0.4076 · Recall = 0.5716 · Capacitor AP50 = 0.2673</p>
+    </div>
+    <div style="max-width:55ch;font-size:.88rem;color:var(--mut);border-left:2px solid var(--line);padding-left:1rem">
+      <b>Physical Insight:</b> Industrial PCB inspection boards are captured under diffuse, flat studio illumination with minimal cast shadows. Removing illumination gradients provided no contrast gain because the primary challenge is microscopic component scale, not non-uniform lighting.
+    </div>
+  </div>
+</div>
+</section>
+
+<!-- 8c --><section class="slide"><h2><small>Data Audit & Rectification</small>Recovering Omitted Components: Confidence & Filter Thresholds</h2>
+<div class="two">
+  <div>
+    <div class="lab">Candidate Verification: Visual Failure Case on ATTIOT Board</div>
+    <img src="assets/missing_labels_evidence.png" alt="matched-filter candidates">
+    <p style="font-size:.82rem;margin-top:.3rem;color:var(--mut)"><b>The Problem with Correlation Alone:</b> Candidates M1–M4 have high cross-correlation (NCC 0.69–0.73) with capacitor templates, but microscopic zoom reveals they are connector pin edges and silkscreen text. Loose thresholds inject severe label noise!</p>
+  </div>
+  <div>
+    <div class="card" style="padding:.9rem 1.1rem">
+      <h3 class="c-a">1. The Ground Truth Omission Problem</h3>
+      <p style="font-size:.92rem">Annotators omitted hundreds of physical SMD capacitors on genuine boards. When the detector fires on an unannotated capacitor, loss penalizes it as a False Positive: <b>the model is actively trained to suppress small capacitors!</b></p>
+    </div>
+    <div class="card" style="margin-top:.6rem;padding:.9rem 1.1rem">
+      <h3 class="c-g">2. The Dual-Verification Pipeline & Strict Thresholds</h3>
+      <p style="font-size:.92rem">To recover real components without hallucinating noise, we engineered a dual neural + optical filter:</p>
+      <ul style="font-size:.88rem;margin-top:.3rem;gap:.3rem">
+        <li><b>YOLO26x multi-scale proposals</b> @ 1280px native inference</li>
+        <li><b>Capacitors:</b> Confidence &ge; <b>0.65</b> AND NCC &ge; <b>0.50</b> AND Aspect Ratio &ge; <b>1.30</b><br><span style="color:var(--w);font-size:.8rem">(Aspect ratio kills circular drill vias; NCC confirms solder fillet reflectance)</span></li>
+        <li><b>ICs:</b> Confidence &ge; <b>0.70</b> on distinct silicon packaging</li>
+      </ul>
+    </div>
+    <div class="card" style="margin-top:.6rem;padding:.9rem 1.1rem">
+      <h3 class="c-w">3. Impact: +1,175 Verified Labels Added (4,752 → 5,927)</h3>
+      <p style="font-size:.92rem">YOLO26x Cleaned vs Original: <b>Capacitor AP50 rose from 0.3077 → 0.3354 (+9.0% relative)</b>, and Recall rose from 60.84% → 61.79%.</p>
+    </div>
+  </div>
+</div>
+</section>
+<!-- 9 --><section class="slide"><h2><small>Takeaways</small>Where this leaves us</h2>
+<div class="grid g2"><div class="card"><h3 class="c-g">Supported</h3><ul><li>Ensembling 3 seeds: 0.619 mAP50, +0.033 over the 3-seed mean.</li>
+<li>Bilateral ≈ raw baseline (+0.0065, within noise).</li>
+<li>YOLO26x: similar to the best small-model runs, not clearly better (1 seed).</li></ul></div>
+<div class="card"><h3 class="c-r">Not working (1 seed each)</h3><ul><li>P2 head, capacitor copy-paste, lower hsv_v.</li>
+<li>Capacitor AP50 stays ≈0.24–0.31 in every run.</li></ul></div></div>
+<div class="card" style="margin-top:1.2rem"><h3>Next</h3><p>Raw-image seed ensemble as the control; extra seeds for 26x / P2 / copy-paste; tiled inference for dense capacitors.</p></div>
+<p class="mono" style="margin-top:1.4rem;color:var(--a)">Thank you — questions?</p></section>
+<div class="nav"><span id="cnt"></span><div class="bar"><i id="bar"></i></div></div>
+<script>
+const S=[...document.querySelectorAll('.slide')];let i=0;
+function show(n){i=Math.max(0,Math.min(S.length-1,n));S.forEach((s,k)=>s.classList.toggle('active',k===i));
+document.getElementById('cnt').textContent=(i+1)+' / '+S.length;
+document.getElementById('bar').style.width=((i+1)/S.length*100)+'%';location.hash=i+1}
+addEventListener('keydown',e=>{if(['ArrowRight',' ','PageDown'].includes(e.key)){e.preventDefault();show(i+1)}
+else if(['ArrowLeft','PageUp'].includes(e.key))show(i-1);else if(e.key==='f')document.documentElement.requestFullscreen?.()});
+addEventListener('click',e=>{if(e.target.tagName!=='IMG')show(e.clientX>innerWidth/2?i+1:i-1)});
+show((parseInt(location.hash.slice(1))||1)-1);
+</script>
+</body>
+</html>

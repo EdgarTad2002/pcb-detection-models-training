@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Retinex Preprocessing for PCB Component Detection</title>
+<meta name="description" content="Bilateral and variational Retinex preprocessing for 4-class PCB component detection with YOLO26: method, experiments, and honest results.">
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;500;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0b1020;--card:rgba(255,255,255,.06);--line:rgba(255,255,255,.12);--txt:#e8ecf8;--mut:#9aa6c7;
+--a:#38bdf8;--b:#a78bfa;--g:#34d399;--w:#fbbf24;--r:#fb7185}
+*{box-sizing:border-box;margin:0}
+html,body{height:100%;background:var(--bg);color:var(--txt);font-family:Outfit,system-ui,sans-serif;overflow:hidden}
+body::before{content:"";position:fixed;inset:0;background:
+radial-gradient(900px 500px at 12% 8%,rgba(56,189,248,.18),transparent 60%),
+radial-gradient(800px 500px at 92% 92%,rgba(167,139,250,.18),transparent 60%);z-index:0}
+.slide{position:absolute;inset:0;padding:5vh 6vw;display:flex;flex-direction:column;justify-content:center;
+opacity:0;transform:translateY(24px) scale(.99);pointer-events:none;transition:all .55s cubic-bezier(.2,.8,.2,1);z-index:1}
+.slide.active{opacity:1;transform:none;pointer-events:auto}
+h1{font-size:clamp(2.4rem,5.4vw,4.6rem);font-weight:800;line-height:1.05;letter-spacing:-.02em;
+background:linear-gradient(100deg,#fff,var(--a) 50%,var(--b));-webkit-background-clip:text;background-clip:text;color:transparent}
+h2{font-size:clamp(1.7rem,3.2vw,2.7rem);font-weight:700;margin-bottom:.35em}
+h2 small{display:block;font-size:.42em;font-weight:500;color:var(--a);letter-spacing:.18em;text-transform:uppercase;margin-bottom:.4em}
+p,li{font-size:clamp(1rem,1.55vw,1.35rem);line-height:1.5;color:var(--mut)}
+b,strong{color:var(--txt);font-weight:600}
+.sub{font-size:clamp(1.1rem,1.9vw,1.6rem);color:var(--mut);margin-top:1.2rem;max-width:62ch}
+.grid{display:grid;gap:1.4rem;margin-top:1rem}
+.g2{grid-template-columns:1fr 1fr}.g3{grid-template-columns:repeat(3,1fr)}.g4{grid-template-columns:repeat(4,1fr)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:1.3rem 1.5rem;backdrop-filter:blur(10px);
+transition:transform .25s,border-color .25s}
+.card:hover{transform:translateY(-4px);border-color:var(--a)}
+.card h3{font-size:1.15rem;margin-bottom:.4rem;color:#fff}
+.big{font-size:clamp(2rem,4vw,3.4rem);font-weight:800;line-height:1}
+.lbl{font-size:.8rem;letter-spacing:.14em;text-transform:uppercase;color:var(--mut);margin-top:.5rem}
+.c-a{color:var(--a)}.c-g{color:var(--g)}.c-w{color:var(--w)}.c-r{color:var(--r)}.c-b{color:var(--b)}
+.fig{max-height:68vh;max-width:100%;object-fit:contain;border-radius:14px;border:1px solid var(--line);
+box-shadow:0 20px 60px rgba(0,0,0,.45);background:#fff}
+.figwrap{display:flex;flex-direction:column;align-items:center;gap:.8rem}
+.cap{font-size:.95rem;color:var(--mut);text-align:center;max-width:90ch}
+code,.mono{font-family:"JetBrains Mono",monospace;font-size:.92em;color:var(--g)}
+.eq{font-family:"JetBrains Mono",monospace;background:rgba(0,0,0,.35);border:1px solid var(--line);border-radius:12px;
+padding:.9rem 1.2rem;color:#d5defa;font-size:clamp(.85rem,1.3vw,1.1rem);margin:.7rem 0;line-height:1.7}
+table{border-collapse:collapse;width:100%;font-size:clamp(.85rem,1.35vw,1.15rem)}
+th,td{padding:.55rem .8rem;border-bottom:1px solid var(--line);text-align:right}
+th:first-child,td:first-child{text-align:left}
+th{color:var(--a);font-weight:600;font-size:.85em;letter-spacing:.08em;text-transform:uppercase}
+td{color:var(--txt)}tr.hl td{background:rgba(52,211,153,.10)}tr.dim td{color:var(--mut)}
+.tag{display:inline-block;padding:.15rem .6rem;border-radius:99px;font-size:.78rem;font-weight:600;border:1px solid}
+.t-ok{color:var(--g);border-color:var(--g)}.t-no{color:var(--r);border-color:var(--r)}.t-na{color:var(--w);border-color:var(--w)}
+ul{padding-left:1.2rem;display:grid;gap:.55rem}
+.nav{position:fixed;bottom:2.2vh;left:0;right:0;display:flex;justify-content:center;align-items:center;gap:1rem;z-index:5}
+.bar{width:min(420px,60vw);height:4px;background:var(--line);border-radius:4px;overflow:hidden}
+.bar i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--a),var(--b));transition:width .4s}
+.nav span{font-size:.85rem;color:var(--mut);font-family:"JetBrains Mono",monospace}
+.hint{position:fixed;top:2vh;right:2vw;font-size:.75rem;color:var(--mut);z-index:5}
+.pipe{display:flex;align-items:center;gap:.8rem;flex-wrap:wrap;margin-top:1.2rem}
+.pipe .card{padding:.9rem 1.1rem;font-size:1rem;color:#fff}
+.pipe .ar{color:var(--a);font-size:1.6rem}
+
+/* Publication-grade Mathematics Styling */
+.math-var {
+  font-family: "Cambria Math", "Latin Modern Math", "STIX Two Math", "Georgia", "Times New Roman", serif;
+  font-style: italic;
+  font-weight: 500;
+  color: #fff;
+}
+.math-frac {
+  display: inline-flex;
+  flex-direction: column;
+  vertical-align: -0.45em;
+  text-align: center;
+  font-size: 0.88em;
+  line-height: 1;
+  padding: 0 0.2em;
+}
+.math-frac .num {
+  border-bottom: 1.5px solid currentColor;
+  padding-bottom: 0.1em;
+  display: block;
+}
+.math-frac .den {
+  padding-top: 0.15em;
+  display: block;
+}
+.math-norm {
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+}
+.math-norm .bar {
+  font-size: 1.25em;
+  font-weight: 300;
+  color: var(--a);
+  margin: 0 1px;
+}
+.math-card {
+  background: linear-gradient(135deg, rgba(15, 23, 42, 0.9), rgba(30, 41, 59, 0.8));
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  border-left: 4px solid var(--a);
+  border-radius: 14px;
+  padding: 1rem 1.4rem;
+  margin: 0.7rem 0;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+}
+.math-card-green {
+  border-left-color: var(--g);
+  border-color: rgba(52, 211, 153, 0.35);
+}
+.math-title {
+  font-size: 0.76rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--mut);
+  margin-bottom: 0.4rem;
+  font-weight: 700;
+}
+.math-eq {
+  font-family: "Cambria Math", "Latin Modern Math", "STIX Two Math", "Georgia", "Times New Roman", serif;
+  font-size: 1.2rem;
+  color: #f8fafc;
+  line-height: 1.6;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+.math-subtext {
+  font-size: 0.84rem;
+  color: var(--mut);
+  margin-top: 0.45rem;
+  line-height: 1.4;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  padding-top: 0.4rem;
+}
+</style>
+</head>
+<body>
+<div class="hint">← → / space to navigate · F fullscreen</div>
+
+<!-- 1 -->
+<section class="slide">
+  <p class="mono c-a" style="letter-spacing:.2em">YSU · COMPUTER VISION · PCB INSPECTION</p>
+  <h1 style="margin-top:1rem">Does Retinex preprocessing<br>help PCB component detection?</h1>
+  <p class="sub">Bilateral and variational Retinex with YOLO26 on a 4-class dataset (Capacitor, Connector, Electrolytic Capacitor, IC) — evaluated across multiple seeds.</p>
+  <p class="mono" style="margin-top:2rem;color:var(--mut)">Edgar Tadevosyan</p>
+</section>
+
+<!-- 2 -->
+<section class="slide">
+  <h2><small>Problem</small>Dense, small components on high-resolution boards</h2>
+  <div class="grid g4">
+    <div class="card"><div class="big c-a">4</div><div class="lbl">classes</div></div>
+    <div class="card"><div class="big c-b">1280px</div><div class="lbl">training resolution</div></div>
+    <div class="card"><div class="big c-g">42</div><div class="lbl">test images evaluated</div></div>
+    <div class="card"><div class="big c-w">≈3,800</div><div class="lbl">capacitors in test set</div></div>
+  </div>
+  <div class="grid g2" style="margin-top:1.6rem">
+    <div class="card"><h3>Hypothesis</h3><p>Removing illumination (shading, glare) and emphasising edges should help detectors on small, low-contrast parts — especially capacitors.</p></div>
+    <div class="card"><h3>Protocol</h3><p>YOLO26s, 100 epochs, batch 8, <code>max_det=1000</code>, conf 0.001, same cleaned dataset and test split for every run. 3 seeds per main config.</p></div>
+  </div>
+</section>
+
+<!-- 3 -->
+<section class="slide">
+  <h2><small>Method 1</small>Bilateral Retinex + edge fusion</h2>
+  <p>Edge-preserving illumination estimate, reflectance recovered per image, fused back with the original.</p>
+  <div class="pipe">
+    <div class="card">RGB image</div><span class="ar">→</span>
+    <div class="card">V = max(R,G,B)</div><span class="ar">→</span>
+    <div class="card">bilateral filter → illumination L</div><span class="ar">→</span>
+    <div class="card">reflectance R = log V − log L</div><span class="ar">→</span>
+    <div class="card">fuse with original (α, β)</div>
+  </div>
+  <div class="eq">α = 0.30 · β = 0.10 &nbsp;|&nbsp; fast: ≈0.17 s / image on CPU at 1280px (measured)</div>
+  <p>Output is a normal 3-channel image, so any YOLO model trains on it unchanged.</p>
+</section>
+
+<!-- 4 -->
+<section class="slide">
+  <h2><small>Method 2</small>Variational Retinex with channel-wise fusion</h2>
+  <p>Weighted variational model (Fu et al., CVPR 2016) solving for reflectance R and illumination L jointly.</p>
+  <div class="math-card">
+    <div class="math-title">Fu et al. (CVPR 2016) Weighted Variational Optimization</div>
+    <div class="math-eq">
+      <span class="math-var">min<sub>r, l</sub></span> &nbsp;
+      <span class="math-norm"><span class="bar">‖</span><span class="math-var">r + l − s</span><span class="bar">‖</span><sub>2</sub><sup>2</sup></span>
+      &nbsp;+&nbsp; <span class="math-var">c</span><sub>1</sub> <span class="math-norm"><span class="bar">‖</span><span class="math-var">e<sup>r</sup> · ∇r</span><span class="bar">‖</span><sub>1</sub></span>
+      &nbsp;+&nbsp; <span class="math-var">c</span><sub>2</sub> <span class="math-norm"><span class="bar">‖</span><span class="math-var">e<sup>l</sup> · ∇l</span><span class="bar">‖</span><sub>2</sub><sup>2</sup></span>
+    </div>
+    <div class="math-subtext">
+      <b>Physical Model:</b> <span class="math-var">S = R · L</span> &nbsp;(s = log S, r = log R, l = log L) &nbsp;|&nbsp;
+      <span style="color:var(--g)">Enhanced: <span class="math-var">S</span><sub>enh</sub> = <span class="math-var">R</span> · <span class="math-var">L</span><sup>1/γ</sup> &nbsp;(γ = 2.2)</span>
+    </div>
+  </div>
+  <div class="grid g3">
+    <div class="card"><h3>Per-channel</h3><p>reflection_c + channel_c for R, G, B, then recombined.</p></div>
+    <div class="card"><h3>Cost</h3><p>≈3.3 s / image on CPU; ≈46 img/s on H100 in the dataset script (measured).</p></div>
+    <div class="card"><h3>Caveat</h3><p>On the demo image the stopping rule was not met in 15 iterations (ε_r=0.038).</p></div>
+  </div>
+</section>
+
+<!-- 5 -->
+<section class="slide">
+  <h2><small>Visual results</small>Method 1 — Bilateral Retinex</h2>
+  <div class="figwrap"><img class="fig" src="../results/retinex_fusion_presentation/method1_bilateral_retinex_panel.png" alt="Bilateral Retinex panel">
+  <div class="cap">Arty_Top board, downscaled to 1280px. The board is evenly lit, so the effect is subtle; dark parts become greyer (lower contrast).</div></div>
+</section>
+
+<!-- 6 -->
+<section class="slide">
+  <h2><small>Visual results</small>Method 2 — Variational Retinex</h2>
+  <div class="figwrap"><img class="fig" src="../results/retinex_fusion_presentation/method2_variational_retinex_panel.png" alt="Variational Retinex panel">
+  <div class="cap">Output is visually close to the original on this evenly lit board.</div></div>
+</section>
+
+<!-- 7 -->
+<section class="slide">
+  <h2><small>Visual results</small>Zoomed comparison</h2>
+  <div class="figwrap"><img class="fig" src="../results/retinex_fusion_presentation/microscopic_zoom_comparison.png" alt="Zoom crops">
+  <div class="cap">Crop A is a large dark BGA package with a logo — not a capacitor cluster.</div></div>
+</section>
+
+<!-- 8 -->
+<section class="slide">
+  <h2><small>Result 1</small>Retinex preprocessing: no significant gain</h2>
+  <div class="grid g3">
+    <div class="card"><div class="big">0.586<span style="font-size:.4em;color:var(--mut)"> ±0.017</span></div><div class="lbl">raw baseline mAP50 · 3 seeds</div></div>
+    <div class="card"><div class="big c-a">0.593<span style="font-size:.4em;color:var(--mut)"> ±0.012</span></div><div class="lbl">bilateral Retinex mAP50 · 3 seeds</div></div>
+    <div class="card"><div class="big c-w">+0.0065</div><div class="lbl">difference · within noise</div></div>
+  </div>
+  <div class="figwrap" style="margin-top:1rem"><img class="fig" style="max-height:48vh" src="../results/presentation_charts/seed_variance_and_pareto_frontier.png" alt="Seed variance">
+  <div class="cap">Baseline alone ranges 0.5705–0.6042 across seeds; this is larger than the method difference.</div></div>
+</section>
+
+<!-- 9 -->
+<section class="slide">
+  <h2><small>Result 2</small>Everything else we tried (single seed unless stated)</h2>
+  <table>
+    <tr><th>Configuration</th><th>mAP50</th><th>mAP50-95</th><th>Recall</th><th>Verdict</th></tr>
+    <tr><td>Raw baseline (3 seeds)</td><td>0.5862</td><td>0.4048</td><td>0.5720</td><td><span class="tag t-na">control</span></td></tr>
+    <tr><td>Bilateral Retinex (3 seeds)</td><td>0.5927</td><td>0.4063</td><td>0.5559</td><td><span class="tag t-na">not significant</span></td></tr>
+    <tr><td>Bilateral + YOLO26x</td><td>0.5975</td><td>0.4266</td><td>0.5616</td><td><span class="tag t-na">1 seed</span></td></tr>
+    <tr><td>Bilateral, hsv_v = 0.1</td><td>0.5765</td><td>0.3879</td><td>0.5843</td><td><span class="tag t-no">no gain</span></td></tr>
+    <tr><td>Bilateral + capacitor copy-paste</td><td>0.5790</td><td>0.4060</td><td>0.5498</td><td><span class="tag t-no">no gain · cap AP 0.244</span></td></tr>
+    <tr><td>Bilateral + P2 head</td><td>0.5670</td><td>0.3641</td><td>0.5714</td><td><span class="tag t-no">lower</span></td></tr>
+    <tr><td>Variational 3-channel fusion*</td><td>0.5591</td><td>0.4076</td><td>0.5716</td><td><span class="tag t-no">lower</span></td></tr>
+  </table>
+  <p style="margin-top:1rem;font-size:.95rem">*Earlier run, default <code>max_det</code> (not identical settings to the sweep). Single-seed differences below ≈0.02 cannot be distinguished from noise.</p>
+</section>
+
+<!-- 10 -->
+<section class="slide">
+  <h2><small>Result 3</small>Per-class AP50</h2>
+  <div class="figwrap"><img class="fig" src="../results/presentation_charts/per_class_breakdown_comparison.png" alt="Per class AP50">
+  <div class="cap">Capacitor is the weakest class for every model (≈0.28–0.31), regardless of preprocessing.</div></div>
+</section>
+
+<!-- 11 -->
+<section class="slide">
+  <h2><small>Result 4</small>Seed ensemble</h2>
+  <div class="grid g3">
+    <div class="card"><div class="big c-g">0.619</div><div class="lbl">3-seed bilateral WBF ensemble mAP50</div></div>
+    <div class="card"><div class="big c-a">0.634</div><div class="lbl">ensemble recall</div></div>
+    <div class="card"><div class="big c-w">≈1.3 s</div><div class="lbl">per image (3 models) vs ≈0.12 s single</div></div>
+  </div>
+  <div class="card" style="margin-top:1.4rem"><h3>Important caveat</h3>
+  <p>No ensemble of the <b>raw-image</b> seeds has been evaluated yet, so we cannot attribute this gain to Retinex rather than to ensembling itself. That control is prepared (<code>train_base_seed_ensemble.sh</code>) and is the next experiment.</p></div>
+</section>
+
+<!-- 12 -->
+<section class="slide">
+  <h2><small>Conclusions</small>What we can and cannot claim</h2>
+  <div class="grid g2">
+    <div class="card"><h3 class="c-g">Supported</h3><ul>
+      <li>Single-run comparisons are unreliable: baseline varies by 3.4 points across seeds.</li>
+      <li>Bilateral Retinex ≈ baseline (+0.0065, within noise).</li>
+      <li>Copy-paste, P2 head and lower hsv_v gave no gain in these single runs.</li>
+      <li>Multi-seed WBF ensembling reaches 0.619 mAP50.</li></ul></div>
+    <div class="card"><h3 class="c-r">Not shown</h3><ul>
+      <li>That Retinex improves small-class detection.</li>
+      <li>That the ensemble gain comes from Retinex.</li>
+      <li>Any benefit of the variational method (it scored lower).</li>
+      <li>Effects on boards with strong shadows/glare — test boards are evenly lit.</li></ul></div>
+  </div>
+</section>
+
+<!-- 13 -->
+<section class="slide">
+  <h2><small>Next steps</small>Planned work</h2>
+  <ul>
+    <li><b>Raw-image seed ensemble</b> as the fair control for the 0.619 result.</li>
+    <li>3 seeds for YOLO26x, P2 and copy-paste before drawing conclusions.</li>
+    <li>α/β grid for the bilateral fusion (4 jobs prepared).</li>
+    <li>Evaluate on boards with real illumination problems, where Retinex should matter.</li>
+    <li>Tiled inference (SAHI) for dense capacitors.</li>
+  </ul>
+  <p class="mono" style="margin-top:2rem;color:var(--a)">Thank you — questions?</p>
+</section>
+
+<div class="nav"><span id="cnt"></span><div class="bar"><i id="bar"></i></div></div>
+<script>
+const S=[...document.querySelectorAll('.slide')];let i=0;
+function show(n){i=Math.max(0,Math.min(S.length-1,n));S.forEach((s,k)=>s.classList.toggle('active',k===i));
+document.getElementById('cnt').textContent=(i+1)+' / '+S.length;
+document.getElementById('bar').style.width=((i+1)/S.length*100)+'%';location.hash=i+1}
+addEventListener('keydown',e=>{if(['ArrowRight',' ','PageDown'].includes(e.key)){e.preventDefault();show(i+1)}
+else if(['ArrowLeft','PageUp'].includes(e.key))show(i-1);else if(e.key==='f')document.documentElement.requestFullscreen?.()});
+addEventListener('click',e=>{if(e.target.tagName!=='IMG')show(e.clientX>innerWidth/2?i+1:i-1)});
+show((parseInt(location.hash.slice(1))||1)-1);
+</script>
+</body>
+</html>

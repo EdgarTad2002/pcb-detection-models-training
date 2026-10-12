@@ -12,7 +12,9 @@ This project directly reproduces, substantially extends, and resolves critical s
 > **Reference Paper:**  
 > Zhou, X., & Agaian, S. (2026). *Ensemble Learning Using YOLO Models for Semiconductor E-Waste Recycling*. **Information**, 17(4), 322. [https://doi.org/10.3390/info17040322](https://doi.org/10.3390/info17040322)
 
-> 📋 **Collaborator Notice:** See [ARCHITECTURE_CHANGELOG.md](ARCHITECTURE_CHANGELOG.md) for the complete decision matrix, validated techniques, negative results, and cluster master leaderboard.
+> 📋 **Collaborator Notice:** See [ARCHITECTURE_CHANGELOG.md](ARCHITECTURE_CHANGELOG.md) for the complete decision matrix, validated techniques, negative results, and cluster master leaderboard.  
+> 📄 **Paper Candidate Models Guide:** See [README_PAPER_MODELS.md](README_PAPER_MODELS.md) for the complete breakdown of our top 7 models, mathematical implementations, benchmark leaderboard, and publication storyline.  
+> 🗂️ **Cluster Datasets Catalog:** See [README_DATASETS.md](README_DATASETS.md) for the full breakdown of all 8 active cluster datasets, how each was created, and which models were trained on them.
 
 ---
 
@@ -500,7 +502,6 @@ pcb-detection-models-training/
 │   ├── train_rectified_yolov26s_unified_1280.sh # Multi-scale unified champion (1280px)
 │   ├── train_rectified_yolov26s_unified_640.sh # Multi-scale unified pipeline (640px)
 │   ├── train_native_res_physics_spectral.sh # Physics-informed spectral YOLO (1280px)
-│   ├── train_clahe_unsharp.sh          # Spatial enhancement CLAHE training runner
 │   ├── train_sahi_tile_640.sh          # Sliced tile SAHI training runner
 │   ├── train_omni_scale_champion.sh    # Compound resolution Omni-Scale runner
 │   ├── train_rectified_yolov26s.sh     # Rectified YOLO26s baseline (640px)
@@ -511,7 +512,6 @@ pcb-detection-models-training/
 │   ├── train_rectified_yolov10s.sh     # Rectified YOLOv10s baseline
 │   ├── train_rectified_yolov11s.sh     # Rectified YOLOv11s baseline
 │   ├── train_rectified_yolov12s.sh     # Rectified YOLOv12s baseline
-│   ├── eval_sahi_hybrid.sh             # Sliced Aided Hyper Inference hybrid benchmark runner
 │   └── benchmark_speed.sh              # Remote Slurm speed benchmark runner
 │
 ├── ensemble/                           # Multi-model ensembling and fusion modules

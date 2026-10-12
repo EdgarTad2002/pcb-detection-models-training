@@ -122,6 +122,17 @@ def parse_args():
     p.add_argument("--dfl", type=float, default=None, help="Distribution Focal Loss gain override (default 1.5)")
     p.add_argument("--label-smoothing", type=float, default=None, help="Label smoothing override (default 0.0)")
 
+    # --- reproducibility / dense-scene evaluation ---
+    p.add_argument("--seed", type=int, default=0, help="Training seed (Ultralytics default 0). Use several seeds to measure run-to-run noise.")
+    p.add_argument(
+        "--max-det", type=int, default=None,
+        help="Max detections per image at val time (Ultralytics default 300). Dense PCBs can exceed 300 objects.",
+    )
+    p.add_argument(
+        "--retinex-stem", action="store_true",
+        help="Inject the learnable in-network Retinex-Edge stem (retinex_stem.py) into Layer 0. Train on RAW images.",
+    )
+
     # --- evaluation protocol -- keep these fixed across every run for a fair comparison ---
     p.add_argument("--eval-conf", type=float, default=0.001)
     p.add_argument("--eval-iou", type=float, default=0.5)
@@ -163,7 +174,10 @@ def build_train_kwargs(args, data_yaml, effective_classes=None):
         save=True,
         save_period=args.save_period,
         val=True,
+        seed=args.seed,
     )
+    if args.max_det is not None:
+        kwargs["max_det"] = args.max_det
     if effective_classes is not None:
         kwargs["classes"] = effective_classes
 
@@ -217,6 +231,8 @@ def evaluate(weights_path, args, data_yaml, effective_classes=None):
     )
     if effective_classes is not None:
         val_kwargs["classes"] = effective_classes
+    if args.max_det is not None:
+        val_kwargs["max_det"] = args.max_det
 
     metrics = model.val(**val_kwargs)
 
@@ -249,6 +265,12 @@ def evaluate(weights_path, args, data_yaml, effective_classes=None):
         "imgsz": args.imgsz,
         "batch": args.batch,
         "pretrained_weights": args.pretrained_weights,
+        "seed": args.seed,
+        "max_det": args.max_det if args.max_det is not None else 300,
+        "hsv_v": args.hsv_v,
+        "hsv_s": args.hsv_s,
+        "retinex_stem": bool(args.retinex_stem),
+        "data": str(args.data),
         "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
     }
     return summary
@@ -297,7 +319,12 @@ def main():
             print(f"Loading/transferring pretrained weights from: {args.pretrained_weights}")
             model.load(args.pretrained_weights)
         train_kwargs = build_train_kwargs(args, data_yaml, effective_classes=effective_classes)
-        results = model.train(**train_kwargs)
+        if args.retinex_stem:
+            from retinex_stem import get_retinex_stem_trainer
+            print("Using RetinexStemDetectionTrainer (learnable Retinex-Edge stem in Layer 0)")
+            results = model.train(trainer=get_retinex_stem_trainer(), **train_kwargs)
+        else:
+            results = model.train(**train_kwargs)
         print("Training finished. Run saved to:", results.save_dir)
     else:
         assert weights_path.exists(), (

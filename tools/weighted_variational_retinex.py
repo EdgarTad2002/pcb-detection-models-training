@@ -365,6 +365,68 @@ def process_rgb_image(
     return rgb_reflectance, L_v_np, rgb_enhanced
 
 
+def process_rgb_channelwise_fusion(
+    img_bgr: np.ndarray,
+    alpha: float = 0.30,
+    device: Union[torch.device, str] = "cpu",
+    c1: float = 0.01,
+    c2: float = 0.1,
+    lambd: float = 1.0,
+    gamma: float = 2.2,
+    max_iter: int = 15,
+    eps1: float = 1e-3,
+    eps2: float = 1e-3,
+    use_mean_weights: Optional[bool] = None,
+    return_info: bool = False,
+):
+    """
+    Applies Fu et al. (CVPR 2016) ADMM decomposition independently across all 3 color channels (R, G, B),
+    then performs channel-wise residual fusion:
+        I_fused = (1 - alpha) * I_orig + alpha * R_refl
+    Preserves natural color contrast while injecting shadow-invariant physical surface albedo.
+    """
+    img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
+    img_f = img_rgb.astype(np.float32) / 255.0
+
+    # Tensor shape (3, H, W) for batched per-channel execution
+    tensor = torch.from_numpy(img_f).permute(2, 0, 1).to(device)
+
+    with torch.no_grad():
+        decomp = decompose_weighted_variational(
+            tensor,
+            c1=c1,
+            c2=c2,
+            lambd=lambd,
+            gamma=gamma,
+            max_iter=max_iter,
+            eps1=eps1,
+            eps2=eps2,
+            use_mean_weights=use_mean_weights,
+            return_info=return_info,
+        )
+
+    if return_info:
+        R_tensor, L_tensor, S_enh_tensor, info = decomp
+    else:
+        R_tensor, L_tensor, S_enh_tensor = decomp
+        info = None
+
+    R_np = R_tensor.permute(1, 2, 0).cpu().numpy()
+    L_np = L_tensor.permute(1, 2, 0).cpu().numpy()
+
+    # Channel-wise residual combination: (1 - alpha) * orig + alpha * reflectance
+    fused_rgb = (1.0 - alpha) * img_f + alpha * R_np
+    fused_rgb = np.clip(fused_rgb * 255.0, 0, 255).astype(np.uint8)
+    fused_bgr = cv2.cvtColor(fused_rgb, cv2.COLOR_RGB2BGR)
+
+    R_u8 = np.clip(R_np * 255.0, 0, 255).astype(np.uint8)
+    L_u8 = np.clip(L_np * 255.0, 0, 255).astype(np.uint8)
+
+    if return_info:
+        return R_u8, L_u8, fused_bgr, info
+    return R_u8, L_u8, fused_bgr
+
+
 def process_rgb_batch(
     images_bgr: List[np.ndarray],
     device: Union[torch.device, str] = "cpu",

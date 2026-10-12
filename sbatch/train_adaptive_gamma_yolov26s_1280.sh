@@ -1,10 +1,10 @@
 #!/bin/bash
-#SBATCH --job-name=retinex_y26s_1280
+#SBATCH --job-name=adapt_gamma_y26s_1280
 #SBATCH --partition=research
 #SBATCH --mem=48G
 #SBATCH --cpus-per-task=8
 #SBATCH --gres=gpu:1
-#SBATCH --output=slurm_retinex_y26s_1280_%j.out
+#SBATCH --output=slurm_adapt_gamma_y26s_1280_%j.out
 
 export CONDA_PKGS_DIRS=/mnt/weka/etadevosyan/.conda/pkgs
 export CONDA_ENVS_PATH=/mnt/weka/etadevosyan/.conda/envs
@@ -18,33 +18,47 @@ export PYTHONPATH="/mnt/weka/etadevosyan/pcb-yolo/pcb-detection-models-training:
 
 cd /mnt/weka/etadevosyan/pcb-yolo/pcb-detection-models-training
 
-echo "=========================================================================="
-echo "☀️  STEP 1: Building Retinex-Rectified Dataset (Fu et al., CVPR 2016)..."
-echo "=========================================================================="
-python tools/build_retinex_cleaned_dataset.py \
-    --src-dir datasets/pcb-unified-4class-cleaned \
-    --dst-dir datasets/pcb-unified-4class-cleaned-retinex \
-    --device cuda \
-    --c1 0.01 \
-    --c2 0.1 \
-    --lambd 1.0 \
-    --gamma 2.2 \
-    --max-iter 15 \
-    --eps1 1e-3 \
-    --eps2 1e-3 \
-    --batch-size 4 \
-    --overwrite
+SEED=${1:-0}
+ALPHA=${2:-0.35}
+AGC_ALPHA=${3:-0.50}
+
+SRC_DATA="datasets/pcb-unified-4class-cleaned"
+DST_DATA="datasets/pcb-adaptive-gamma-a${ALPHA}-1280"
+RUN_KEY="rectified_yolov26s_adaptive_gamma_s${SEED}_1280"
 
 echo "=========================================================================="
-echo "🚀 STEP 2: Training YOLO26s on Retinex-Rectified Cleaned Dataset (1280px)..."
+echo "☀️  STEP 1: Building Adaptive Gamma Dataset (ZERO CANNY EDGES)..."
+echo "    Source:       $SRC_DATA"
+echo "    Destination:  $DST_DATA"
+echo "    Alpha:        $ALPHA (AGCWD alpha: $AGC_ALPHA)"
 echo "=========================================================================="
+
+if [ ! -f "$DST_DATA/data.yaml" ]; then
+    python tools/enhance_pcb_adaptive_gamma.py \
+        --source "$SRC_DATA" \
+        --dest "$DST_DATA" \
+        --alpha "$ALPHA" \
+        --agc-alpha "$AGC_ALPHA" \
+        --workers 8
+else
+    echo ">>> Reusing existing dataset: $DST_DATA"
+fi
+
+echo "=========================================================================="
+echo "🚀 STEP 2: Training YOLO26s on Adaptive Gamma Dataset (1280px)..."
+echo "    Run Key:      $RUN_KEY"
+echo "    Seed:         $SEED"
+echo "=========================================================================="
+
 python train.py \
-    --run-key rectified_yolov26s_retinex_cleaned_1280 \
+    --run-key "$RUN_KEY" \
     --weights yolo26s.pt \
-    --data datasets/pcb-unified-4class-cleaned-retinex/data.yaml \
+    --data "$DST_DATA/data.yaml" \
     --epochs 100 --imgsz 1280 --batch 8 --workers 8 \
+    --seed "$SEED" \
+    --max-det 1000 \
     --eval-conf 0.001
 
 echo "=========================================================================="
-echo "✅ Retinex-YOLO26s Cleaned 1280 Training & Evaluation Complete!"
+echo "✅ Adaptive Gamma YOLO26s 1280 Training Complete: $RUN_KEY"
 echo "=========================================================================="
