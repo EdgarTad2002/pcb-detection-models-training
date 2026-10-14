@@ -37,8 +37,8 @@ if [ ! -f "$DST_DATA/data.yaml" ]; then
     python tools/enhance_pcb_adaptive_gamma.py \
         --source "$SRC_DATA" \
         --dest "$DST_DATA" \
+        --method agaian2023 \
         --alpha "$ALPHA" \
-        --agc-alpha "$AGC_ALPHA" \
         --workers 8
 else
     echo ">>> Reusing existing dataset: $DST_DATA"

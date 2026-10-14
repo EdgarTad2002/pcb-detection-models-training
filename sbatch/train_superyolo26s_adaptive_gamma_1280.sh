@@ -1,0 +1,64 @@
+#!/bin/bash
+#SBATCH --job-name=superyolo_gamma_1280
+#SBATCH --partition=research
+#SBATCH --mem=48G
+#SBATCH --cpus-per-task=8
+#SBATCH --gres=gpu:1
+#SBATCH --output=slurm_superyolo_gamma_1280_%j.out
+
+export CONDA_PKGS_DIRS=/mnt/weka/etadevosyan/.conda/pkgs
+export CONDA_ENVS_PATH=/mnt/weka/etadevosyan/.conda/envs
+export YOLO_CONFIG_DIR=/mnt/weka/etadevosyan/.config/Ultralytics
+mkdir -p "$YOLO_CONFIG_DIR"
+
+source /mnt/weka/shared-cache/miniforge3/etc/profile.d/conda.sh
+conda activate /mnt/weka/etadevosyan/.conda/envs/pcb-yolo
+
+export PYTHONPATH="/mnt/weka/etadevosyan/pcb-yolo/pcb-detection-models-training:$PYTHONPATH"
+
+cd /mnt/weka/etadevosyan/pcb-yolo/pcb-detection-models-training
+
+ALPHA=${1:-0.35}
+AGC_ALPHA=${2:-0.50}
+
+SRC_DATA="datasets/pcb-unified-4class-cleaned"
+DST_DATA="datasets/pcb-adaptive-gamma-a${ALPHA}-1280"
+RUN_KEY="superyolo26s_adaptive_gamma_1280"
+
+echo "=========================================================================="
+echo "⚡ STEP 1: Ensuring Adaptive Gamma Dataset Exists (ZERO CANNY EDGES)..."
+echo "    Source:       $SRC_DATA"
+echo "    Destination:  $DST_DATA"
+echo "=========================================================================="
+
+if [ ! -f "$DST_DATA/data.yaml" ]; then
+    python tools/enhance_pcb_adaptive_gamma.py \
+        --source "$SRC_DATA" \
+        --dest "$DST_DATA" \
+        --alpha "$ALPHA" \
+        --agc-alpha "$AGC_ALPHA" \
+        --workers 8
+else
+    echo ">>> Reusing existing dataset: $DST_DATA"
+fi
+
+echo "=========================================================================="
+echo "🚀 STEP 2: Training SuperYOLO (Model 5) on Adaptive Gamma Dataset (1280px)..."
+echo "    Run Key:      $RUN_KEY"
+echo "=========================================================================="
+
+# Train SuperYOLO (58 FPS Real-Time Champion architecture) on Continuous Adaptive Gamma
+python superyolo_pcb.py \
+    --run-key "$RUN_KEY" \
+    --weights yolo26s.pt \
+    --data "$DST_DATA/data.yaml" \
+    --lambda-sr 0.10 \
+    --cls-weight 1.5 \
+    --box-weight 5.0 \
+    --dfl-weight 2.0 \
+    --epochs 100 --imgsz 1280 --batch 8 --workers 8 \
+    --eval-conf 0.001
+
+echo "=========================================================================="
+echo "✅ SuperYOLO Adaptive Gamma 1280 Training Complete: $RUN_KEY"
+echo "=========================================================================="
