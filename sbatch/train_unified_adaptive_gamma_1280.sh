@@ -43,6 +43,14 @@ else
     echo ">>> Reusing existing dataset: $DST_DATA"
 fi
 
+# Ensure val and test splits exist (copy-paste only modifies train)
+GAMMA_BASE="datasets/pcb-agaian-gamma-a${ALPHA}-1280"
+if [ ! -d "$DST_DATA/val" ] && [ -d "$GAMMA_BASE/val" ]; then
+    echo ">>> Linking val and test splits from $GAMMA_BASE into $DST_DATA"
+    ln -sfn "$(realpath "$GAMMA_BASE/val")" "$DST_DATA/val"
+    ln -sfn "$(realpath "$GAMMA_BASE/test")" "$DST_DATA/test"
+fi
+
 echo "=========================================================================="
 echo "🚀 STEP 2: Training Unified Champion (Model 6) with Adaptive Gamma (1280px)..."
 echo "    Run Key:      $RUN_KEY"
