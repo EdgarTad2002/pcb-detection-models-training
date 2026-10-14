@@ -23,8 +23,8 @@ ALPHA=${2:-0.35}
 AGC_ALPHA=${3:-0.50}
 
 SRC_DATA="datasets/pcb-unified-4class-cleaned"
-DST_DATA="datasets/pcb-adaptive-gamma-a${ALPHA}-1280"
-RUN_KEY="rectified_yolov26s_adaptive_gamma_s${SEED}_1280"
+DST_DATA="datasets/pcb-agaian-gamma-a${ALPHA}-1280"
+RUN_KEY="rectified_yolov26s_agaian_gamma_s${SEED}_1280"
 
 echo "=========================================================================="
 echo "☀️  STEP 1: Building Adaptive Gamma Dataset (ZERO CANNY EDGES)..."

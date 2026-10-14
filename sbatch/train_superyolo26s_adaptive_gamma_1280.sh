@@ -22,8 +22,8 @@ ALPHA=${1:-0.35}
 AGC_ALPHA=${2:-0.50}
 
 SRC_DATA="datasets/pcb-unified-4class-cleaned"
-DST_DATA="datasets/pcb-adaptive-gamma-a${ALPHA}-1280"
-RUN_KEY="superyolo26s_adaptive_gamma_1280"
+DST_DATA="datasets/pcb-agaian-gamma-a${ALPHA}-1280"
+RUN_KEY="superyolo26s_agaian_gamma_1280"
 
 echo "=========================================================================="
 echo "⚡ STEP 1: Ensuring Adaptive Gamma Dataset Exists (ZERO CANNY EDGES)..."
@@ -35,8 +35,8 @@ if [ ! -f "$DST_DATA/data.yaml" ]; then
     python tools/enhance_pcb_adaptive_gamma.py \
         --source "$SRC_DATA" \
         --dest "$DST_DATA" \
+        --method agaian2023 \
         --alpha "$ALPHA" \
-        --agc-alpha "$AGC_ALPHA" \
         --workers 8
 else
     echo ">>> Reusing existing dataset: $DST_DATA"

@@ -22,8 +22,8 @@ ALPHA=${1:-0.35}
 AGC_ALPHA=${2:-0.50}
 
 BASE_CAPPASTE="datasets/pcb-native-res-rectified-cappaste-1280"
-DST_DATA="datasets/pcb-unified-cappaste-adaptive-gamma-1280"
-RUN_KEY="rectified_yolov26s_unified_adaptive_gamma_1280"
+DST_DATA="datasets/pcb-unified-cappaste-agaian-gamma-1280"
+RUN_KEY="rectified_yolov26s_unified_agaian_gamma_1280"
 
 echo "=========================================================================="
 echo "☀️  STEP 1: Building Unified Copy-Paste + Adaptive Gamma Dataset..."
