@@ -114,12 +114,21 @@ class SquaredDiceDetectionLoss(v8DetectionLoss):
       2. Squared-IoU Bounding Box Regression Loss
       3. Distribution Focal Loss (DFL)
     """
-    def __init__(self, model, lambda_dice: float = 0.5, smooth: float = 1.0, squared_box: bool = True):
-        super().__init__(model)
+    def __init__(
+        self,
+        model: torch.nn.Module,
+        tal_topk: int = 10,
+        tal_topk2: int | None = None,
+        lambda_dice: float = 0.5,
+        smooth: float = 1.0,
+        squared_box: bool = True,
+        **kwargs,
+    ):
+        super().__init__(model, tal_topk=tal_topk, tal_topk2=tal_topk2)
         self.lambda_dice = lambda_dice
         self.sdice_loss = SquaredDiceLoss(smooth=smooth)
-        reg_max = self.bbox_loss.dfl_loss.reg_max if self.bbox_loss.dfl_loss else 16
-        self.bbox_loss = SquaredDiceBboxLoss(reg_max=reg_max, squared=squared_box)
+        m = model.model[-1]
+        self.bbox_loss = SquaredDiceBboxLoss(reg_max=m.reg_max, squared=squared_box).to(self.device)
 
     def get_assigned_targets_and_loss(self, preds: dict[str, torch.Tensor], batch: dict[str, Any]) -> tuple:
         loss = torch.zeros(3, device=self.device)  # [box, cls, dfl]
@@ -181,9 +190,12 @@ class SquaredDiceDetectionLoss(v8DetectionLoss):
                 stride_tensor,
             )
 
-        loss[0] *= self.hyp.box
-        loss[1] *= self.hyp.cls
-        loss[2] *= self.hyp.dfl
+        box_gain = self.hyp.box if hasattr(self.hyp, "box") else (self.hyp.get("box", 7.5) if isinstance(self.hyp, dict) else 7.5)
+        cls_gain = self.hyp.cls if hasattr(self.hyp, "cls") else (self.hyp.get("cls", 0.5) if isinstance(self.hyp, dict) else 0.5)
+        dfl_gain = self.hyp.dfl if hasattr(self.hyp, "dfl") else (self.hyp.get("dfl", 1.5) if isinstance(self.hyp, dict) else 1.5)
+        loss[0] *= box_gain
+        loss[1] *= cls_gain
+        loss[2] *= dfl_gain
 
         return (
             (fg_mask, target_gt_idx, target_bboxes, anchor_points, stride_tensor),
@@ -195,19 +207,29 @@ class SquaredDiceDetectionLoss(v8DetectionLoss):
 def get_squared_dice_trainer(lambda_dice: float = 0.5, smooth: float = 1.0, squared_box: bool = True):
     """
     Factory creating a DetectionTrainer configured to use SquaredDiceDetectionLoss.
+    Handles both standard single-head detectors and YOLO26 end2end dual-head architectures.
     """
     class SquaredDiceTrainer(DetectionTrainer):
         def get_model(self, cfg: str | None = None, weights: str | None = None, verbose: bool = True):
             model = super().get_model(cfg=cfg, weights=weights, verbose=verbose)
 
             # Override init_criterion lazily so model.args is populated first by Ultralytics
-            def custom_init_criterion():
-                return SquaredDiceDetectionLoss(
-                    model,
-                    lambda_dice=lambda_dice,
-                    smooth=smooth,
-                    squared_box=squared_box,
-                )
+            def custom_init_criterion(*args, **kwargs):
+                target_model = args[0] if (args and isinstance(args[0], torch.nn.Module)) else model
+
+                def loss_factory(m, **kw):
+                    return SquaredDiceDetectionLoss(
+                        m,
+                        lambda_dice=lambda_dice,
+                        smooth=smooth,
+                        squared_box=squared_box,
+                        **kw,
+                    )
+
+                if getattr(target_model, "end2end", False):
+                    from ultralytics.utils.loss import E2ELoss
+                    return E2ELoss(target_model, loss_fn=loss_factory)
+                return loss_factory(target_model)
 
             model.init_criterion = custom_init_criterion
             return model
