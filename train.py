@@ -132,6 +132,22 @@ def parse_args():
         "--retinex-stem", action="store_true",
         help="Inject the learnable in-network Retinex-Edge stem (retinex_stem.py) into Layer 0. Train on RAW images.",
     )
+    p.add_argument(
+        "--squared-dice", action="store_true",
+        help="Use BCE + Squared-Dice composite loss (Eq. 3/4) with Squared-IoU box regression.",
+    )
+    p.add_argument(
+        "--lambda-dice", type=float, default=0.5,
+        help="Weight for Squared-Dice classification loss component (default: 0.5).",
+    )
+    p.add_argument(
+        "--smooth-dice", type=float, default=1.0,
+        help="Smoothing epsilon for Squared-Dice loss (default: 1.0).",
+    )
+    p.add_argument(
+        "--no-squared-box", action="store_true",
+        help="Disable Squared-IoU in bounding box loss (reverts to standard CIoU).",
+    )
 
     # --- evaluation protocol -- keep these fixed across every run for a fair comparison ---
     p.add_argument("--eval-conf", type=float, default=0.001)
@@ -270,6 +286,8 @@ def evaluate(weights_path, args, data_yaml, effective_classes=None):
         "hsv_v": args.hsv_v,
         "hsv_s": args.hsv_s,
         "retinex_stem": bool(args.retinex_stem),
+        "squared_dice": bool(args.squared_dice),
+        "lambda_dice": args.lambda_dice if args.squared_dice else None,
         "data": str(args.data),
         "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
     }
@@ -323,6 +341,15 @@ def main():
             from retinex_stem import get_retinex_stem_trainer
             print("Using RetinexStemDetectionTrainer (learnable Retinex-Edge stem in Layer 0)")
             results = model.train(trainer=get_retinex_stem_trainer(), **train_kwargs)
+        elif args.squared_dice:
+            from squared_dice_loss import get_squared_dice_trainer
+            print(f"Using SquaredDiceTrainer (BCE + lambda={args.lambda_dice} * SDice + Squared-IoU)")
+            sd_trainer = get_squared_dice_trainer(
+                lambda_dice=args.lambda_dice,
+                smooth=args.smooth_dice,
+                squared_box=not args.no_squared_box,
+            )
+            results = model.train(trainer=sd_trainer, **train_kwargs)
         else:
             results = model.train(**train_kwargs)
         print("Training finished. Run saved to:", results.save_dir)
