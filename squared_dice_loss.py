@@ -199,12 +199,17 @@ def get_squared_dice_trainer(lambda_dice: float = 0.5, smooth: float = 1.0, squa
     class SquaredDiceTrainer(DetectionTrainer):
         def get_model(self, cfg: str | None = None, weights: str | None = None, verbose: bool = True):
             model = super().get_model(cfg=cfg, weights=weights, verbose=verbose)
-            model.criterion = SquaredDiceDetectionLoss(
-                model,
-                lambda_dice=lambda_dice,
-                smooth=smooth,
-                squared_box=squared_box,
-            )
+
+            # Override init_criterion lazily so model.args is populated first by Ultralytics
+            def custom_init_criterion():
+                return SquaredDiceDetectionLoss(
+                    model,
+                    lambda_dice=lambda_dice,
+                    smooth=smooth,
+                    squared_box=squared_box,
+                )
+
+            model.init_criterion = custom_init_criterion
             return model
 
     return SquaredDiceTrainer
