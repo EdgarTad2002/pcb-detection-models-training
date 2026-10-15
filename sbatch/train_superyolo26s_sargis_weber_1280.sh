@@ -25,17 +25,26 @@ WORKSPACE_DIR=${PCB_YOLO_WORKSPACE:-"/mnt/weka/etadevosyan/pcb-yolo/pcb-yolo26n-
 cd "$WORKSPACE_DIR"
 export PYTHONPATH="$WORKSPACE_DIR:$PYTHONPATH"
 
-# Locate native resolution source dataset
-if [ -f "datasets/pcb-native-res-unified-4class/data.yaml" ]; then
-    SRC_DATA="datasets/pcb-native-res-unified-4class"
-elif [ -f "datasets/pcb-unified-4class-cleaned/data.yaml" ]; then
+# Locate native resolution source dataset (prefer audited gold-standard cleaned dataset)
+if [ -f "datasets/pcb-unified-4class-cleaned/data.yaml" ]; then
     SRC_DATA="datasets/pcb-unified-4class-cleaned"
+elif [ -f "datasets/pcb-native-res-unified-4class/data.yaml" ]; then
+    SRC_DATA="datasets/pcb-native-res-unified-4class"
 else
     SRC_DATA="datasets/pcb-unified-4class"
 fi
 
 # Step 1: Generate Sargis Weber-Contrast Enhanced Dataset (1280px Native)
 WEBER_DATA="datasets/pcb-weber-enhanced-1280"
+# Clean up if previously aborted with empty images
+if [ -d "$WEBER_DATA/train/images" ]; then
+    IMG_COUNT=$(ls "$WEBER_DATA/train/images" 2>/dev/null | wc -l)
+    if [ "$IMG_COUNT" -lt 10 ]; then
+        echo "Removing incomplete $WEBER_DATA (only $IMG_COUNT images)..."
+        rm -rf "$WEBER_DATA"
+    fi
+fi
+
 if [ ! -f "$WEBER_DATA/data.yaml" ]; then
     echo "=========================================================================="
     echo "🎨 Building Sargis Weber-Contrast Enhanced PCB Dataset (1280px)..."
@@ -57,6 +66,15 @@ fi
 
 # Step 2: Build Micro-Capacitor Crop Bank from Weber Dataset
 BANK_DIR="capacitor_bank_weber_1280"
+# Clean up if bank has no image crops
+if [ -d "$BANK_DIR" ]; then
+    CROP_COUNT=$(ls "$BANK_DIR"/*.png 2>/dev/null | wc -l)
+    if [ "$CROP_COUNT" -eq 0 ]; then
+        echo "Removing empty $BANK_DIR..."
+        rm -rf "$BANK_DIR"
+    fi
+fi
+
 if [ ! -f "$BANK_DIR/metadata.json" ]; then
     echo "=========================================================================="
     echo "📦 Building High-Resolution Weber Capacitor Crop Bank..."
