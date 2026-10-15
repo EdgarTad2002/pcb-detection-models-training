@@ -22,7 +22,7 @@ SEED=${1:-0}
 LAMBDA_DICE=${2:-0.5}
 
 DATA="datasets/pcb-unified-4class-cleaned/data.yaml"
-RUN_KEY="rectified_yolov26s_squared_dice_s${SEED}_1280"
+RUN_KEY="rectified_yolov26s_squared_dice_l${LAMBDA_DICE}_s${SEED}_1280"
 
 echo "=========================================================================="
 echo "🎯 TRAINING YOLO26s WITH BCE + SQUARED-DICE LOSS (1280px)"
@@ -30,7 +30,7 @@ echo "    Data:         $DATA"
 echo "    Run Key:      $RUN_KEY"
 echo "    Seed:         $SEED"
 echo "    Lambda Dice:  $LAMBDA_DICE"
-echo "    Loss:         BCE + Lambda*Squared_Dice (Eq. 3/4) + Squared-IoU"
+echo "    Loss:         BCE + Lambda*Squared_Dice (Eq. 3/4)"
 echo "=========================================================================="
 
 python train.py \

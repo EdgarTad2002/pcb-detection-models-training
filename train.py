@@ -134,7 +134,7 @@ def parse_args():
     )
     p.add_argument(
         "--squared-dice", action="store_true",
-        help="Use BCE + Squared-Dice composite loss (Eq. 3/4) with Squared-IoU box regression.",
+        help="Use BCE + Squared-Dice composite classification loss (Eq. 3/4).",
     )
     p.add_argument(
         "--lambda-dice", type=float, default=0.5,
@@ -145,8 +145,8 @@ def parse_args():
         help="Smoothing epsilon for Squared-Dice loss (default: 1.0).",
     )
     p.add_argument(
-        "--no-squared-box", action="store_true",
-        help="Disable Squared-IoU in bounding box loss (reverts to standard CIoU).",
+        "--squared-box", action="store_true",
+        help="Enable Squared-IoU ablation in bounding box loss (default: False, uses plain CIoU).",
     )
 
     # --- evaluation protocol -- keep these fixed across every run for a fair comparison ---
@@ -288,6 +288,7 @@ def evaluate(weights_path, args, data_yaml, effective_classes=None):
         "retinex_stem": bool(args.retinex_stem),
         "squared_dice": bool(args.squared_dice),
         "lambda_dice": args.lambda_dice if args.squared_dice else None,
+        "squared_box": bool(args.squared_box) if args.squared_dice else None,
         "data": str(args.data),
         "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
     }
@@ -343,11 +344,12 @@ def main():
             results = model.train(trainer=get_retinex_stem_trainer(), **train_kwargs)
         elif args.squared_dice:
             from squared_dice_loss import get_squared_dice_trainer
-            print(f"Using SquaredDiceTrainer (BCE + lambda={args.lambda_dice} * SDice + Squared-IoU)")
+            box_loss_desc = " + Squared-IoU" if args.squared_box else ""
+            print(f"Using SquaredDiceTrainer (BCE + lambda={args.lambda_dice} * SDice{box_loss_desc})")
             sd_trainer = get_squared_dice_trainer(
                 lambda_dice=args.lambda_dice,
                 smooth=args.smooth_dice,
-                squared_box=not args.no_squared_box,
+                squared_box=args.squared_box,
             )
             results = model.train(trainer=sd_trainer, **train_kwargs)
         else:
