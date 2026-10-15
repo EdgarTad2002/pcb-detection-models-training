@@ -204,6 +204,9 @@ class SquaredDiceDetectionLoss(v8DetectionLoss):
         )
 
 
+import types
+
+_CURRENT_MODEL = None
 _CURRENT_LAMBDA_DICE = 0.5
 _CURRENT_SMOOTH_DICE = 1.0
 _CURRENT_SQUARED_BOX = True
@@ -220,12 +223,14 @@ def squared_dice_loss_factory(m: torch.nn.Module, **kw) -> "SquaredDiceDetection
     )
 
 
-def squared_dice_init_criterion(model_instance: torch.nn.Module, *args, **kwargs) -> Any:
+def squared_dice_init_criterion(self=None, *args, **kwargs) -> Any:
     """
     Top-level criterion initialization function (fully pickle-compatible).
     Dispatches to E2ELoss for dual-head models (YOLO26) or single-head loss.
     """
-    target_model = args[0] if (args and isinstance(args[0], torch.nn.Module)) else model_instance
+    target_model = self if isinstance(self, torch.nn.Module) else (
+        args[0] if (args and isinstance(args[0], torch.nn.Module)) else _CURRENT_MODEL
+    )
     if getattr(target_model, "end2end", False):
         from ultralytics.utils.loss import E2ELoss
         return E2ELoss(target_model, loss_fn=squared_dice_loss_factory)
@@ -239,8 +244,10 @@ class SquaredDiceTrainer(DetectionTrainer):
     Top-level class definition ensures full picklability for Slurm cluster runs.
     """
     def get_model(self, cfg: str | None = None, weights: str | None = None, verbose: bool = True):
+        global _CURRENT_MODEL
         model = super().get_model(cfg=cfg, weights=weights, verbose=verbose)
-        model.init_criterion = squared_dice_init_criterion
+        _CURRENT_MODEL = model
+        model.init_criterion = types.MethodType(squared_dice_init_criterion, model)
         return model
 
     def save_model(self):
