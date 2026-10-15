@@ -204,34 +204,62 @@ class SquaredDiceDetectionLoss(v8DetectionLoss):
         )
 
 
+_CURRENT_LAMBDA_DICE = 0.5
+_CURRENT_SMOOTH_DICE = 1.0
+_CURRENT_SQUARED_BOX = True
+
+
+def squared_dice_loss_factory(m: torch.nn.Module, **kw) -> "SquaredDiceDetectionLoss":
+    """Factory creating SquaredDiceDetectionLoss with current hyperparameters."""
+    return SquaredDiceDetectionLoss(
+        m,
+        lambda_dice=_CURRENT_LAMBDA_DICE,
+        smooth=_CURRENT_SMOOTH_DICE,
+        squared_box=_CURRENT_SQUARED_BOX,
+        **kw,
+    )
+
+
+def squared_dice_init_criterion(model_instance: torch.nn.Module, *args, **kwargs) -> Any:
+    """
+    Top-level criterion initialization function (fully pickle-compatible).
+    Dispatches to E2ELoss for dual-head models (YOLO26) or single-head loss.
+    """
+    target_model = args[0] if (args and isinstance(args[0], torch.nn.Module)) else model_instance
+    if getattr(target_model, "end2end", False):
+        from ultralytics.utils.loss import E2ELoss
+        return E2ELoss(target_model, loss_fn=squared_dice_loss_factory)
+    return squared_dice_loss_factory(target_model)
+
+
+class SquaredDiceTrainer(DetectionTrainer):
+    """
+    DetectionTrainer configured to train with BCE + Squared-Dice Loss + Squared-IoU.
+    Handles dual-head end2end architectures (YOLO26) and standard single-head detectors.
+    Top-level class definition ensures full picklability for Slurm cluster runs.
+    """
+    def get_model(self, cfg: str | None = None, weights: str | None = None, verbose: bool = True):
+        model = super().get_model(cfg=cfg, weights=weights, verbose=verbose)
+        model.init_criterion = squared_dice_init_criterion
+        return model
+
+    def save_model(self):
+        """
+        Safely serialize EMA checkpoint by removing any non-standard instance attributes.
+        """
+        if hasattr(self, "ema") and self.ema is not None and hasattr(self.ema, "ema"):
+            ema_model = getattr(self.ema, "ema")
+            if "init_criterion" in ema_model.__dict__:
+                del ema_model.__dict__["init_criterion"]
+        return super().save_model()
+
+
 def get_squared_dice_trainer(lambda_dice: float = 0.5, smooth: float = 1.0, squared_box: bool = True):
     """
-    Factory creating a DetectionTrainer configured to use SquaredDiceDetectionLoss.
-    Handles both standard single-head detectors and YOLO26 end2end dual-head architectures.
+    Configure and return the SquaredDiceTrainer class with the specified parameters.
     """
-    class SquaredDiceTrainer(DetectionTrainer):
-        def get_model(self, cfg: str | None = None, weights: str | None = None, verbose: bool = True):
-            model = super().get_model(cfg=cfg, weights=weights, verbose=verbose)
-
-            # Override init_criterion lazily so model.args is populated first by Ultralytics
-            def custom_init_criterion(*args, **kwargs):
-                target_model = args[0] if (args and isinstance(args[0], torch.nn.Module)) else model
-
-                def loss_factory(m, **kw):
-                    return SquaredDiceDetectionLoss(
-                        m,
-                        lambda_dice=lambda_dice,
-                        smooth=smooth,
-                        squared_box=squared_box,
-                        **kw,
-                    )
-
-                if getattr(target_model, "end2end", False):
-                    from ultralytics.utils.loss import E2ELoss
-                    return E2ELoss(target_model, loss_fn=loss_factory)
-                return loss_factory(target_model)
-
-            model.init_criterion = custom_init_criterion
-            return model
-
+    global _CURRENT_LAMBDA_DICE, _CURRENT_SMOOTH_DICE, _CURRENT_SQUARED_BOX
+    _CURRENT_LAMBDA_DICE = lambda_dice
+    _CURRENT_SMOOTH_DICE = smooth
+    _CURRENT_SQUARED_BOX = squared_box
     return SquaredDiceTrainer
