@@ -418,8 +418,18 @@ def main():
     trainer.train()
 
     # Post-train evaluation
-    best_pt = project_dir / "pcb-filtered" / "weights" / "best.pt"
-    if best_pt.exists():
+    candidates = [
+        project_dir / "pcb-filtered" / "weights" / "best.pt",
+        Path("runs/detect") / project_dir / "pcb-filtered" / "weights" / "best.pt",
+        Path("runs") / "detect" / args.run_key / "pcb-filtered" / "weights" / "best.pt",
+    ]
+    best_pt = None
+    for c in candidates:
+        if c.exists():
+            best_pt = c
+            break
+
+    if best_pt is not None:
         print(f"\n[EVAL] Running evaluation on '{args.eval_split}' split with max_det={args.max_det} at {args.imgsz}px...")
         eval_model = YOLO(str(best_pt))
         metrics = eval_model.val(
@@ -432,7 +442,48 @@ def main():
             max_det=args.max_det,
             device=args.device,
         )
-        print(f"Grand Unified Evaluation mAP50: {metrics.box.map50:.4f}, mAP50-95: {metrics.box.map:.4f}")
+        map50 = float(metrics.box.map50)
+        map50_95 = float(metrics.box.map)
+        prec = float(metrics.box.mp)
+        rec = float(metrics.box.mr)
+        speed = metrics.speed
+        total_time_ms = sum(speed.values())
+        fps = 1000.0 / total_time_ms if total_time_ms > 0 else 0.0
+
+        per_class_ap50 = {}
+        names = metrics.names if hasattr(metrics, "names") else {i: CLASS_NAMES[i] for i in range(4)}
+        if hasattr(metrics.box, "maps") and len(metrics.box.maps) > 0:
+            for idx, ap in enumerate(metrics.box.maps):
+                c_name = names.get(idx, f"Class_{idx}")
+                per_class_ap50[c_name] = round(float(ap), 4)
+
+        summary = {
+            "model": args.run_key,
+            "weights": str(best_pt),
+            "mAP50": map50,
+            "mAP50_95": map50_95,
+            "precision": prec,
+            "recall": rec,
+            "total_time_ms": total_time_ms,
+            "fps": fps,
+            "eval_conf": args.eval_conf,
+            "eval_iou": args.eval_iou,
+            "eval_split": args.eval_split,
+            "imgsz": args.imgsz,
+            "batch": args.batch,
+            "max_det": args.max_det,
+            "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+            "per_class_ap50": per_class_ap50,
+        }
+        for k, v in per_class_ap50.items():
+            summary[f"{k}_ap50"] = v
+
+        results_dir = Path("/mnt/weka/etadevosyan/pcb-yolo/results")
+        results_dir.mkdir(parents=True, exist_ok=True)
+        out_json = results_dir / f"{args.run_key}.json"
+        with open(out_json, "w", encoding="utf-8") as f:
+            json.dump(summary, f, indent=2)
+        print(f"\n✅ Grand Unified Results JSON saved to: {out_json}")
 
 
 if __name__ == "__main__":

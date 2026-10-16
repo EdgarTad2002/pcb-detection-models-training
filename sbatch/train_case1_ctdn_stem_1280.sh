@@ -97,8 +97,7 @@ python models/train_case1_ctdn_stem.py \
 # Step 4: Aggregate results into shared leaderboard
 if [ -f "aggregate_results.py" ]; then
     python aggregate_results.py \
-        --results-dir "$SHARED_RESULTS_DIR" \
-        --output-dir "$SHARED_RESULTS_DIR" || true
+        --results-dir "$SHARED_RESULTS_DIR" || true
 fi
 
 echo "=========================================================================="
