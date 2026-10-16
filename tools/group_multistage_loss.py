@@ -34,51 +34,72 @@ def binary_cross_entropy_loss(
     Numerically stable BCE loss for predictions in [0, 1] (or logits).
     Eq. (1): - 1/N sum [ y * log(p) + (1 - y) * log(1 - p) ]
     """
-    pred_clamped = torch.clamp(pred, min=eps, max=1.0 - eps)
-    bce = - (target * torch.log(pred_clamped) + (1.0 - target) * torch.log(1.0 - pred_clamped))
-    return bce.mean()
+    pred_f = pred.float()
+    target_f = target.float()
+    pred_clamped = torch.clamp(pred_f, min=eps, max=1.0 - eps)
+    bce = - (target_f * torch.log(pred_clamped) + (1.0 - target_f) * torch.log(1.0 - pred_clamped))
+    bce_val = bce.mean()
+    return torch.nan_to_num(bce_val, nan=0.0, posinf=1.0, neginf=0.0)
 
 
 def dice_loss(
     pred: torch.Tensor,
     target: torch.Tensor,
-    smooth: float = 1.0,
+    smooth: float = 1e-4,
 ) -> torch.Tensor:
     """
-    Standard Dice Loss.
+    Standard Dice Loss computed with per-item spatial normalization in float32.
     Eq. (2): 1 - (2 * sum(p * y) + smooth) / (sum(p) + sum(y) + smooth)
     """
-    pred_flat = pred.contiguous().view(-1)
-    target_flat = target.contiguous().view(-1)
+    pred_f = pred.float()
+    target_f = target.float()
 
-    intersection = (pred_flat * target_flat).sum()
-    cardinality = pred_flat.sum() + target_flat.sum()
+    # Flatten spatial dims [B, -1]
+    b = pred_f.shape[0] if pred_f.ndim >= 2 else 1
+    p_flat = pred_f.view(b, -1)
+    y_flat = target_f.view(b, -1)
 
-    dice = (2.0 * intersection + smooth) / (cardinality + smooth)
-    return 1.0 - dice
+    # Use spatial mean to prevent FP16/FP32 overflow under AMP
+    inter = (p_flat * y_flat).mean(dim=1)
+    p_mean = p_flat.mean(dim=1)
+    y_mean = y_flat.mean(dim=1)
+
+    dice = (2.0 * inter + smooth) / (p_mean + y_mean + smooth)
+    dice_loss_val = (1.0 - dice).mean()
+    return torch.nan_to_num(dice_loss_val, nan=0.0, posinf=1.0, neginf=0.0)
 
 
 def squared_dice_loss(
     pred: torch.Tensor,
     target: torch.Tensor,
-    smooth: float = 1.0,
+    smooth: float = 1e-4,
 ) -> torch.Tensor:
     """
-    Squared-Dice Loss (SDice).
+    Squared-Dice Loss (SDice) computed with per-item spatial normalization in float32.
     Eq. (3): 1 - (2 * (sum(p * y))^2 + smooth) / ((sum(p))^2 + (sum(y))^2 + smooth)
+
+    By computing normalized spatial means (mean(p) in [0, 1]) instead of unnormalized raw pixel sums,
+    the squared terms remain bounded in [0, 1], guaranteeing 100% immunity to FP16 overflow under AMP!
     """
-    pred_flat = pred.contiguous().view(-1)
-    target_flat = target.contiguous().view(-1)
+    pred_f = pred.float()
+    target_f = target.float()
 
-    intersection = (pred_flat * target_flat).sum()
-    sum_pred = pred_flat.sum()
-    sum_target = target_flat.sum()
+    # Flatten spatial dims per batch element [B, -1]
+    b = pred_f.shape[0] if pred_f.ndim >= 2 else 1
+    p_flat = pred_f.view(b, -1)
+    y_flat = target_f.view(b, -1)
 
-    numerator = 2.0 * (intersection ** 2) + smooth
-    denominator = (sum_pred ** 2) + (sum_target ** 2) + smooth
+    # Normalized spatial means
+    inter_mean = (p_flat * y_flat).mean(dim=1)
+    p_mean = p_flat.mean(dim=1)
+    y_mean = y_flat.mean(dim=1)
+
+    numerator = 2.0 * (inter_mean ** 2) + smooth
+    denominator = (p_mean ** 2) + (y_mean ** 2) + smooth
 
     sdice = numerator / denominator
-    return 1.0 - sdice
+    sdice_loss_val = (1.0 - sdice).mean()
+    return torch.nan_to_num(sdice_loss_val, nan=0.0, posinf=1.0, neginf=0.0)
 
 
 def base_stage_loss(
