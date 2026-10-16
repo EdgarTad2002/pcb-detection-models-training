@@ -41,6 +41,15 @@ fi
 
 # Step 1: Generate Grand Unified Dataset
 GU_DATA="datasets/pcb-grand-unified-1280"
+BANK_DIR="capacitor_bank_grand_unified_1280"
+AUG_DATA="datasets/pcb-grand-unified-cappaste-1280"
+
+# Auto-heal: If previous run created incomplete dataset without valid/images, wipe and rebuild
+if [ -d "$GU_DATA" ] && { [ ! -d "$GU_DATA/valid/images" ] || [ $(ls -1 "$GU_DATA/valid/images" 2>/dev/null | wc -l) -eq 0 ]; }; then
+    echo "⚠️ Incomplete dataset detected (missing valid split). Re-generating cleanly..."
+    rm -rf "$GU_DATA" "$BANK_DIR" "$AUG_DATA"
+fi
+
 if [ ! -f "$GU_DATA/data.yaml" ]; then
     echo "=========================================================================="
     echo "🎨 Building Grand Unified Dataset (Retinex R + Agaian AGC + Sargis Weber)..."

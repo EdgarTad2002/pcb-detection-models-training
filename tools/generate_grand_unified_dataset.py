@@ -101,15 +101,19 @@ def build_grand_unified_dataset(
     print("=" * 75)
 
     dest_root.mkdir(parents=True, exist_ok=True)
-    splits = ["train", "val", "test"]
+    splits = ["train", "valid", "test"]
 
     for split in splits:
-        src_split_img = src_root / split / "images"
-        src_split_lbl = src_root / split / "labels"
+        src_split_name = split
+        if split == "valid":
+            if not (src_root / "valid").exists() and (src_root / "val").exists():
+                src_split_name = "val"
+
+        src_split_img = src_root / src_split_name / "images"
+        src_split_lbl = src_root / src_split_name / "labels"
         if not src_split_img.exists():
-            # Check alternative Roboflow layout: <split>/
-            src_split_img = src_root / split
-            src_split_lbl = src_root / split
+            src_split_img = src_root / src_split_name
+            src_split_lbl = src_root / src_split_name
 
         dest_split_img = dest_root / split / "images"
         dest_split_lbl = dest_root / split / "labels"
@@ -121,7 +125,7 @@ def build_grand_unified_dataset(
             list(src_split_img.glob("*.jpeg")) +
             list(src_split_img.glob("*.png"))
         )
-        print(f"\nProcessing '{split}' split ({len(img_files)} images)...")
+        print(f"\nProcessing '{split}' split (source '{src_split_name}', {len(img_files)} images)...")
         start_t = time.time()
 
         tasks = []
@@ -157,17 +161,33 @@ def build_grand_unified_dataset(
         elapsed = time.time() - start_t
         print(f"✅ Split '{split}' complete: {done}/{len(img_files)} images, {copied_lbls} labels in {elapsed:.1f}s")
 
-    # Generate data.yaml
-    data_yaml_content = {
-        "path": str(dest_root.resolve()),
-        "train": "train/images",
-        "val": "val/images",
-        "test": "test/images",
-        "nc": 4,
-        "names": ["Capacitor", "Connector", "Electrolytic Capacitor", "IC"],
-    }
+    # Ensure both valid and val aliases exist in dest_root for 100% Ultralytics & script compatibility
+    if (dest_root / "valid").exists() and not (dest_root / "val").exists():
+        try:
+            (dest_root / "val").symlink_to("valid", target_is_directory=True)
+        except Exception:
+            shutil.copytree(dest_root / "valid", dest_root / "val", dirs_exist_ok=True)
+
+    # Generate data.yaml preserving source nc and names
+    src_yaml = src_root / "data.yaml"
+    if src_yaml.exists():
+        with open(src_yaml, "r", encoding="utf-8") as f:
+            cfg = yaml.safe_load(f)
+        cfg["path"] = str(dest_root.resolve())
+        cfg["train"] = "train/images"
+        cfg["val"] = "valid/images"
+        cfg["test"] = "test/images"
+    else:
+        cfg = {
+            "path": str(dest_root.resolve()),
+            "train": "train/images",
+            "val": "valid/images",
+            "test": "test/images",
+            "nc": 4,
+            "names": ["Capacitor", "Connector", "Electrolytic Capacitor", "IC"],
+        }
     with open(dest_root / "data.yaml", "w", encoding="utf-8") as f:
-        yaml.dump(data_yaml_content, f, default_flow_style=False)
+        yaml.dump(cfg, f, default_flow_style=False)
     print(f"\n✅ Created dataset configuration at: {dest_root / 'data.yaml'}")
 
 
