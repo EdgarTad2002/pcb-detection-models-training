@@ -145,25 +145,28 @@ class SuperYOLOMultiStageModel(DetectionModel):
                  lambda_sr: float = 0.10, sr_scale: int = 2,
                  edge_weight: float = 0.5, lambda_group: float = 0.15,
                  use_squared_dice: bool = True, imgsz: int = 1280):
-        super().__init__(cfg=cfg, ch=ch, nc=nc, verbose=verbose)
+        # 1. Initialize all attributes BEFORE super().__init__ because Ultralytics runs a dummy forward pass!
+        self.p2_features = None
+        self.p3_features = None
+        self.stage_features = []
+        self.img_hr = None
+        self.p2_idx = 2
+        self.p3_idx = 4
+        self.stage_indices = [2, 4, 6, 8]
+        self.sr_head = None
+        self.mask_head = None
         self.lambda_sr = float(lambda_sr)
         self.sr_scale = int(sr_scale)
         self.edge_weight = float(edge_weight)
         self.lambda_group = float(lambda_group)
         self.use_squared_dice = bool(use_squared_dice)
         self.imgsz = int(imgsz)
+        self.group_criterion = None
 
-        self.p2_features = None
-        self.p3_features = None
-        self.stage_features = []
-        self.img_hr = None
+        # 2. Base DetectionModel builds backbone layers and runs stride probing
+        super().__init__(cfg=cfg, ch=ch, nc=nc, verbose=verbose)
 
-        self.p2_idx = 2
-        self.p3_idx = 4
-        self.stage_indices = [2, 4, 6, 8]  # default candidate indices for P2, P3, P4, P5
-
-        self.sr_head = None
-        self.mask_head = None
+        # 3. Setup auxiliary branches and loss modules
         self.group_criterion = GroupMultiStageLoss(use_squared_dice=self.use_squared_dice)
         self._setup_branches()
 
@@ -218,7 +221,10 @@ class SuperYOLOMultiStageModel(DetectionModel):
         return mask
 
     def _predict_once(self, x, profile=False, embed=None):
-        if self.training and hasattr(self, "sr_scale") and self.sr_scale > 1:
+        sr_active = self.training and getattr(self, "sr_head", None) is not None
+        mask_active = self.training and getattr(self, "mask_head", None) is not None
+
+        if sr_active and hasattr(self, "sr_scale") and self.sr_scale > 1:
             self.img_hr = x
             h, w = x.shape[-2:]
             x = F.interpolate(x, size=(h // self.sr_scale, w // self.sr_scale),
@@ -236,11 +242,13 @@ class SuperYOLOMultiStageModel(DetectionModel):
                 self._profile_one_layer(m, x, dt)
             x = m(x)
 
-            if self.training:
+            if sr_active:
                 if m.i == self.p2_idx:
                     self.p2_features = x
-                if m.i == self.p3_idx:
+                elif m.i == self.p3_idx:
                     self.p3_features = x
+
+            if mask_active:
                 if m.i in self.stage_indices:
                     captured_stages[m.i] = x
 
@@ -250,7 +258,7 @@ class SuperYOLOMultiStageModel(DetectionModel):
                 if m.i == max_idx:
                     return torch.unbind(torch.cat(embeddings, 1), dim=0)
 
-        if self.training and len(captured_stages) == 4:
+        if mask_active and len(captured_stages) == len(self.stage_indices):
             self.stage_features = [captured_stages[idx] for idx in self.stage_indices]
         return x
 
