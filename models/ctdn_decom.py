@@ -20,7 +20,7 @@ import warnings
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from einops import rearrange
+# Native PyTorch implementation (zero external einops dependency)
 
 warnings.filterwarnings("ignore", category=UserWarning)
 
@@ -141,12 +141,13 @@ class Self_Attention(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         b, c, h, w = x.shape
+        head_dim = c // self.num_heads
         qkv = self.qkv_dwconv(self.qkv(x))
         q, k, v = qkv.chunk(3, dim=1)
 
-        q = rearrange(q, "b (head c) h w -> b head c (h w)", head=self.num_heads)
-        k = rearrange(k, "b (head c) h w -> b head c (h w)", head=self.num_heads)
-        v = rearrange(v, "b (head c) h w -> b head c (h w)", head=self.num_heads)
+        q = q.view(b, self.num_heads, head_dim, h * w)
+        k = k.view(b, self.num_heads, head_dim, h * w)
+        v = v.view(b, self.num_heads, head_dim, h * w)
 
         q = F.normalize(q, dim=-1)
         k = F.normalize(k, dim=-1)
@@ -154,7 +155,7 @@ class Self_Attention(nn.Module):
         attn = (q @ k.transpose(-2, -1)).softmax(dim=-1)
         out = attn @ v
 
-        out = rearrange(out, "b head c (h w) -> b (head c) h w", head=self.num_heads, h=h, w=w)
+        out = out.view(b, c, h, w)
         return self.project_out(out)
 
 
