@@ -48,11 +48,16 @@ def main():
         else:
             raise FileNotFoundError(f"Weights file not found at {weights_path}")
 
+    device = args.device
+    if str(device) not in ("cpu", "-1") and not torch.cuda.is_available():
+        print("⚠️ CUDA GPU is not available on this node (login node). Automatically evaluating on CPU...")
+        device = "cpu"
+
     print("=" * 75)
     print(f"📊 EVALUATING {args.run_key} ON '{args.split}' SPLIT")
     print(f"Weights:    {weights_path}")
     print(f"Dataset:    {args.data}")
-    print(f"Resolution: {args.imgsz}px | Max Det: {args.max_det} | Device: {args.device}")
+    print(f"Resolution: {args.imgsz}px | Max Det: {args.max_det} | Device: {device}")
     print("=" * 75)
 
     model = YOLO(str(weights_path))
@@ -65,7 +70,7 @@ def main():
         conf=args.conf,
         iou=args.iou,
         max_det=args.max_det,
-        device=args.device,
+        device=device,
         save_json=False,
         plots=True,
     )
@@ -80,13 +85,20 @@ def main():
     total_time_ms = sum(speed.values())
     fps = 1000.0 / total_time_ms if total_time_ms > 0 else 0.0
 
-    # Per-class AP@50
+    # Per-class AP@50 and AP@50-95
     per_class_ap50 = {}
+    per_class_ap50_95 = {}
     names = metrics.names if hasattr(metrics, "names") else {i: CLASS_NAMES[i] for i in range(4)}
-    if hasattr(metrics.box, "maps") and len(metrics.box.maps) > 0:
-        for idx, ap in enumerate(metrics.box.maps):
+    
+    if hasattr(metrics.box, "ap50") and metrics.box.ap50 is not None:
+        for idx, ap in enumerate(metrics.box.ap50):
             c_name = names.get(idx, f"Class_{idx}")
             per_class_ap50[c_name] = round(float(ap), 4)
+            
+    if hasattr(metrics.box, "maps") and metrics.box.maps is not None:
+        for idx, ap in enumerate(metrics.box.maps):
+            c_name = names.get(idx, f"Class_{idx}")
+            per_class_ap50_95[c_name] = round(float(ap), 4)
 
     print("\n" + "=" * 75)
     print(f"🏆 EVALUATION RESULTS: {args.run_key}")
@@ -97,7 +109,7 @@ def main():
     print(f"  Speed:             {total_time_ms:.1f} ms/board ({fps:.1f} FPS)")
     print("\n--- Per-Class AP@0.5 ---")
     for k, v in per_class_ap50.items():
-        print(f"  {k:22s}: {v:.4f}")
+        print(f"  {k:22s}: {v:.4f} (AP50-95: {per_class_ap50_95.get(k, 0.0):.4f})")
     print("=" * 75)
 
     # Save to JSON
@@ -118,10 +130,13 @@ def main():
         "max_det": args.max_det,
         "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
         "per_class_ap50": per_class_ap50,
+        "per_class_ap50_95": per_class_ap50_95,
     }
     # Add per-class top-level keys for comparison_table.csv compatibility
     for k, v in per_class_ap50.items():
         summary[f"{k}_ap50"] = v
+    for k, v in per_class_ap50_95.items():
+        summary[f"{k}_ap50_95"] = v
 
     args.results_dir.mkdir(parents=True, exist_ok=True)
     out_json = args.results_dir / f"{args.run_key}.json"

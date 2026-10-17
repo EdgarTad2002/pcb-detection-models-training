@@ -82,6 +82,7 @@ python models/train_case1_ctdn_stem.py \
     --run-key "$RUN_KEY" \
     --weights "yolo26s.pt" \
     --data "$AUG_DATA/data.yaml" \
+    --optimizer SGD \
     --lambda-group 0.15 \
     --use-squared-dice \
     --epochs 100 \

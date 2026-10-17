@@ -100,13 +100,11 @@ class CTDNInNetworkStem(nn.Module):
             nn.SiLU(inplace=True),
         )
 
-    def forward(self, x: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
         Forward pass.
         Returns:
-            fused_stride4: [B, out_channels, H/4, W/4] to feed into YOLO layer 2
-            feat_R: Clean Reflectance latent representation
-            feat_L_adj: AGC-adjusted Illumination latent representation
+            fused_stride4: [B, out_channels, H/4, W/4] to feed directly into YOLO layer 2 (stride 4, 64 channels).
         """
         # Downsample to stride 2 and stride 4
         lvl0 = self.down0(self.block0(self.conv_in(x)))
@@ -132,16 +130,19 @@ class CTDNInNetworkStem(nn.Module):
         l_agc = apply_agaian_agc_torch(l_mag, gamma_min=0.30, gamma_max=2.0)
         feat_l_adj = feat_l_refined * l_agc
 
+        self.feat_R = feat_r_refined
+        self.feat_L = feat_l_adj
+
         # Fuse Reflectance and Illumination into final stride-4 output
         fused = self.fusion(torch.cat([feat_r_refined, feat_l_adj], dim=1))
-        return fused, feat_r_refined, feat_l_adj
+        return fused
 
 
 if __name__ == "__main__":
     print("Testing CTDNInNetworkStem...")
     stem = CTDNInNetworkStem(in_channels=3, out_channels=64, internal_dim=32)
     x = torch.rand(2, 3, 640, 640)
-    out, r, l = stem(x)
+    out = stem(x)
     print(f"Stem Output shape: {out.shape} (Expected: [2, 64, 160, 160])")
-    print(f"Reflectance shape: {r.shape}, Illumination shape: {l.shape}")
+    print(f"Reflectance shape: {stem.feat_R.shape}, Illumination shape: {stem.feat_L.shape}")
     print("CTDNInNetworkStem self-test passed successfully!")

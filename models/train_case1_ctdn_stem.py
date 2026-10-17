@@ -58,7 +58,18 @@ class YOLO26sCTDNStemModel(DetectionModel):
         super().__init__(cfg=cfg, ch=ch, nc=nc, verbose=verbose)
 
         # Build in-network CTDN stem (outputs 64 channels at stride 4)
+        # Directly replace layer 0 and layer 1 in self.model so standard DetectionModel execution works
         self.ctdn_stem = CTDNInNetworkStem(in_channels=ch, out_channels=64, internal_dim=32)
+        self.ctdn_stem.i = 0
+        self.ctdn_stem.f = -1
+        self.ctdn_stem.type = "models.ctdn_yolo_stem.CTDNInNetworkStem"
+        self.model[0] = self.ctdn_stem
+
+        identity = nn.Identity()
+        identity.i = 1
+        identity.f = -1
+        identity.type = "torch.nn.Identity"
+        self.model[1] = identity
 
         # Setup 4-stage auxiliary mask heads for Group Multi-Stage Loss
         p2_ch = 64
@@ -87,7 +98,6 @@ class YOLO26sCTDNStemModel(DetectionModel):
         return mask
 
     def _predict_once(self, x, profile=False, embed=None):
-        stem_active = getattr(self, "ctdn_stem", None) is not None
         mask_active = self.training and getattr(self, "mask_head", None) is not None
 
         y, dt, embeddings = [], [], []
@@ -95,18 +105,7 @@ class YOLO26sCTDNStemModel(DetectionModel):
         max_idx = max(embed_set)
         captured_stages = {}
 
-        if stem_active:
-            # Pass raw image through CTDN stem directly to stride 4 (64 channels)
-            x_stem, _, _ = self.ctdn_stem(x)
-            y.append(None)       # layer 0 skipped
-            y.append(x_stem)     # layer 1 replaced with CTDN stem output
-            start_layer = 2
-            x = x_stem
-        else:
-            start_layer = 0
-
-        for idx in range(start_layer, len(self.model)):
-            m = self.model[idx]
+        for m in self.model:
             if m.f != -1:
                 x = y[m.f] if isinstance(m.f, int) else [x if j == -1 else y[j] for j in m.f]
             if profile:
@@ -214,6 +213,7 @@ def main():
     p.add_argument("--batch", type=int, default=8)
     p.add_argument("--workers", type=int, default=8)
     p.add_argument("--device", default="0")
+    p.add_argument("--optimizer", default="SGD", help="Optimizer to use (default: SGD per project benchmark findings)")
     p.add_argument("--eval-conf", type=float, default=0.001)
     p.add_argument("--eval-iou", type=float, default=0.50)
     p.add_argument("--eval-split", default="test")
@@ -237,7 +237,7 @@ def main():
         "exist_ok": True,
         "save": True,
         "plots": True,
-        "optimizer": "auto",
+        "optimizer": args.optimizer,
         "copy_paste": 0.30,
         "mosaic": 1.0,
         "mixup": 0.15,
@@ -258,7 +258,43 @@ def main():
             max_det=args.max_det,
             device=args.device,
         )
-        print(f"Case 1 Evaluation mAP50: {metrics.box.map50:.4f}, mAP50-95: {metrics.box.map:.4f}")
+        map50 = float(metrics.box.map50)
+        map50_95 = float(metrics.box.map)
+        prec = float(metrics.box.mp)
+        rec = float(metrics.box.mr)
+        print(f"Case 1 Evaluation mAP50: {map50:.4f}, mAP50-95: {map50_95:.4f}")
+
+        # Extract per-class AP50
+        per_class_ap50 = {}
+        names = metrics.names if hasattr(metrics, "names") else {0: "Capacitor", 1: "Connector", 2: "Electrolytic Capacitor", 3: "IC"}
+        if hasattr(metrics.box, "ap50") and metrics.box.ap50 is not None:
+            for idx, ap in enumerate(metrics.box.ap50):
+                c_name = names.get(idx, f"Class_{idx}")
+                per_class_ap50[c_name] = round(float(ap), 4)
+
+        results_dir = Path("/mnt/weka/etadevosyan/pcb-yolo/results")
+        if not results_dir.exists():
+            results_dir = Path("results")
+        results_dir.mkdir(parents=True, exist_ok=True)
+        summary = {
+            "model": args.run_key,
+            "weights": str(best_pt),
+            "mAP50": map50,
+            "mAP50_95": map50_95,
+            "precision": prec,
+            "recall": rec,
+            "imgsz": args.imgsz,
+            "max_det": args.max_det,
+            "eval_split": args.eval_split,
+            "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+            "per_class_ap50": per_class_ap50,
+        }
+        for k, v in per_class_ap50.items():
+            summary[f"{k}_ap50"] = v
+        out_json = results_dir / f"{args.run_key}.json"
+        with open(out_json, "w", encoding="utf-8") as f:
+            json.dump(summary, f, indent=2)
+        print(f"✅ Case 1 results saved to: {out_json}")
 
 
 if __name__ == "__main__":
