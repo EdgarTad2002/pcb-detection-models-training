@@ -71,13 +71,24 @@ class YOLO26sCTDNStemModel(DetectionModel):
         identity.type = "torch.nn.Identity"
         self.model[1] = identity
 
-        # Setup 4-stage auxiliary mask heads for Group Multi-Stage Loss
-        p2_ch = 64
-        p3_ch = 128
-        p4_ch = 256
-        p5_ch = 512
+        # Setup 4-stage auxiliary mask heads for Group Multi-Stage Loss dynamically probed from backbone
+        p2_idx, p2_ch = self._probe_layer_channels([2, 1, 3])
+        p3_idx, p3_ch = self._probe_layer_channels([4, 3, 5])
+        p4_idx, p4_ch = self._probe_layer_channels([6, 5, 7])
+        p5_idx, p5_ch = self._probe_layer_channels([8, 7, 9])
+        self.stage_indices = [p2_idx, p3_idx, p4_idx, p5_idx]
         self.mask_head = MultiStageMaskHead([p2_ch, p3_ch, p4_ch, p5_ch])
         self.group_criterion = GroupMultiStageLoss(use_squared_dice=self.use_squared_dice)
+
+    def _probe_layer_channels(self, candidates):
+        for idx in candidates:
+            if idx < len(self.model):
+                mod = self.model[idx]
+                if hasattr(mod, "cv2") and hasattr(mod.cv2, "conv"):
+                    return idx, mod.cv2.conv.out_channels
+                if hasattr(mod, "conv") and hasattr(mod.conv, "out_channels"):
+                    return idx, mod.conv.out_channels
+        return candidates[0], 128
 
     def _rasterize_gt_mask(self, batch: dict, shape: Tuple[int, int], device: torch.device) -> torch.Tensor:
         bs, _, h, w = batch["img"].shape
