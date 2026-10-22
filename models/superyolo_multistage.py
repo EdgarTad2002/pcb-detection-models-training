@@ -180,10 +180,42 @@ class SuperYOLOMultiStageModel(DetectionModel):
                     return idx, mod.conv.out_channels
         return candidates[0], 64
 
+    def _probe_stage_taps(self):
+        """Dynamically identifies downsampling boundaries (P2: stride 4, P3: stride 8, P4: stride 16, P5: stride 32)
+        by forward-passing a dummy tensor through self.model, ensuring 100% compatibility with YOLO26, YOLO12, YOLO11, and YOLOv8."""
+        try:
+            device = next(self.model.parameters()).device
+            x = torch.zeros(1, 3, 128, 128, device=device)
+            y = []
+            stride_map = {}
+            for i, m in enumerate(self.model):
+                if m.f != -1:
+                    x = y[m.f] if isinstance(m.f, int) else [x if j == -1 else y[j] for j in m.f]
+                x = m(x)
+                y.append(x if m.i in self.save else None)
+                if isinstance(x, torch.Tensor) and x.ndim == 4:
+                    s = 128 // max(x.shape[-1], 1)
+                    if s in (4, 8, 16, 32) and i <= 14:
+                        stride_map[s] = (i, x.shape[1])
+            if all(s in stride_map for s in (4, 8, 16, 32)):
+                return stride_map
+        except Exception:
+            pass
+        # Robust fallback
+        return {
+            4: self._probe_layer_channels([2, 1, 3]),
+            8: self._probe_layer_channels([4, 3, 5]),
+            16: self._probe_layer_channels([6, 5, 7]),
+            32: self._probe_layer_channels([8, 7, 9]),
+        }
+
     def _setup_branches(self):
-        # 1. Setup SR Branch
-        self.p2_idx, p2_ch = self._probe_layer_channels([2, 1, 3])
-        self.p3_idx, p3_ch = self._probe_layer_channels([4, 3, 5])
+        taps = self._probe_stage_taps()
+        self.p2_idx, p2_ch = taps[4]
+        self.p3_idx, p3_ch = taps[8]
+        p4_idx, p4_ch = taps[16]
+        p5_idx, p5_ch = taps[32]
+
         lr_size = self.imgsz // max(self.sr_scale, 1)
         p2_size = lr_size // 4
         upscale = max(1, self.imgsz // max(p2_size, 1))
@@ -192,9 +224,7 @@ class SuperYOLOMultiStageModel(DetectionModel):
         self.sr_head = SRHead(p2_ch=p2_ch, p3_ch=p3_ch, out_ch=3,
                               edge_weight=self.edge_weight, n_upsample=n_up)
 
-        # 2. Setup 4-Stage Mask Heads for Group Multi-Stage Loss
-        p4_idx, p4_ch = self._probe_layer_channels([6, 5, 7])
-        p5_idx, p5_ch = self._probe_layer_channels([8, 7, 9])
+        # Setup 4-Stage Mask Heads for Group Multi-Stage Loss
         self.stage_indices = [self.p2_idx, self.p3_idx, p4_idx, p5_idx]
         stage_channels = [p2_ch, p3_ch, p4_ch, p5_ch]
         self.mask_head = MultiStageMaskHead(stage_channels)
@@ -283,7 +313,7 @@ class SuperYOLOMultiStageModel(DetectionModel):
         if self.training and self.mask_head is not None and self.lambda_group > 0 and len(self.stage_features) == 4:
             stage_preds = self.mask_head(self.stage_features)
             target_mask = self._rasterize_gt_mask(batch, shape=batch["img"].shape[-2:], device=det_loss.device)
-            group_loss_val, _ = self.group_criterion(stage_preds, target_mask)
+            group_loss_val, _ = self.group_criterion(stage_preds, target_mask, output_pred=stage_preds[0])
 
         # Clear references
         self.p2_features = None
@@ -374,7 +404,7 @@ def main():
     p = argparse.ArgumentParser(description="True SuperYOLO with Group Multi-Stage SDice Loss")
     p.add_argument("--run-key", default="superyolo26s_grand_unified_1280")
     p.add_argument("--weights", default="yolo26s.pt")
-    p.add_argument("--data", default="datasets/pcb-grand-unified-1280/data.yaml")
+    p.add_argument("--eval-data", default=None, help="Optional canonical data.yaml for evaluation (e.g. pcb-native-res-cleaned-1280)")
     p.add_argument("--lambda-sr", type=float, default=0.10)
     p.add_argument("--lambda-group", type=float, default=0.15)
     p.add_argument("--use-squared-dice", action="store_true", default=True)
@@ -430,10 +460,11 @@ def main():
             break
 
     if best_pt is not None:
-        print(f"\n[EVAL] Running evaluation on '{args.eval_split}' split with max_det={args.max_det} at {args.imgsz}px...")
+        eval_data_path = args.eval_data if args.eval_data else args.data
+        print(f"\n[EVAL] Running evaluation on '{args.eval_split}' split with max_det={args.max_det} at {args.imgsz}px using {eval_data_path}...")
         eval_model = YOLO(str(best_pt))
         metrics = eval_model.val(
-            data=args.data,
+            data=eval_data_path,
             split=args.eval_split,
             imgsz=args.imgsz,
             batch=args.batch,

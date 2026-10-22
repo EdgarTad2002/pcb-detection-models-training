@@ -29,7 +29,8 @@ def main():
     p = argparse.ArgumentParser(description="Train YOLO26s with Convolutional Grand Unified Stem")
     p.add_argument("--run-key", default="yolov26s_conv_grand_unified_stem_1280")
     p.add_argument("--weights", default="yolo26s.pt")
-    p.add_argument("--data", default="datasets/pcb-unified-4class-cappaste-1280/data.yaml")
+    p.add_argument("--data", default="datasets/pcb-native-res-cleaned-cappaste-1280/data.yaml")
+    p.add_argument("--eval-data", default=None, help="Optional canonical data.yaml for evaluation (e.g. pcb-native-res-cleaned-1280)")
     p.add_argument("--epochs", type=int, default=100)
     p.add_argument("--imgsz", type=int, default=1280)
     p.add_argument("--batch", type=int, default=8)
@@ -69,10 +70,11 @@ def main():
 
     best_pt = project_dir / "pcb-filtered" / "weights" / "best.pt"
     if best_pt.exists():
-        print(f"\n[EVAL] Running evaluation on '{args.eval_split}' split with max_det={args.max_det} at {args.imgsz}px...")
+        eval_data_path = args.eval_data if args.eval_data else args.data
+        print(f"\n[EVAL] Running evaluation on '{args.eval_split}' split with max_det={args.max_det} at {args.imgsz}px using {eval_data_path}...")
         eval_model = YOLO(str(best_pt))
         metrics = eval_model.val(
-            data=args.data,
+            data=eval_data_path,
             split=args.eval_split,
             imgsz=args.imgsz,
             batch=args.batch,

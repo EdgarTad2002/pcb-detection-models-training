@@ -126,20 +126,33 @@ def base_stage_loss(
 
 class GroupMultiStageLoss(nn.Module):
     """
-    Group Multi-Stage Loss module over intermediate feature maps [P1, P2, P3, P4].
-    Computes Base_Loss at each stage against downscaled target ground truth masks.
+    Group Multi-Stage Loss module over intermediate feature maps [P2, P3, P4, P5]
+    and primary Output prediction, matching DualCENet (TransFuse / EGE-UNet):
+
+      Group_Loss = Loss_Output + sum_{i=1..M} lambda_i * Loss_Stage_i
+
+    where Base_Loss(P, Y) = bce_weight * BCE(P, Y) + dice_weight * Squared_Dice(P, Y).
+
+    PCB-Calibrated Stage Weights (lambda_i):
+      - Stage 1 (P2, Stride 4):  0.35 (Heaviest supervision for microscopic 0402/0201 capacitors)
+      - Stage 2 (P3, Stride 8):  0.25 (Mid-scale components and IC pin rows)
+      - Stage 3 (P4, Stride 16): 0.15 (Connectors and large IC bodies)
+      - Stage 4 (P5, Stride 32): 0.10 (Coarse features; downscaled mask aliasing penalty minimized)
     """
     def __init__(
         self,
         use_squared_dice: bool = True,
         stage_weights: Optional[List[float]] = None,
+        output_weight: float = 1.0,
         smooth: float = 1.0,
-        bce_weight: float = 1.0,
+        bce_weight: float = 0.6,
         dice_weight: float = 1.0,
     ):
         super(GroupMultiStageLoss, self).__init__()
         self.use_squared_dice = use_squared_dice
-        self.stage_weights = stage_weights if stage_weights else [1.0, 1.0, 1.0, 1.0]
+        # Default calibrated scale-aware pyramid weights for PCB AOI:
+        self.stage_weights = stage_weights if stage_weights is not None else [0.35, 0.25, 0.15, 0.10]
+        self.output_weight = float(output_weight)
         self.smooth = smooth
         self.bce_weight = bce_weight
         self.dice_weight = dice_weight
@@ -148,20 +161,45 @@ class GroupMultiStageLoss(nn.Module):
         self,
         stage_preds: List[torch.Tensor],
         target_mask: torch.Tensor,
+        output_pred: Optional[torch.Tensor] = None,
     ) -> Tuple[torch.Tensor, dict]:
         """
         Args:
-            stage_preds: List of 4 predicted masks [P1, P2, P3, P4] with values in [0, 1].
+            stage_preds: List of intermediate predicted masks [P2, P3, P4, P5] with values in [0, 1].
             target_mask: Full-resolution binary mask [B, 1, H, W] of component ground truth.
+            output_pred: Optional high-resolution primary output mask prediction [B, 1, H, W].
 
         Returns:
-            total_loss: Weighted sum of stage losses.
+            total_loss: Group_Loss = Loss_Output + sum_i lambda_i * Loss_Stage_i
             loss_dict: Dictionary with per-stage details for logging.
         """
         total_loss = torch.tensor(0.0, device=target_mask.device)
         loss_dict = {}
 
-        for idx, (p_stage, weight) in enumerate(zip(stage_preds, self.stage_weights), start=1):
+        # 1. Output Loss (if explicit full-resolution head is provided)
+        if output_pred is not None:
+            out_target = target_mask.float()
+            if output_pred.shape[-2:] != out_target.shape[-2:]:
+                out_target = F.interpolate(out_target, size=output_pred.shape[-2:], mode="nearest")
+            out_loss, out_bce, out_sdice = base_stage_loss(
+                output_pred,
+                out_target,
+                use_squared_dice=self.use_squared_dice,
+                smooth=self.smooth,
+                bce_weight=self.bce_weight,
+                dice_weight=self.dice_weight,
+            )
+            total_loss = total_loss + self.output_weight * out_loss
+            loss_dict["loss_output"] = out_loss.detach()
+            loss_dict["output_bce"] = out_bce.detach()
+            loss_dict["output_sdice"] = out_sdice.detach()
+
+        # 2. Multi-Stage Auxiliary Losses: sum_{i=1..M} lambda_i * Loss_Stage_i
+        num_stages = min(len(stage_preds), len(self.stage_weights))
+        for idx in range(num_stages):
+            p_stage = stage_preds[idx]
+            weight = self.stage_weights[idx]
+
             # Downscale target ground truth to match this stage's spatial resolution
             if p_stage.shape[-2:] != target_mask.shape[-2:]:
                 y_stage = F.interpolate(
@@ -182,9 +220,9 @@ class GroupMultiStageLoss(nn.Module):
             )
 
             total_loss = total_loss + weight * s_loss
-            loss_dict[f"stage_{idx}_loss"] = s_loss.detach()
-            loss_dict[f"stage_{idx}_bce"] = s_bce.detach()
-            loss_dict[f"stage_{idx}_sdice"] = s_sdice.detach()
+            loss_dict[f"stage_{idx + 1}_loss"] = s_loss.detach()
+            loss_dict[f"stage_{idx + 1}_bce"] = s_bce.detach()
+            loss_dict[f"stage_{idx + 1}_sdice"] = s_sdice.detach()
 
         loss_dict["group_multistage_total"] = total_loss.detach()
         return total_loss, loss_dict

@@ -72,6 +72,12 @@ def parse_args():
         default=None,
         help="Path to data.yaml. Defaults to pcb-unified-4class-cleaned/data.yaml (or pcb-unified-4class / pcb-filtered-yolov8).",
     )
+    p.add_argument(
+        "--eval-data",
+        type=Path,
+        default=None,
+        help="Optional canonical data.yaml for evaluation (e.g. pcb-native-res-cleaned-1280). Defaults to --data.",
+    )
 
     # --- core training hyperparameters ---
     p.add_argument("--epochs", type=int, default=100)
@@ -335,8 +341,8 @@ def main():
 
     print("\n" + "=" * 70)
     print(f"Evaluating {args.run_key} on '{args.eval_split}' split")
-    print("=" * 70)
-    summary = evaluate(weights_path, args, data_yaml, effective_classes=effective_classes)
+    eval_yaml = args.eval_data if args.eval_data else data_yaml
+    summary = evaluate(weights_path, args, eval_yaml, effective_classes=effective_classes)
 
     print("\n--- Overall Metrics ---")
     for k, v in summary.items():
