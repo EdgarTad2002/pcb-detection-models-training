@@ -404,6 +404,7 @@ def main():
     p = argparse.ArgumentParser(description="True SuperYOLO with Group Multi-Stage SDice Loss")
     p.add_argument("--run-key", default="superyolo26s_grand_unified_1280")
     p.add_argument("--weights", default="yolo26s.pt")
+    p.add_argument("--data", default="datasets/pcb-native-res-cleaned-cappaste-1280/data.yaml")
     p.add_argument("--eval-data", default=None, help="Optional canonical data.yaml for evaluation (e.g. pcb-native-res-cleaned-1280)")
     p.add_argument("--lambda-sr", type=float, default=0.10)
     p.add_argument("--lambda-group", type=float, default=0.15)
