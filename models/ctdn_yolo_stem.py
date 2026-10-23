@@ -128,13 +128,15 @@ class CTDNInNetworkStem(nn.Module):
         # Differentiable Agaian AGC on the illumination latent
         l_mag = torch.sigmoid(torch.mean(feat_l_refined, dim=1, keepdim=True))
         l_agc = apply_agaian_agc_torch(l_mag, gamma_min=0.30, gamma_max=2.0)
-        feat_l_adj = feat_l_refined * l_agc
+        feat_l_adj = (feat_l_refined * l_agc).to(feat_r_refined.dtype)
 
         self.feat_R = feat_r_refined
         self.feat_L = feat_l_adj
 
-        # Fuse Reflectance and Illumination into final stride-4 output
-        fused = self.fusion(torch.cat([feat_r_refined, feat_l_adj], dim=1))
+        # Fuse Reflectance and Illumination into final stride-4 output (cast to fusion weight dtype for FP16 val)
+        cat_feat = torch.cat([feat_r_refined, feat_l_adj], dim=1)
+        w_dtype = self.fusion[0].weight.dtype if hasattr(self.fusion[0], "weight") else feat_r_refined.dtype
+        fused = self.fusion(cat_feat.to(w_dtype))
         return fused
 
 

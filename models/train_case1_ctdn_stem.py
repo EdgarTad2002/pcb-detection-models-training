@@ -230,34 +230,47 @@ def main():
     p.add_argument("--eval-iou", type=float, default=0.50)
     p.add_argument("--eval-split", default="test")
     p.add_argument("--max-det", type=int, default=1000)
+    p.add_argument("--skip-train", action="store_true", help="Skip training and evaluate existing best.pt checkpoint directly")
     args = p.parse_args()
 
     Case1CTDNTrainer.lambda_group = args.lambda_group
     Case1CTDNTrainer.use_squared_dice = args.use_squared_dice
 
     project_dir = Path("runs") / args.run_key
-    trainer = Case1CTDNTrainer(overrides={
-        "model": args.weights,
-        "data": args.data,
-        "epochs": args.epochs,
-        "imgsz": args.imgsz,
-        "batch": args.batch,
-        "workers": args.workers,
-        "device": args.device,
-        "project": str(project_dir),
-        "name": "pcb-filtered",
-        "exist_ok": True,
-        "save": True,
-        "plots": True,
-        "optimizer": args.optimizer,
-        "copy_paste": 0.30,
-        "mosaic": 1.0,
-        "mixup": 0.15,
-    })
-    trainer.train()
+    if not args.skip_train:
+        trainer = Case1CTDNTrainer(overrides={
+            "model": args.weights,
+            "data": args.data,
+            "epochs": args.epochs,
+            "imgsz": args.imgsz,
+            "batch": args.batch,
+            "workers": args.workers,
+            "device": args.device,
+            "project": str(project_dir),
+            "name": "pcb-filtered",
+            "exist_ok": True,
+            "save": True,
+            "plots": True,
+            "optimizer": args.optimizer,
+            "copy_paste": 0.30,
+            "mosaic": 1.0,
+            "mixup": 0.15,
+        })
+        trainer.train()
 
-    best_pt = project_dir / "pcb-filtered" / "weights" / "best.pt"
-    if best_pt.exists():
+    candidates = [
+        project_dir / "pcb-filtered" / "weights" / "best.pt",
+        Path("runs/detect") / project_dir / "pcb-filtered" / "weights" / "best.pt",
+        Path("runs/detect") / args.run_key / "pcb-filtered" / "weights" / "best.pt",
+        Path("runs") / "detect" / project_dir / "pcb-filtered" / "weights" / "best.pt",
+    ]
+    best_pt = None
+    for c in candidates:
+        if c.exists():
+            best_pt = c
+            break
+
+    if best_pt is not None:
         eval_data_path = args.eval_data if args.eval_data else args.data
         print(f"\n[EVAL] Running evaluation on '{args.eval_split}' split with max_det={args.max_det} at {args.imgsz}px using {eval_data_path}...")
         eval_model = YOLO(str(best_pt))
