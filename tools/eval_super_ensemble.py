@@ -40,6 +40,18 @@ try:
 except ImportError:
     pass
 
+for _mod_name in (
+    "models.as_pgms_yolo",
+    "models.conv_grand_unified_stem",
+    "models.ctdn_yolo_stem",
+    "models.train_case1_ctdn_stem",
+    "models.superyolo_multistage",
+):
+    try:
+        __import__(_mod_name)
+    except ImportError:
+        pass
+
 import cv2
 import numpy as np
 import torch

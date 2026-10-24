@@ -2,6 +2,11 @@
 
 Extending [Zhou & Agaian (2026), *"Ensemble Learning Using YOLO Models for Semiconductor E-Waste Recycling"*](https://doi.org/10.3390/info17040322) with a reproduction of their baselines, the introduction of **YOLO26** (released after the paper), a diagnosis of a critical small-object failure mode, and a controlled ablation study to fix it — all trained on the **YSU Cluster**.
 
+> [!IMPORTANT]
+> **New to the project or continuing work as an AI agent?**  
+> Please read the comprehensive master documentation: [**`PROJECT_MASTER_GUIDE.md`**](file:///d:/pcb-detection-models-training/PROJECT_MASTER_GUIDE.md).  
+> It details the full mathematical theory (Retinex, Agaian AGC, Sargis Weber edge operator, DualCENet multi-stage squared-dice loss), the cluster environment, dataset standards, and strict operational guidelines.
+
 ---
 
 ## Why this project

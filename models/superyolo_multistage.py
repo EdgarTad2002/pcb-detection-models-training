@@ -484,8 +484,8 @@ def main():
 
         per_class_ap50 = {}
         names = metrics.names if hasattr(metrics, "names") else {i: CLASS_NAMES[i] for i in range(4)}
-        if hasattr(metrics.box, "maps") and len(metrics.box.maps) > 0:
-            for idx, ap in enumerate(metrics.box.maps):
+        if hasattr(metrics.box, "ap50") and metrics.box.ap50 is not None and len(metrics.box.ap50) > 0:
+            for idx, ap in enumerate(metrics.box.ap50):
                 c_name = names.get(idx, f"Class_{idx}")
                 per_class_ap50[c_name] = round(float(ap), 4)
 

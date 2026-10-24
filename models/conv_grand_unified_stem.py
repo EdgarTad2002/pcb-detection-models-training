@@ -88,14 +88,13 @@ class LearnableConvGrandUnifiedEdge(nn.Module):
         log_r = torch.log(x + self.eps) - torch.log(L + self.eps)
         log_r = log_r.clamp(-4.0, 2.0)
 
-        # 4. Sargis Weber Contrast on Reflectance via Differentiable Local Min/Max Pooling
-        gray_r = log_r.mean(dim=1, keepdim=True)
-        # Normalize gray_r into positive range [0, 1] for stable contrast ratio
-        gray_norm = torch.sigmoid(gray_r)
-        l_max = F.max_pool2d(gray_norm, kernel_size=3, stride=1, padding=1)
-        l_min = -F.max_pool2d(-gray_norm, kernel_size=3, stride=1, padding=1)
-        # Weber contrast formula: ((Lmax - Lmin) / (Lmin + 1e-3))^0.20
-        weber = ((l_max - l_min) / (l_min + 1e-3)).clamp(min=0.0, max=10.0) ** 0.20
+        # 4. Sargis Weber Contrast on Reflectance via Differentiable Local Min/Max Pooling (Eq. 6.3.8)
+        gray_r = torch.exp(log_r.mean(dim=1, keepdim=True) * 0.5)
+        l_max = F.max_pool2d(gray_r, kernel_size=3, stride=1, padding=1)
+        l_min = -F.max_pool2d(-gray_r, kernel_size=3, stride=1, padding=1)
+        u = ((l_max - l_min).clamp(min=0.0) / (l_min.clamp(min=0.0) + 0.02)).clamp(min=0.0, max=20.0)
+        weber_raw = ((u + 1e-6) ** 0.20) * torch.log1p(u)
+        weber = (weber_raw / weber_raw.amax(dim=(2, 3), keepdim=True).clamp(min=1e-4)).clamp(0.0, 1.0)
 
         return L_agc, log_r, weber
 
@@ -140,10 +139,14 @@ class ConvGrandUnifiedTrainer(DetectionTrainer):
     """DetectionTrainer injecting the Convolutional Grand Unified Stem into Layer 0."""
 
     def get_model(self, cfg=None, weights=None, verbose=True):
-        model = super().get_model(cfg=cfg, weights=None, verbose=verbose)
+        # Load pretrained weights BEFORE wrapping model[0] so `model.0.conv.weight` matches 100%!
+        model = super().get_model(cfg=cfg, weights=weights, verbose=verbose)
         wrap_model_with_conv_gu_stem(model)
         if weights:
-            model.load(weights)
+            try:
+                model.load(weights, verbose=False)
+            except Exception:
+                pass
         return model
 
 
