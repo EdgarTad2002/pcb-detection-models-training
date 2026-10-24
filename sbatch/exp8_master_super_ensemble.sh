@@ -34,30 +34,42 @@ WEIGHTS=()
 add_checkpoint() {
     local path="$1"
     local w="$2"
-    if [ -f "$path" ]; then
-        CANDIDATES+=("$path")
-        WEIGHTS+=("$w")
-        echo "  [+] Included in Ensemble: $path (weight=$w)"
-    else
-        echo "  [-] Checkpoint not yet found: $path"
-    fi
+    for candidate in "$path" "runs/$path" "runs/detect/$path" "runs/detect/runs/$path"; do
+        if [ -f "$candidate" ]; then
+            CANDIDATES+=("$candidate")
+            WEIGHTS+=("$w")
+            echo "  [+] Included in Ensemble: $candidate (weight=$w)"
+            return
+        fi
+    done
+    echo "  [-] Checkpoint not yet found: $path"
 }
 
 echo "Discovering trained checkpoints..."
-# YOLO26s Specialists
-add_checkpoint "runs/yolo26s_exp7_all_approaches_together_1280/pcb-filtered/weights/best.pt" 1.25
-add_checkpoint "runs/yolo26s_exp3_grand_unified_1280/pcb-filtered/weights/best.pt" 1.10
-add_checkpoint "runs/yolo26s_exp2_agaian_retinex_1280/pcb-filtered/weights/best.pt" 1.05
-add_checkpoint "runs/yolo26s_exp5_conv_stem_1280/pcb-filtered/weights/best.pt" 1.00
-add_checkpoint "runs/yolo26s_exp6_ctdn_stem_1280/pcb-filtered/weights/best.pt" 1.00
+# Baseline Champions (65.2% & 64.5%)
+add_checkpoint "yolo26s_exp1_baseline_1280/pcb-filtered/weights/best.pt" 1.30
+add_checkpoint "yolo12s_exp1_baseline_1280/pcb-filtered/weights/best.pt" 1.25
 
-# YOLO12s Specialists
-add_checkpoint "runs/yolo12s_exp7_all_approaches_together_1280/pcb-filtered/weights/best.pt" 1.20
-add_checkpoint "runs/yolo12s_exp3_grand_unified_1280/pcb-filtered/weights/best.pt" 1.05
-add_checkpoint "runs/yolo12s_exp2_agaian_retinex_1280/pcb-filtered/weights/best.pt" 1.00
+# Loss-Only Multi-Stage SDice Specialists
+add_checkpoint "yolo26s_exp4_loss_only_sdice_1280/pcb-filtered/weights/best.pt" 1.20
+add_checkpoint "yolo12s_exp4_loss_only_sdice_1280/pcb-filtered/weights/best.pt" 1.15
+
+# YOLO26s Architecture Specialists
+add_checkpoint "yolo26s_exp7_all_approaches_together_1280/pcb-filtered/weights/best.pt" 1.25
+add_checkpoint "yolo26s_exp3_grand_unified_1280/pcb-filtered/weights/best.pt" 1.10
+add_checkpoint "yolo26s_exp2_agaian_retinex_1280/pcb-filtered/weights/best.pt" 1.05
+add_checkpoint "yolo26s_exp5_conv_stem_1280/pcb-filtered/weights/best.pt" 1.10
+add_checkpoint "yolo26s_exp6_ctdn_stem_1280/pcb-filtered/weights/best.pt" 1.15
+
+# YOLO12s Architecture Specialists
+add_checkpoint "yolo12s_exp7_all_approaches_together_1280/pcb-filtered/weights/best.pt" 1.20
+add_checkpoint "yolo12s_exp3_grand_unified_1280/pcb-filtered/weights/best.pt" 1.05
+add_checkpoint "yolo12s_exp2_agaian_retinex_1280/pcb-filtered/weights/best.pt" 1.00
+add_checkpoint "yolo12s_exp5_conv_stem_1280/pcb-filtered/weights/best.pt" 1.05
+add_checkpoint "yolo12s_exp6_ctdn_stem_1280/pcb-filtered/weights/best.pt" 1.10
 
 # Historical Reference Champion (if present)
-add_checkpoint "runs/yolov26s_ultimate_retinex_copypaste_1280/pcb-filtered/weights/best.pt" 1.20
+add_checkpoint "yolov26s_ultimate_retinex_copypaste_1280/pcb-filtered/weights/best.pt" 1.15
 
 echo ""
 if [ ${#CANDIDATES[@]} -ge 2 ]; then

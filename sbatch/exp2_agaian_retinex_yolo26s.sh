@@ -20,7 +20,7 @@ WORKSPACE_DIR=${PCB_YOLO_WORKSPACE:-"/mnt/weka/etadevosyan/pcb-yolo/pcb-yolo26n-
 cd "$WORKSPACE_DIR"
 export PYTHONPATH="$WORKSPACE_DIR:$PYTHONPATH"
 
-TRAIN_DATA="datasets/pcb-agaian-retinex-cappaste-1280/data.yaml"
+TRAIN_DATA="datasets/pcb-native-res-cleaned-1280/data.yaml"
 EVAL_DATA="datasets/pcb-native-res-cleaned-1280/data.yaml"
 RUN_KEY="yolo26s_exp2_agaian_retinex_1280"
 

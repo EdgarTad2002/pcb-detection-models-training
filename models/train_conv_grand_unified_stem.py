@@ -29,7 +29,7 @@ def main():
     p = argparse.ArgumentParser(description="Train YOLO26s with Convolutional Grand Unified Stem")
     p.add_argument("--run-key", default="yolov26s_conv_grand_unified_stem_1280")
     p.add_argument("--weights", default="yolo26s.pt")
-    p.add_argument("--data", default="datasets/pcb-native-res-cleaned-cappaste-1280/data.yaml")
+    p.add_argument("--data", default="datasets/pcb-native-res-cleaned-1280/data.yaml")
     p.add_argument("--eval-data", default=None, help="Optional canonical data.yaml for evaluation (e.g. pcb-native-res-cleaned-1280)")
     p.add_argument("--epochs", type=int, default=100)
     p.add_argument("--imgsz", type=int, default=1280)
