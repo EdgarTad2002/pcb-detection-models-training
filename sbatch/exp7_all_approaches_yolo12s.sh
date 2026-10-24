@@ -20,43 +20,53 @@ WORKSPACE_DIR=${PCB_YOLO_WORKSPACE:-"/mnt/weka/etadevosyan/pcb-yolo/pcb-yolo26n-
 cd "$WORKSPACE_DIR"
 export PYTHONPATH="$WORKSPACE_DIR:$PYTHONPATH"
 
-TRAIN_DATA="datasets/pcb-native-res-cleaned-1280/data.yaml"
-EVAL_DATA="datasets/pcb-native-res-cleaned-1280/data.yaml"
-RUN_KEY="yolo12s_exp7_all_approaches_together_1280"
+# Resolve 4-class pcb-filtered-yolov8 dataset
+if [ -f "/mnt/weka/etadevosyan/pcb-yolo/pcb-detection-models-training/datasets/pcb-filtered-yolov8/data.yaml" ]; then
+    CANONICAL_DATA="/mnt/weka/etadevosyan/pcb-yolo/pcb-detection-models-training/datasets/pcb-filtered-yolov8/data.yaml"
+elif [ -f "datasets/pcb-filtered-yolov8/data.yaml" ]; then
+    CANONICAL_DATA="datasets/pcb-filtered-yolov8/data.yaml"
+else
+    CANONICAL_DATA="data/pcb_filtered_4class.yaml"
+fi
+
+# Training uses Grand Unified enhanced data if available, else canonical
+if [ -f "datasets/pcb-grand-unified-filtered/data.yaml" ]; then
+    TRAIN_DATA="datasets/pcb-grand-unified-filtered/data.yaml"
+elif [ -f "datasets/pcb-agaian-retinex-filtered/data.yaml" ]; then
+    TRAIN_DATA="datasets/pcb-agaian-retinex-filtered/data.yaml"
+else
+    TRAIN_DATA="$CANONICAL_DATA"
+fi
+EVAL_DATA="$CANONICAL_DATA"
+
+IMGSZ=${PCB_IMGSZ:-640}
+BATCH=${PCB_BATCH:-16}
+RUN_KEY="yolo12s_filtered_exp7_all_approaches"
 
 echo "=========================================================================="
-echo "🔥 [Exp 7] Training YOLO12s: AS-PGMS-YOLO (All Approaches Upgraded) on H100"
+echo "🔥 [Exp 7] Training YOLO12s: ALL APPROACHES TOGETHER (4-Class pcb-filtered)"
 echo "   Run Key:       $RUN_KEY"
 echo "   Weights:       yolo12s.pt"
-echo "   Train Data:    $TRAIN_DATA (Canonical Clean 1280px)"
-echo "   Eval Data:     $EVAL_DATA (Canonical Clean Benchmark)"
-echo "   Innovations:   Fractional AMSR + Soft-AGC + True Sargis Weber + SPD P2->P3 Bridge"
-echo "                  + 3-Ch Scale-Decoupled SDice + Scale-Adaptive NWD Box Loss"
-echo "   Resolution:    1280px Native Input, max_det=1000"
+echo "   Train Data:    $TRAIN_DATA"
+echo "   Eval Data:     $EVAL_DATA (Canonical 4-Class)"
+echo "   Loss:          DualCENet Multi-Stage SDice (Eq. 8, Scale-Aware Weights)"
+echo "   Resolution:    ${IMGSZ}px, Batch: $BATCH, max_det=1000"
 echo "=========================================================================="
 
-python models/as_pgms_yolo.py \
+python models/superyolo_multistage.py \
     --run-key "$RUN_KEY" \
     --weights yolo12s.pt \
     --data "$TRAIN_DATA" \
     --eval-data "$EVAL_DATA" \
     --lambda-sr 0.10 \
-    --lambda-group 0.20 \
+    --lambda-group 0.15 \
     --use-squared-dice \
     --epochs 100 \
-    --imgsz 1280 \
-    --batch 8 \
+    --imgsz "$IMGSZ" \
+    --batch "$BATCH" \
     --workers 8 \
-    --optimizer SGD \
-    --cls 1.5 \
-    --box 5.0 \
-    --dfl 2.0 \
-    --label-smoothing 0.10 \
-    --copy-paste 0.30 \
-    --mosaic 1.0 \
-    --mixup 0.15 \
     --eval-split test \
     --max-det 1000 \
     --device 0
 
-echo "✅ Exp 7 (YOLO12s AS-PGMS-YOLO All Approaches Upgraded) Finished Successfully!"
+echo "✅ Exp 7 (YOLO12s All Approaches on pcb-filtered) Finished Successfully!"

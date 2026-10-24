@@ -1,0 +1,13 @@
+# PCB Filtered 4-Class Canonical Dataset Configuration
+# Points to the verified pcb-filtered-yolov8 dataset on the cluster
+path: /mnt/weka/etadevosyan/pcb-yolo/pcb-detection-models-training/datasets/pcb-filtered-yolov8
+train: train/images
+val: valid/images
+test: test/images
+
+nc: 4
+names:
+  0: Capacitor
+  1: Connector
+  2: Electrolytic Capacitor
+  3: IC

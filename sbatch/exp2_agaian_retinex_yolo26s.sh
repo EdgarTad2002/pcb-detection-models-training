@@ -20,28 +20,48 @@ WORKSPACE_DIR=${PCB_YOLO_WORKSPACE:-"/mnt/weka/etadevosyan/pcb-yolo/pcb-yolo26n-
 cd "$WORKSPACE_DIR"
 export PYTHONPATH="$WORKSPACE_DIR:$PYTHONPATH"
 
-TRAIN_DATA="datasets/pcb-native-res-cleaned-1280/data.yaml"
-EVAL_DATA="datasets/pcb-native-res-cleaned-1280/data.yaml"
-RUN_KEY="yolo26s_exp2_agaian_retinex_1280"
+# Base 4-class pcb-filtered-yolov8 dataset
+if [ -f "/mnt/weka/etadevosyan/pcb-yolo/pcb-detection-models-training/datasets/pcb-filtered-yolov8/data.yaml" ]; then
+    SRC_DATA="/mnt/weka/etadevosyan/pcb-yolo/pcb-detection-models-training/datasets/pcb-filtered-yolov8"
+elif [ -f "datasets/pcb-filtered-yolov8/data.yaml" ]; then
+    SRC_DATA="datasets/pcb-filtered-yolov8"
+else
+    SRC_DATA="/mnt/weka/etadevosyan/pcb-yolo/pcb-detection-models-training/datasets/pcb-filtered-yolov8"
+fi
+
+EVAL_DATA="$SRC_DATA/data.yaml"
+AGAIAN_DATA="datasets/pcb-agaian-retinex-filtered"
+
+if [ ! -f "$AGAIAN_DATA/data.yaml" ]; then
+    echo "⚡ Generating Case 2 Agaian Fractional Retinex dataset from $SRC_DATA..."
+    python tools/generate_case2_agaian_dataset.py \
+        --source "$SRC_DATA" \
+        --dest "$AGAIAN_DATA" \
+        --workers 8
+fi
+
+IMGSZ=${PCB_IMGSZ:-640}
+BATCH=${PCB_BATCH:-16}
+RUN_KEY="yolo26s_filtered_exp2_agaian_retinex"
 
 echo "=========================================================================="
-echo "🚀 [Exp 2] Training YOLO26s on Agaian Retinex Dataset (Eq. 23 AGC)"
+echo "🔬 [Exp 2] Training YOLO26s on Agaian Retinex (Filtered 4-Class)"
 echo "   Run Key:       $RUN_KEY"
 echo "   Weights:       yolo26s.pt"
-echo "   Train Data:    $TRAIN_DATA"
+echo "   Train Data:    $AGAIAN_DATA/data.yaml"
 echo "   Eval Data:     $EVAL_DATA"
-echo "   Resolution:    1280px Native Input, max_det=1000"
+echo "   Resolution:    ${IMGSZ}px, Batch: $BATCH, max_det=1000"
 echo "=========================================================================="
 
 python train.py \
     --project-root "$WORKSPACE_DIR" \
     --run-key "$RUN_KEY" \
     --weights yolo26s.pt \
-    --data "$TRAIN_DATA" \
+    --data "$AGAIAN_DATA/data.yaml" \
     --eval-data "$EVAL_DATA" \
     --epochs 100 \
-    --imgsz 1280 \
-    --batch 8 \
+    --imgsz "$IMGSZ" \
+    --batch "$BATCH" \
     --workers 8 \
     --optimizer SGD \
     --cls 1.5 \

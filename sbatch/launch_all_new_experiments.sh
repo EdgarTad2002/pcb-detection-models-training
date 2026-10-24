@@ -1,6 +1,7 @@
 #!/bin/bash
 # ==============================================================================
 # Master Launcher for PCB Ablation Experiments 1 to 8 (YOLO26s & YOLO12s)
+# Optimized for 4-Canonical-Component pcb-filtered-yolov8 Dataset
 #
 # Experiments:
 #   1: Clean Baseline (YOLO26s & YOLO12s)
@@ -13,20 +14,36 @@
 #   8: Master Super-Ensemble WBF Consensus
 #
 # Usage:
-#   bash sbatch/launch_all_new_experiments.sh all       # Submits all jobs
-#   bash sbatch/launch_all_new_experiments.sh 7         # Submits Exp 7 (All Approaches)
-#   bash sbatch/launch_all_new_experiments.sh yolo26    # Submits all YOLO26s jobs
-#   bash sbatch/launch_all_new_experiments.sh yolo12    # Submits all YOLO12s jobs
-#   bash sbatch/launch_all_new_experiments.sh 8         # Runs Exp 8 (Ensemble)
+#   bash sbatch/launch_all_new_experiments.sh prep      # Verifies & sets up 4-class dataset
+#   bash sbatch/launch_all_new_experiments.sh 7         # Submits Exp 7 (Top 2 Champions: YOLO26s & YOLO12s All Approaches)
+#   bash sbatch/launch_all_new_experiments.sh best      # Submits Top 4 Models (Exp 7 Champions + Exp 1 Baselines)
+#   bash sbatch/launch_all_new_experiments.sh 8         # Runs Exp 8 Master Super-Ensemble
+#   bash sbatch/launch_all_new_experiments.sh all       # Submits Exp 1-7 (all 14 ablation jobs)
 # ==============================================================================
 
 set -e
 
-MODE=${1:-"all"}
+MODE=${1:-"best"}
 
 echo "=========================================================================="
 echo "🎯 PCB AOI ABLATION EXPERIMENTS LAUNCHER (Mode: $MODE)"
+echo "   Target Dataset: 4-Component pcb-filtered-yolov8"
 echo "=========================================================================="
+
+# Step 0: Ensure dataset is audited and configured for the 4 canonical components
+WORKSPACE_DIR=${PCB_YOLO_WORKSPACE:-"/mnt/weka/etadevosyan/pcb-yolo/pcb-yolo26n-gurgen"}
+cd "$WORKSPACE_DIR"
+export PYTHONPATH="$WORKSPACE_DIR:$PYTHONPATH"
+
+if [ -f "tools/setup_pcb_filtered_4class.py" ]; then
+    echo "🔍 Verifying 4-class configuration for pcb-filtered-yolov8..."
+    python tools/setup_pcb_filtered_4class.py
+fi
+
+if [[ "$MODE" == "prep" || "$MODE" == "setup" ]]; then
+    echo "✅ Dataset preparation complete. Exiting without launching training jobs."
+    exit 0
+fi
 
 submit_job() {
     local script="$1"
@@ -41,10 +58,10 @@ submit_job() {
 }
 
 # --- Exp 1: Clean Baseline ---
-if [[ "$MODE" == "all" || "$MODE" == "yolo26" || "$MODE" == "1" ]]; then
+if [[ "$MODE" == "all" || "$MODE" == "yolo26" || "$MODE" == "1" || "$MODE" == "best" ]]; then
     submit_job "sbatch/exp1_baseline_yolo26s.sh" "Exp 1: YOLO26s Baseline"
 fi
-if [[ "$MODE" == "all" || "$MODE" == "yolo12" || "$MODE" == "1" ]]; then
+if [[ "$MODE" == "all" || "$MODE" == "yolo12" || "$MODE" == "1" || "$MODE" == "best" ]]; then
     submit_job "sbatch/exp1_baseline_yolo12s.sh" "Exp 1: YOLO12s Baseline"
 fi
 
@@ -89,15 +106,15 @@ if [[ "$MODE" == "all" || "$MODE" == "yolo12" || "$MODE" == "6" ]]; then
 fi
 
 # --- Exp 7: ALL APPROACHES TOGETHER ---
-if [[ "$MODE" == "all" || "$MODE" == "yolo26" || "$MODE" == "7" ]]; then
+if [[ "$MODE" == "all" || "$MODE" == "yolo26" || "$MODE" == "7" || "$MODE" == "best" ]]; then
     submit_job "sbatch/exp7_all_approaches_yolo26s.sh" "Exp 7: YOLO26s ALL APPROACHES TOGETHER"
 fi
-if [[ "$MODE" == "all" || "$MODE" == "yolo12" || "$MODE" == "7" ]]; then
+if [[ "$MODE" == "all" || "$MODE" == "yolo12" || "$MODE" == "7" || "$MODE" == "best" ]]; then
     submit_job "sbatch/exp7_all_approaches_yolo12s.sh" "Exp 7: YOLO12s ALL APPROACHES TOGETHER"
 fi
 
 # --- Exp 8: Master Super-Ensemble ---
-if [[ "$MODE" == "all" || "$MODE" == "8" ]]; then
+if [[ "$MODE" == "8" ]]; then
     submit_job "sbatch/exp8_master_super_ensemble.sh" "Exp 8: Master Super-Ensemble WBF"
 fi
 
@@ -105,4 +122,9 @@ echo ""
 echo "=========================================================================="
 echo "📊 Current Slurm Queue for $USER:"
 squeue -u "$USER" || true
+echo "=========================================================================="
+echo "💡 Tips:"
+echo "  • Watch job logs: tail -f slurm_exp*.out"
+echo "  • Once models finish training, run the ensemble with:"
+echo "      bash sbatch/launch_all_new_experiments.sh 8"
 echo "=========================================================================="

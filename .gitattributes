@@ -1,0 +1,5 @@
+# Ensure bash scripts maintain UNIX line endings (LF) across checkouts
+*.sh text eol=lf
+*.py text
+*.yaml text
+*.md text

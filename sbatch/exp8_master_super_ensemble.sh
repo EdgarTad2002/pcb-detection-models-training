@@ -20,21 +20,33 @@ WORKSPACE_DIR=${PCB_YOLO_WORKSPACE:-"/mnt/weka/etadevosyan/pcb-yolo/pcb-yolo26n-
 cd "$WORKSPACE_DIR"
 export PYTHONPATH="$WORKSPACE_DIR:$PYTHONPATH"
 
-EVAL_DATA="datasets/pcb-native-res-cleaned-1280/data.yaml"
+# Resolve 4-class pcb-filtered-yolov8 dataset
+if [ -f "/mnt/weka/etadevosyan/pcb-yolo/pcb-detection-models-training/datasets/pcb-filtered-yolov8/data.yaml" ]; then
+    EVAL_DATA="/mnt/weka/etadevosyan/pcb-yolo/pcb-detection-models-training/datasets/pcb-filtered-yolov8/data.yaml"
+elif [ -f "datasets/pcb-filtered-yolov8/data.yaml" ]; then
+    EVAL_DATA="datasets/pcb-filtered-yolov8/data.yaml"
+else
+    EVAL_DATA="data/pcb_filtered_4class.yaml"
+fi
+
+IMGSZ=${PCB_IMGSZ:-640}
+RUN_KEY="ensemble_wbf_master_filtered_4class"
 
 echo "=========================================================================="
-echo "🏆 [Exp 8] Running Master Multi-Paradigm Super-Ensemble (WBF @ 1280px)"
-echo "   Canonical Benchmark: $EVAL_DATA (test split, max_det=1000)"
+echo "🏆 [Exp 8] Master Super-Ensemble (Weighted Box Fusion on 4-Class pcb-filtered)"
+echo "   Benchmark:     $EVAL_DATA (test split, max_det=1000)"
+echo "   Resolution:    ${IMGSZ}px"
+echo "   Run Key:       $RUN_KEY"
 echo "=========================================================================="
 
-# Candidate Checkpoints from Newly Trained Ablation Matrix
+# Candidate Checkpoints from Newly Trained Filtered Matrix & Prior Runs
 CANDIDATES=()
 WEIGHTS=()
 
 add_checkpoint() {
     local path="$1"
     local w="$2"
-    for candidate in "$path" "runs/$path" "runs/detect/$path" "runs/detect/runs/$path"; do
+    for candidate in "$path" "runs/$path" "runs/detect/$path" "runs/detect/runs/$path" "/mnt/weka/etadevosyan/pcb-yolo/pcb-yolo26n-gurgen/runs/$path" "/mnt/weka/etadevosyan/pcb-yolo/pcb-yolo26n-gurgen/runs/detect/runs/$path"; do
         if [ -f "$candidate" ]; then
             CANDIDATES+=("$candidate")
             WEIGHTS+=("$w")
@@ -46,29 +58,33 @@ add_checkpoint() {
 }
 
 echo "Discovering trained checkpoints..."
-# Baseline Champions (65.2% & 64.5%)
-add_checkpoint "yolo26s_exp1_baseline_1280/pcb-filtered/weights/best.pt" 1.30
-add_checkpoint "yolo12s_exp1_baseline_1280/pcb-filtered/weights/best.pt" 1.25
+# Filtered Exp 7: All Approaches
+add_checkpoint "yolo26s_filtered_exp7_all_approaches/pcb-filtered/weights/best.pt" 1.35
+add_checkpoint "yolo12s_filtered_exp7_all_approaches/pcb-filtered/weights/best.pt" 1.30
 
-# Loss-Only Multi-Stage SDice Specialists
-add_checkpoint "yolo26s_exp4_loss_only_sdice_1280/pcb-filtered/weights/best.pt" 1.20
-add_checkpoint "yolo12s_exp4_loss_only_sdice_1280/pcb-filtered/weights/best.pt" 1.15
+# Filtered Exp 1: Baseline
+add_checkpoint "yolo26s_filtered_exp1_baseline/pcb-filtered/weights/best.pt" 1.25
+add_checkpoint "yolo12s_filtered_exp1_baseline/pcb-filtered/weights/best.pt" 1.20
 
-# YOLO26s Architecture Specialists
+# Filtered Exp 4: Multi-Stage SDice Loss
+add_checkpoint "yolo26s_filtered_exp4_loss_only_sdice/pcb-filtered/weights/best.pt" 1.25
+add_checkpoint "yolo12s_filtered_exp4_loss_only_sdice/pcb-filtered/weights/best.pt" 1.20
+
+# Filtered Exp 5 & 6: In-Network Stems
+add_checkpoint "yolo26s_filtered_exp6_ctdn_stem/pcb-filtered/weights/best.pt" 1.20
+add_checkpoint "yolo12s_filtered_exp6_ctdn_stem/pcb-filtered/weights/best.pt" 1.15
+add_checkpoint "yolo26s_filtered_exp5_conv_stem/pcb-filtered/weights/best.pt" 1.15
+add_checkpoint "yolo12s_filtered_exp5_conv_stem/pcb-filtered/weights/best.pt" 1.10
+
+# Filtered Exp 3 & 2: Grand Unified & Agaian Retinex
+add_checkpoint "yolo26s_filtered_exp3_grand_unified/pcb-filtered/weights/best.pt" 1.15
+add_checkpoint "yolo12s_filtered_exp3_grand_unified/pcb-filtered/weights/best.pt" 1.10
+add_checkpoint "yolo26s_filtered_exp2_agaian_retinex/pcb-filtered/weights/best.pt" 1.10
+add_checkpoint "yolo12s_filtered_exp2_agaian_retinex/pcb-filtered/weights/best.pt" 1.05
+
+# Cross-Resolution & Prior Champions
 add_checkpoint "yolo26s_exp7_all_approaches_together_1280/pcb-filtered/weights/best.pt" 1.25
-add_checkpoint "yolo26s_exp3_grand_unified_1280/pcb-filtered/weights/best.pt" 1.10
-add_checkpoint "yolo26s_exp2_agaian_retinex_1280/pcb-filtered/weights/best.pt" 1.05
-add_checkpoint "yolo26s_exp5_conv_stem_1280/pcb-filtered/weights/best.pt" 1.10
-add_checkpoint "yolo26s_exp6_ctdn_stem_1280/pcb-filtered/weights/best.pt" 1.15
-
-# YOLO12s Architecture Specialists
 add_checkpoint "yolo12s_exp7_all_approaches_together_1280/pcb-filtered/weights/best.pt" 1.20
-add_checkpoint "yolo12s_exp3_grand_unified_1280/pcb-filtered/weights/best.pt" 1.05
-add_checkpoint "yolo12s_exp2_agaian_retinex_1280/pcb-filtered/weights/best.pt" 1.00
-add_checkpoint "yolo12s_exp5_conv_stem_1280/pcb-filtered/weights/best.pt" 1.05
-add_checkpoint "yolo12s_exp6_ctdn_stem_1280/pcb-filtered/weights/best.pt" 1.10
-
-# Historical Reference Champion (if present)
 add_checkpoint "yolov26s_ultimate_retinex_copypaste_1280/pcb-filtered/weights/best.pt" 1.15
 
 echo ""
@@ -77,12 +93,12 @@ if [ ${#CANDIDATES[@]} -ge 2 ]; then
     python tools/eval_super_ensemble.py \
         --data "$EVAL_DATA" \
         --split test \
-        --imgsz 1280 \
+        --imgsz "$IMGSZ" \
         --weights "${CANDIDATES[@]}" \
         --model-weights "${WEIGHTS[@]}" \
         --iou-thr 0.55 \
         --max-det 1000 \
-        --run-key "ensemble_wbf_master_all_approaches_1280" \
+        --run-key "$RUN_KEY" \
         --device 0
 else
     echo "⚠️ Need at least 2 checkpoints to ensemble. Found ${#CANDIDATES[@]}."
