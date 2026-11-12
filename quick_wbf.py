@@ -44,6 +44,7 @@ from evaluate_apex_r4_suite import (
     accumulate_image_stat,
     compute_single_class_ap50,
     compute_split_metrics_from_stats,
+    predict_native_grid_tiles,
     resolve_ckpt_path,
     wbf_single_class,
 )
@@ -101,10 +102,12 @@ def main():
         ("PhysOT_1280", "runs/r4_final_physot_yolo26s_1280/pcb-filtered/weights/best.pt", [0.22, 0.37, 0.56, 0.59]),
         ("P2_Crop_200ep", "runs/r4_s_yolo26s_p2_crop_specialist_200ep/pcb-filtered/weights/best.pt", [0.20, 0.37, 0.56, 0.56]),
         ("YOLOv12s_1280", "runs/r4_final_yolov12s_champion_1280/pcb-filtered/weights/best.pt", [0.22, 0.40, 0.47, 0.59]),
+        ("CropSpec_100ep", "runs/r4_final_yolo26s_crop_specialist_1280/pcb-filtered/weights/best.pt", [0.23, 0.36, 0.52, 0.57]),
         ("PhysOT_Mix200", "runs/r4_s_physot_yolo26s_mixed_200ep/pcb-filtered/weights/best.pt", [0.23, 0.39, 0.56, 0.58]),
     ]
 
     preds = {i: {c: [] for c in range(nc)} for i in range(len(recs))}
+    quad_preds = {i: {c: [] for c in range(nc)} for i in range(len(recs))}
     iouv = torch.linspace(0.5, 0.95, 10)
     used_models = []
 
@@ -124,6 +127,18 @@ def main():
             c = r.boxes.cls.cpu().numpy().astype(int)
             raw_per_img.append((b, s, c))
             accumulate_image_stat(r.boxes.xyxy.cpu(), r.boxes.conf.cpu(), r.boxes.cls.cpu().long(), gt_b, gt_c, iouv, st)
+
+            # Extract 2x2 native high-res quadrant micro-components on CropSpec_200ep
+            if m_name == "CropSpec_200ep":
+                img_bgr = cv2.imread(str(im_path))
+                if img_bgr is not None:
+                    tb, ts, tc, trs = predict_native_grid_tiles(model, img_bgr, grid_n=2, imgsz=1280)
+                    del img_bgr
+                    if len(tb) > 0:
+                        for k in (0, 1):
+                            mk = (tc == k) & (trs <= (0.045 if k == 0 else 0.065))
+                            if np.any(mk):
+                                quad_preds[i][k].append((tb[mk], ts[mk], 0.25 ** 2))
 
         d = compute_split_metrics_from_stats(st, names, [m_name])
         for i, (b, s, c) in enumerate(raw_per_img):
@@ -157,7 +172,6 @@ def main():
                 m = c == 0
                 sp_preds.append((b[m], s[m]))
 
-        # Compute single-class AP50 on Capacitor (cid=0)
         dummy_recs = [(r[0], None, r[1], r[2], r[3], r[4]) for r in recs]
         cap_ap50, cap_ap95 = compute_single_class_ap50(sp_preds, dummy_recs, 0)
         print(
@@ -170,12 +184,13 @@ def main():
         used_models.append("Spec_C0_Cap")
         del s_model
 
-    print("\n================ 2. MULTI-MODEL + SPECIALIST PER-CLASS WBF ================")
+    print("\n================ 2. MULTI-MODEL + SPECIALIST + QUADRANT WBF ================")
     best_ens = None
-    for mode_name, iou_t, beta, gamma in [
-        ("WBF_Classic_0.55", 0.55, 1.00, 1.00),
-        ("WBF_Soft_0.55_g0.65", 0.55, 0.65, 0.65),
-        ("WBF_Soft_0.52_g0.50", 0.52, 0.55, 0.50),
+    for mode_name, iou_t, beta, gamma, use_q in [
+        ("Tier2_FullBoard_WBF_Classic", 0.55, 1.00, 1.00, False),
+        ("Tier2_FullBoard_WBF_Soft", 0.55, 0.65, 0.65, False),
+        ("Tier3_QuadTile_WBF_Classic", 0.55, 1.00, 1.00, True),
+        ("Tier3_QuadTile_WBF_Soft", 0.54, 0.55, 0.55, True),
     ]:
         st = []
         for i in range(len(recs)):
@@ -185,6 +200,11 @@ def main():
                 bl = [x[0] for x in preds[i][k]]
                 sl = [x[1] for x in preds[i][k]]
                 wl = [x[2] for x in preds[i][k]]
+                if use_q and k in (0, 1):
+                    for qb, qs, qw in quad_preds[i][k]:
+                        bl.append(qb)
+                        sl.append(qs)
+                        wl.append(qw * (0.90 if k == 0 else 0.45))
                 fb, fs = wbf_single_class(bl, sl, wl, iou_thr=cls_iou, beta=beta, gamma=gamma)
                 if len(fb) > 0:
                     ib.append(fb)
@@ -202,7 +222,7 @@ def main():
 
         d = compute_split_metrics_from_stats(st, names, used_models)
         print(
-            f">>> {mode_name:20s} | Test mAP50={d['mAP50']:.4f} | mAP50-95={d['mAP50_95']:.4f} | "
+            f">>> {mode_name:28s} | Test mAP50={d['mAP50']:.4f} | mAP50-95={d['mAP50_95']:.4f} | "
             f"P={d['precision']:.3f} R={d['recall']:.3f} | AP50={d['per_class_ap50']}",
             flush=True,
         )

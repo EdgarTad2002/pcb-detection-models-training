@@ -84,9 +84,16 @@ def resolve_ckpt_path(w_path: str) -> Optional[Path]:
         Path(w_path),
         Path("runs/detect") / w_path,
         Path(w_path.replace("runs/detect/", "runs/")),
+        Path(w_path.replace("best.pt", "last.pt")),
     ]:
         if cand.exists():
             return cand
+    # Also search parent run directory for any .pt file if best.pt was renamed
+    run_dir = Path(w_path).parent.parent
+    if run_dir.exists():
+        pts = sorted(run_dir.rglob("*.pt"))
+        if pts:
+            return pts[0]
     return None
 
 
@@ -351,13 +358,13 @@ def compute_single_class_ap50(
     tp, conf, pred_cls, target_cls = [torch.cat(x, 0).cpu().numpy() for x in zip(*stats)]
     if len(target_cls) == 0 or len(tp) == 0:
         return 0.0, 0.0
-    _, _, _, _, _, ap, _ = ap_per_class(tp, conf, pred_cls, target_cls, plot=False)
+    _, _, _, _, _, ap, _, *_ = ap_per_class(tp, conf, pred_cls, target_cls, plot=False)
     return float(ap[0, 0]), float(ap[0].mean())
 
 
 def compute_split_metrics_from_stats(stats: list, names: List[str], models_used: List[str]) -> dict:
     tp, conf, pred_cls, target_cls = [torch.cat(x, 0).cpu().numpy() for x in zip(*stats)]
-    tp_r, fp_r, p, r, f1, ap, ap_class = ap_per_class(tp, conf, pred_cls, target_cls, plot=False)
+    tp_r, fp_r, p, r, f1, ap, ap_class, *_ = ap_per_class(tp, conf, pred_cls, target_cls, plot=False)
     ap50, ap50_95 = ap[:, 0], ap.mean(1)
     return {
         "models_fused": models_used,
