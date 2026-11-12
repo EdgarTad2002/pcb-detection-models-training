@@ -112,16 +112,74 @@ def squared_dice_loss(
     return torch.nan_to_num((1.0 - sdice).mean(), nan=0.0, posinf=1.0, neginf=0.0)
 
 
+def haar_dwt_2d(x: torch.Tensor) -> torch.Tensor:
+    """
+    Exact 2D Orthogonal Haar Discrete Wavelet Transform (DWT):
+    Decomposes [B, C, H, W] into [B, 4*C, H/2, W/2] comprising:
+      - LL: Anti-aliased low-frequency structural approximation
+      - LH: Horizontal high-frequency edge subband (horizontal connectors & solder leads)
+      - HL: Vertical high-frequency edge subband (vertical connectors & solder leads)
+      - HH: Diagonal high-frequency corner subband (component package corners)
+    """
+    h, w = x.shape[-2:]
+    if h % 2 != 0 or w % 2 != 0:
+        x = F.pad(x, (0, w % 2, 0, h % 2), mode="replicate")
+    x00 = x[:, :, 0::2, 0::2]
+    x01 = x[:, :, 0::2, 1::2]
+    x10 = x[:, :, 1::2, 0::2]
+    x11 = x[:, :, 1::2, 1::2]
+    ll = 0.5 * (x00 + x01 + x10 + x11)
+    lh = 0.5 * (x00 + x01 - x10 - x11)
+    hl = 0.5 * (x00 - x01 + x10 - x11)
+    hh = 0.5 * (x00 - x01 - x10 + x11)
+    return torch.cat([ll, lh, hl, hh], dim=1)
+
+
+class ManhattanCoordAttnBlock(nn.Module):
+    """
+    Orthogonal Manhattan Coordinate Attention (X/Y Strip Pooling):
+    Pools features along horizontal rows [B, C, H, 1] and vertical columns [B, C, 1, W]
+    to lock onto elongated horizontal/vertical Connector headers and collinear Capacitor arrays.
+    """
+    __module__ = "apex_r4_model"
+
+    def __init__(self, channels: int, reduction: int = 8):
+        super().__init__()
+        mid = max(16, channels // reduction)
+        self.shared_conv = nn.Sequential(
+            nn.Conv2d(channels, mid, kernel_size=1, bias=False),
+            nn.BatchNorm2d(mid),
+            nn.SiLU(inplace=True),
+        )
+        self.conv_h = nn.Conv2d(mid, channels, kernel_size=1, bias=True)
+        self.conv_w = nn.Conv2d(mid, channels, kernel_size=1, bias=True)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        b, c, h, w = x.shape
+        x_h = F.adaptive_avg_pool2d(x, (h, 1))
+        x_w = F.adaptive_avg_pool2d(x, (1, w)).permute(0, 1, 3, 2)
+        y = self.shared_conv(torch.cat([x_h, x_w], dim=2))
+        y_h, y_w = torch.split(y, [h, w], dim=2)
+        y_w = y_w.permute(0, 1, 3, 2)
+        attn_h = torch.sigmoid(self.conv_h(y_h))
+        attn_w = torch.sigmoid(self.conv_w(y_w))
+        return x * attn_h * attn_w
+
+
 # ---------------------------------------------------------------------------
-# 0. Pillar 1 & 2 Modules: Fractional AMSR + Soft-AGC + Sargis Weber + SPD Bridges
+# 0. Pillar 1 & 2 Modules: Dichromatic Wavelet-Retinex + Agaian FS/AGC + Sargis Weber
 # ---------------------------------------------------------------------------
 class FractionalAMSRSoftAGCSargisWeberEdge(nn.Module):
     """
-    100% Differentiable Physics Decomposition Module implementing:
+    100% Differentiable Dichromatic Physics Decomposition Module implementing:
+      - Dichromatic Reflection & Sargis Min-Channel Specular Solder Separation (Shafer DRM + Hovhannisyan Eq. 1):
+        Extracts metallic solder/pin highlights M_spec(x) and removes specular glare BEFORE illumination
+        estimation, eliminating bright-solder Retinex halo rings while preserving M_spec as a solder locator.
       - Pillar 1: 3-Scale Bilateral-Gated AMSR + Fractional Exponents (Agaian Eq. 3, 10, 16)
-      - Pillar 2: Soft-Histogram Local-Global Agaian AGC (Eq. 23) + Sargis ABGC (Eq. 2)
+      - Pillar 2: Multi-Exponent Fractional Stretching (Agaian Eq. 19-22) + Soft-Histogram AGC (Eq. 23) + Sargis ABGC (Eq. 2)
       - Pillar 3: True Sargis Weber-Fechner Contrast u^alpha * ln(1 + u) (Eq. 6.3.8)
-                  on Luminance Reflectance (3x3, 5x5) and Spectral Opponent Reflectance (3x3)
+                  on Luminance Reflectance (3x3, 5x5), Laboratory-Calibrated 600nm Spectral Opponent Reflectance,
+                  and Specular Solder Terminals.
     """
     __module__ = "apex_r4_model"
 
@@ -130,6 +188,7 @@ class FractionalAMSRSoftAGCSargisWeberEdge(nn.Module):
         self.eps = float(eps)
         self.num_bins = int(num_bins)
 
+        # 3-Scale Bilateral-Gated Illumination Filters (k=5, 11, 21)
         self.illum_k5 = nn.Conv2d(1, 1, kernel_size=5, padding=2, bias=False, padding_mode="replicate")
         self.illum_k11 = nn.Conv2d(1, 1, kernel_size=11, padding=5, bias=False, padding_mode="replicate")
         self.illum_k21 = nn.Conv2d(1, 1, kernel_size=21, padding=10, bias=False, padding_mode="replicate")
@@ -138,15 +197,33 @@ class FractionalAMSRSoftAGCSargisWeberEdge(nn.Module):
             self.illum_k11.weight.copy_(_gaussian_kernel_2d(11, 3.5)[None, None])
             self.illum_k21.weight.copy_(_gaussian_kernel_2d(21, 7.0)[None, None])
 
+        # Dichromatic Specular Solder & Pin Extraction Parameters (Hovhannisyan Eq. 1 + DRM)
+        self.raw_spec_thresh = nn.Parameter(torch.tensor(_inv_softplus(0.52), dtype=torch.float32))
+        self.raw_spec_gamma = nn.Parameter(torch.tensor(_inv_softplus(5.50), dtype=torch.float32))
+        self.raw_spec_strip = nn.Parameter(torch.tensor(_inv_softplus(0.45), dtype=torch.float32))
+
+        # Bilateral range & Fractional Retinex Exponents (Agaian Eq. 10 & 16)
         self.raw_sigma_r = nn.Parameter(torch.tensor(_inv_softplus(0.20), dtype=torch.float32))
         self.raw_lambda = nn.Parameter(torch.full((1, 3, 1, 1), _inv_softplus(1.20), dtype=torch.float32))
         self.raw_vartheta = nn.Parameter(torch.full((3,), _inv_softplus(0.50), dtype=torch.float32))
 
+        # Agaian Multi-Exponent Fractional Stretching Bank psi_t (IEEE Access 2023 Eq. 19-22)
+        init_psi = torch.tensor(
+            [_inv_softplus(0.18), _inv_softplus(0.35), _inv_softplus(0.55), _inv_softplus(0.80)],
+            dtype=torch.float32,
+        )
+        self.raw_fs_psi = nn.Parameter(init_psi)
+
+        # Soft-Histogram Centers & Sargis ABGC Parameters (Agaian Eq. 23 + Sargis Eq. 2)
         centers = torch.linspace(0.0, 1.0, steps=self.num_bins, dtype=torch.float32).view(1, self.num_bins, 1, 1)
         self.register_buffer("bin_centers", centers)
         self.abgc_alpha = nn.Parameter(torch.tensor(1.0, dtype=torch.float32))
         self.abgc_beta = nn.Parameter(torch.tensor(0.0, dtype=torch.float32))
 
+        # Laboratory-Calibrated 600nm vs 530nm Ceramic-vs-FR4 Spectral Prior (Arbash et al. 2024)
+        self.spec_weights = nn.Parameter(torch.tensor([0.62, -0.88, 0.38], dtype=torch.float32).view(1, 3, 1, 1))
+
+        # Learnable Sargis Weber Exponents alpha (Hovhannisyan Eq. 6.3.8 / Eq. 5)
         self.raw_alpha_w3 = nn.Parameter(torch.tensor(_inv_softplus(0.20), dtype=torch.float32))
         self.raw_alpha_w5 = nn.Parameter(torch.tensor(_inv_softplus(0.20), dtype=torch.float32))
         self.raw_alpha_spec = nn.Parameter(torch.tensor(_inv_softplus(0.20), dtype=torch.float32))
@@ -163,8 +240,26 @@ class FractionalAMSRSoftAGCSargisWeberEdge(nn.Module):
         peak = weber_raw.amax(dim=(2, 3), keepdim=True).clamp(min=1e-4)
         return (weber_raw / peak).clamp(0.0, 1.0)
 
-    def _soft_agaian_agc(self, l_bar: torch.Tensor) -> torch.Tensor:
-        l_sub = F.avg_pool2d(l_bar, kernel_size=4, stride=4) if min(l_bar.shape[-2:]) >= 8 else l_bar
+    def _agaian_fractional_stretch_and_soft_agc(self, l_bar: torch.Tensor) -> torch.Tensor:
+        """
+        Unifies Agaian Multi-Exponent Fractional Stretching (Eq. 19-22) with
+        Vectorized Soft-Histogram Local-Global AGC (Eq. 23) and Sargis ABGC (Eq. 2).
+        """
+        # 1. Multi-Exponent Fractional Stretching (Eq. 19-22)
+        l_min = l_bar.amin(dim=(2, 3), keepdim=True)
+        l_max = l_bar.amax(dim=(2, 3), keepdim=True)
+        l_norm01 = ((l_bar - l_min) / (l_max - l_min + 1e-4)).clamp(min=1e-5, max=1.0)
+
+        psis = F.softplus(self.raw_fs_psi).clamp(min=0.10, max=1.20)
+        fs_acc = torch.zeros_like(l_norm01)
+        for t in range(4):
+            fs_acc = fs_acc + torch.pow(l_norm01, psis[t])
+        fs_map = fs_acc * 0.25
+        w0 = (fs_map / (fs_map.amax(dim=(2, 3), keepdim=True).clamp(min=1e-4))).clamp(0.0, 1.0)
+        l_fs = (w0 * fs_map + (1.0 - w0) * l_bar).clamp(min=self.eps, max=1.0)
+
+        # 2. Vectorized Soft-Histogram Local-Global Agaian AGC (Eq. 23)
+        l_sub = F.avg_pool2d(l_fs, kernel_size=4, stride=4) if min(l_fs.shape[-2:]) >= 8 else l_fs
         bandwidth = 1.5 / float(self.num_bins)
         dist_sq = (l_sub - self.bin_centers.to(l_sub.device)) ** 2
         w_sub = F.softmax(-dist_sq / (2.0 * (bandwidth ** 2)), dim=1)
@@ -175,14 +270,14 @@ class FractionalAMSRSoftAGCSargisWeberEdge(nn.Module):
         p_sub = (w_sub * pdf).sum(dim=1, keepdim=True)
         c_glob_sub = (w_sub * cdf).sum(dim=1, keepdim=True)
 
-        if p_sub.shape[-2:] != l_bar.shape[-2:]:
-            p_L = F.interpolate(p_sub, size=l_bar.shape[-2:], mode="bilinear", align_corners=False)
-            c_glob = F.interpolate(c_glob_sub, size=l_bar.shape[-2:], mode="bilinear", align_corners=False)
+        if p_sub.shape[-2:] != l_fs.shape[-2:]:
+            p_L = F.interpolate(p_sub, size=l_fs.shape[-2:], mode="bilinear", align_corners=False)
+            c_glob = F.interpolate(c_glob_sub, size=l_fs.shape[-2:], mode="bilinear", align_corners=False)
         else:
             p_L, c_glob = p_sub, c_glob_sub
 
-        l_local_mean = F.avg_pool2d(l_bar, kernel_size=15, stride=1, padding=7)
-        c_local = torch.sigmoid(4.0 * (l_bar - l_local_mean))
+        l_local_mean = F.avg_pool2d(l_fs, kernel_size=15, stride=1, padding=7)
+        c_local = torch.sigmoid(4.0 * (l_fs - l_local_mean))
         c_L = 0.65 * c_glob + 0.35 * c_local
 
         p_inv = 1.0 / (p_L.clamp(min=1e-5))
@@ -190,18 +285,35 @@ class FractionalAMSRSoftAGCSargisWeberEdge(nn.Module):
         raw_gamma = torch.log(ratio) / math.log(2.0)
         gamma = (1.0 + 0.35 * raw_gamma).clamp(min=0.30, max=2.00)
 
-        l_max = l_bar.amax(dim=(2, 3), keepdim=True).clamp(min=1e-4)
-        norm_l = (l_bar / l_max).clamp(min=1e-5, max=1.0)
-        l_agc = l_max * torch.pow(norm_l, gamma)
+        l_fs_max = l_fs.amax(dim=(2, 3), keepdim=True).clamp(min=1e-4)
+        norm_l = (l_fs / l_fs_max).clamp(min=1e-5, max=1.0)
+        l_agc = l_fs_max * torch.pow(norm_l, gamma)
 
         l_out = self.abgc_alpha * l_agc + self.abgc_beta
         return l_out.clamp(0.0, 1.0)
 
     def forward(self, x32: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
-        l_init = x32.max(dim=1, keepdim=True)[0]
+        # 1. Dichromatic Specular Solder & Pin Separation (Sargis Min-Channel Eq. 1 + Shafer DRM)
+        i_max = x32.max(dim=1, keepdim=True)[0]
+        i_min = x32.min(dim=1, keepdim=True)[0]
+        c_sat = (i_max - i_min).clamp(min=0.0)
+
+        spec_thresh = F.softplus(self.raw_spec_thresh).clamp(min=0.30, max=0.85)
+        spec_gamma = F.softplus(self.raw_spec_gamma).clamp(min=1.50, max=12.0)
+        spec_strip = F.softplus(self.raw_spec_strip).clamp(min=0.10, max=0.75)
+
+        m_spec_raw = F.relu(i_min - spec_thresh) * torch.exp(-spec_gamma * c_sat)
+        m_spec_peak = m_spec_raw.amax(dim=(2, 3), keepdim=True).clamp(min=1e-4)
+        m_spec_solder = (m_spec_raw / m_spec_peak).clamp(0.0, 1.0)
+
+        # Strip specular glare spikes before estimating ambient illumination to prevent solder halo rings
+        x_matte = (x32 - spec_strip * m_spec_raw).clamp(min=self.eps, max=1.0)
+        l_init = x_matte.max(dim=1, keepdim=True)[0]
+
         sigma_r = F.softplus(self.raw_sigma_r).clamp(min=0.05, max=1.0)
         two_sigma_r_sq = 2.0 * (sigma_r ** 2) + 1e-6
 
+        # 2. 3-Scale Bilateral-Gated Illumination Estimation
         l_scales = []
         for conv in (self.illum_k5, self.illum_k11, self.illum_k21):
             p = conv.kernel_size[0] // 2
@@ -210,6 +322,7 @@ class FractionalAMSRSoftAGCSargisWeberEdge(nn.Module):
             l_k = (gate * l_blur + (1.0 - gate) * l_init).clamp(min=self.eps, max=1.0)
             l_scales.append(l_k)
 
+        # 3. Agaian AMSR Adaptive Content Likelihood Weights (Eq. 3) & Fractional Log-Retinex (Eq. 10 & 16)
         p_list = []
         for l_k in l_scales:
             mu_k = l_k.mean(dim=(2, 3), keepdim=True)
@@ -222,8 +335,8 @@ class FractionalAMSRSoftAGCSargisWeberEdge(nn.Module):
         lam = F.softplus(self.raw_lambda).clamp(min=0.40, max=2.50)
         varthetas = F.softplus(self.raw_vartheta).clamp(min=0.10, max=1.50)
 
-        log_i = torch.log(x32.clamp(min=0.0) + self.eps)
-        log_r_frac = torch.zeros_like(x32)
+        log_i = torch.log(x_matte + self.eps)
+        log_r_frac = torch.zeros_like(x_matte)
         l_bar = torch.zeros_like(l_init)
 
         for k in range(3):
@@ -234,30 +347,39 @@ class FractionalAMSRSoftAGCSargisWeberEdge(nn.Module):
         log_r_bounded = 2.0 * torch.tanh(log_r_frac * 0.5)
         r_pos = torch.exp(log_r_bounded)
 
-        l_agc = self._soft_agaian_agc(l_bar.clamp(min=self.eps, max=1.0))
+        # 4. Agaian Multi-Exponent Fractional Stretching + Soft-AGC + Sargis ABGC
+        l_agc = self._agaian_fractional_stretch_and_soft_agc(l_bar.clamp(min=self.eps, max=1.0))
 
+        # 5. Laboratory-Calibrated 600nm vs 530nm Ceramic-vs-FR4 Opponent Reflectance & Sargis Weber Contrast
         r_lum = r_pos.mean(dim=1, keepdim=True)
-        r_spec = (0.55 * r_pos[:, 0:1] + 0.45 * r_pos[:, 2:3] - 0.85 * r_pos[:, 1:2]).clamp(min=0.0) + 0.05
+        o_cap_fr4 = torch.sigmoid((r_pos * self.spec_weights).sum(dim=1, keepdim=True))
+        r_spec_solder = (o_cap_fr4 + 0.50 * m_spec_solder).clamp(min=0.05)
 
         w3_lum = self._sargis_weber_op(r_lum, ksize=3, alpha_param=self.raw_alpha_w3)
         w5_lum = self._sargis_weber_op(r_lum, ksize=5, alpha_param=self.raw_alpha_w5)
-        w3_spec = self._sargis_weber_op(r_spec, ksize=3, alpha_param=self.raw_alpha_spec)
+        w3_spec = self._sargis_weber_op(r_spec_solder, ksize=3, alpha_param=self.raw_alpha_spec)
 
         log_r_norm = log_r_bounded * 0.5
-        phys_10ch = torch.cat([x32, log_r_norm, l_agc, w3_lum, w5_lum, w3_spec], dim=1)
+        # 12-channel Dichromatic Physics Tensor:
+        # [x_matte(3), logR_frac(3), L_fs_agc(1), M_spec_solder(1), O_cap_fr4(1), W3_lum(1), W5_lum(1), W3_spec(1)]
+        phys_12ch = torch.cat(
+            [x_matte, log_r_norm, l_agc, m_spec_solder, o_cap_fr4, w3_lum, w5_lum, w3_spec],
+            dim=1,
+        )
 
         r_lum_01 = (r_lum / (r_lum.amax(dim=(2, 3), keepdim=True).clamp(min=1e-4))).clamp(0.0, 1.0)
         sr_target_3ch = torch.cat([w3_lum, w3_spec, r_lum_01], dim=1).detach()
 
-        return phys_10ch, sr_target_3ch
+        return phys_12ch, sr_target_3ch
 
 
 class ASPGMSStemBlock(nn.Module):
     """
     Wraps pretrained YOLO Layer 0 Conv (stride 2):
       1. Injects zero-init 3-channel RGB residual into orig_conv(x + res_rgb).
-      2. Folds full-res 10-channel physics tensor via lossless Space-to-Depth (PixelUnshuffle(2))
-         into 40 channels at Stride 2 and adds a zero-init residual directly to orig_conv's output.
+      2. Applies 2D Orthogonal Haar Discrete Wavelet Transform (haar_dwt_2d) to the 12-channel
+         Dichromatic Physics tensor -> 48 wavelet subband channels [LL, LH, HL, HH] at Stride 2,
+         and adds a zero-init residual directly to orig_conv's output.
     Starts at 100.000% exact pretrained YOLO behavior at initialization!
     """
     __module__ = "apex_r4_model"
@@ -273,7 +395,7 @@ class ASPGMSStemBlock(nn.Module):
         self.physics = FractionalAMSRSoftAGCSargisWeberEdge()
 
         self.rgb_adapter = nn.Sequential(
-            nn.Conv2d(10, hidden, kernel_size=1, bias=False),
+            nn.Conv2d(12, hidden, kernel_size=1, bias=False),
             nn.BatchNorm2d(hidden),
             nn.SiLU(inplace=True),
             nn.Conv2d(hidden, hidden, kernel_size=3, padding=1, groups=hidden, bias=False),
@@ -283,8 +405,9 @@ class ASPGMSStemBlock(nn.Module):
         )
         nn.init.zeros_(self.rgb_adapter[-1].weight)
 
+        # 12ch physics -> 2D Haar DWT -> 48 wavelet subband channels at Stride 2
         self.spd2_adapter = nn.Sequential(
-            nn.Conv2d(40, c1_ch, kernel_size=1, bias=False),
+            nn.Conv2d(48, c1_ch, kernel_size=1, bias=False),
             nn.BatchNorm2d(c1_ch),
             nn.SiLU(inplace=True),
             nn.Conv2d(c1_ch, c1_ch, kernel_size=3, padding=1, groups=c1_ch, bias=False),
@@ -303,22 +426,17 @@ class ASPGMSStemBlock(nn.Module):
 
         with torch.autocast(device_type=dev_type, enabled=False):
             x32 = x.float()
-            phys_10ch, sr_target = self.physics(x32)
+            phys_12ch, sr_target = self.physics(x32)
             if self.training and self.capture_sr_target:
                 self.last_sr_target = sr_target
             else:
                 self.last_sr_target = None
 
             w_dtype = self.rgb_adapter[0].weight.dtype
-            res_rgb = self.rgb_adapter(phys_10ch.to(w_dtype))
+            res_rgb = self.rgb_adapter(phys_12ch.to(w_dtype))
 
-            h, w = phys_10ch.shape[-2:]
-            if h % 2 != 0 or w % 2 != 0:
-                phys_even = F.pad(phys_10ch, (0, w % 2, 0, h % 2), mode="replicate")
-            else:
-                phys_even = phys_10ch
-            spd_40ch = F.pixel_unshuffle(phys_even, downscale_factor=2)
-            res_s2 = self.spd2_adapter(spd_40ch.to(w_dtype))
+            dwt_48ch = haar_dwt_2d(phys_12ch)
+            res_s2 = self.spd2_adapter(dwt_48ch.to(w_dtype))
 
         out_s2 = self.orig_conv(x + res_rgb.to(in_dtype))
         if res_s2.shape[-2:] != out_s2.shape[-2:]:
@@ -329,9 +447,9 @@ class ASPGMSStemBlock(nn.Module):
 class SPDConvBypassBlock(nn.Module):
     """
     Wraps pretrained YOLO Layer 1 Conv (Stride 2 -> Stride 4):
-    Adds a zero-initialized Space-to-Depth (PixelUnshuffle(2)) residual bypass so
-    high-frequency Stride-2 features reach Backbone Stage P2 (Stride 4) without
-    strided-convolution aliasing.
+    Adds a zero-initialized 2D Haar Discrete Wavelet Transform (haar_dwt_2d) residual bypass so
+    high-frequency Stride-2 horizontal/vertical/diagonal subbands reach Backbone Stage P2 (Stride 4)
+    without strided-convolution aliasing.
     """
     __module__ = "apex_r4_model"
 
@@ -357,11 +475,9 @@ class SPDConvBypassBlock(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         out_s4 = self.orig_conv(x)
-        h, w = x.shape[-2:]
-        x_even = F.pad(x, (0, w % 2, 0, h % 2), mode="replicate") if (h % 2 != 0 or w % 2 != 0) else x
-        spd = F.pixel_unshuffle(x_even, downscale_factor=2)
+        dwt = haar_dwt_2d(x)
         w_dtype = self.spd4_adapter[0].weight.dtype
-        res_s4 = self.spd4_adapter(spd.to(w_dtype))
+        res_s4 = self.spd4_adapter(dwt.to(w_dtype))
         if res_s4.shape[-2:] != out_s4.shape[-2:]:
             res_s4 = F.interpolate(res_s4.float(), size=out_s4.shape[-2:], mode="bilinear", align_corners=False)
         return out_s4 + res_s4.to(out_s4.dtype)
@@ -373,8 +489,8 @@ class P2ToP3MicroBridgeBlock(nn.Module):
     Uses Ultralytics' native `f = [-1, p2_idx]` graph routing to receive both:
       - x_main: standard Neck P3 input feature map (Stride 8)
       - p2_feat: Backbone Stage P2 feature map (Stride 4)
-    Applies a spatial high-contrast gate + lossless Space-to-Depth (PixelUnshuffle(2))
-    projection with zero-initialized final weights into the P3 output.
+    Applies 2D Haar DWT Subband Projection + Orthogonal Manhattan Coordinate Attention (X/Y Strip Pooling)
+    with zero-initialized final weights into the P3 output.
     """
     __module__ = "apex_r4_model"
 
@@ -394,6 +510,7 @@ class P2ToP3MicroBridgeBlock(nn.Module):
             nn.Conv2d(p2_ch, 1, kernel_size=3, padding=1, bias=True),
             nn.Sigmoid(),
         )
+        self.coord_attn = ManhattanCoordAttnBlock(p3_ch)
         self.bridge_proj = nn.Sequential(
             nn.Conv2d(p2_ch * 4, p3_ch, kernel_size=1, bias=False),
             nn.BatchNorm2d(p3_ch),
@@ -415,17 +532,49 @@ class P2ToP3MicroBridgeBlock(nn.Module):
             p2_cast = p2_feat.to(w_dtype)
             gated_p2 = p2_cast * (1.0 + self.spatial_gate(p2_cast))
 
-            h, w = gated_p2.shape[-2:]
-            if h % 2 != 0 or w % 2 != 0:
-                gated_p2 = F.pad(gated_p2, (0, w % 2, 0, h % 2), mode="replicate")
-            p2_unshuffled = F.pixel_unshuffle(gated_p2, downscale_factor=2)
-            bridge_res = self.bridge_proj(p2_unshuffled)
+            p2_dwt = haar_dwt_2d(gated_p2)
+            bridge_feat = self.coord_attn(self.bridge_proj[:-1](p2_dwt))
+            bridge_res = self.bridge_proj[-1](bridge_feat)
 
             if bridge_res.shape[-2:] != p3_out.shape[-2:]:
                 bridge_res = F.interpolate(bridge_res.float(), size=p3_out.shape[-2:], mode="bilinear", align_corners=False)
             return p3_out + bridge_res.to(p3_out.dtype)
 
         return self.orig_module(x)
+
+
+class RetinexCoordAttnHeadGate(nn.Module):
+    """
+    Wraps Neck P4 (Stride 16) and P5 (Stride 32) detection head inputs with:
+      - Orthogonal Manhattan Coordinate Attention (X/Y directional strip pooling for anisotropic Connectors)
+      - Multi-scale frequency-preserving depthwise refinement
+      - Zero-initialized output projection (100.000% pretrained identity at step 0)
+    """
+    __module__ = "apex_r4_model"
+
+    def __init__(self, orig_module: nn.Module, channels: int):
+        super().__init__()
+        self.orig_module = orig_module
+        self.f = getattr(orig_module, "f", -1)
+        self.i = getattr(orig_module, "i", 18)
+        self.type = getattr(orig_module, "type", "C3k2")
+        self.np = getattr(orig_module, "np", sum(p.numel() for p in orig_module.parameters()))
+
+        self.coord_attn = ManhattanCoordAttnBlock(channels)
+        self.refine_proj = nn.Sequential(
+            nn.Conv2d(channels, channels, kernel_size=3, padding=1, groups=channels, bias=False),
+            nn.BatchNorm2d(channels),
+            nn.SiLU(inplace=True),
+            nn.Conv2d(channels, channels, kernel_size=1, bias=False),
+        )
+        nn.init.zeros_(self.refine_proj[-1].weight)
+
+    def forward(self, x) -> torch.Tensor:
+        out = self.orig_module(x)
+        w_dtype = self.refine_proj[0].weight.dtype
+        ca_feat = self.coord_attn(out.to(w_dtype))
+        res = self.refine_proj(ca_feat)
+        return out + res.to(out.dtype)
 
 
 class HighFreqPhysicsSRHead(nn.Module):
@@ -471,6 +620,14 @@ class HighFreqPhysicsSRHead(nn.Module):
         p3_up = F.interpolate(self.p3_lateral(p3_c), size=p2_c.shape[-2:], mode="bilinear", align_corners=False)
         f = self.fuse_conv(torch.cat([p2_c, p3_up], dim=1))
         return self.recon(self.up2(self.up1(f)))
+
+    @staticmethod
+    def compute_loss(recon_phys: torch.Tensor, target_phys: torch.Tensor) -> torch.Tensor:
+        recon_f = recon_phys.float()
+        target_f = target_phys.float()
+        if recon_f.shape[-2:] != target_f.shape[-2:]:
+            recon_f = F.interpolate(recon_f, size=target_f.shape[-2:], mode="bilinear", align_corners=False)
+        return F.l1_loss(recon_f, target_f)
 
 
 # ---------------------------------------------------------------------------
@@ -679,17 +836,22 @@ def compute_agwd_similarity_xyxy(
 
 def compute_inner_iou_xyxy(pred_xyxy: torch.Tensor, gt_xyxy: torch.Tensor, ratio: float = 1.25) -> torch.Tensor:
     """
-    Inner-IoU (Zhang et al., 2024): Enlarges auxiliary boxes by `ratio` (1.25x) around their
-    centers to accelerate convergence and restore overlap gradients for slightly shifted tiny boxes.
+    Shape-Aware Inner-IoU (Zhang et al., 2024):
+      1. Enlarges auxiliary boxes by `ratio` (1.25x) around their centers to restore overlap gradients
+         for slightly shifted tiny boxes.
+      2. Applies Shape-IoU anisotropic directional axis weights (w_x, w_y) that penalize center drift
+         and dimension errors 2x more strongly along the narrow axis of elongated Connectors and Capacitors.
     """
     px1, py1, px2, py2 = pred_xyxy.unbind(dim=-1)
     gx1, gy1, gx2, gy2 = gt_xyxy.unbind(dim=-1)
 
     pcx, pcy = 0.5 * (px1 + px2), 0.5 * (py1 + py2)
-    pw, ph = (px2 - px1).clamp(min=1e-4) * ratio, (py2 - py1).clamp(min=1e-4) * ratio
+    pw_raw, ph_raw = (px2 - px1).clamp(min=1e-4), (py2 - py1).clamp(min=1e-4)
+    pw, ph = pw_raw * ratio, ph_raw * ratio
 
     gcx, gcy = 0.5 * (gx1 + gx2), 0.5 * (gy1 + gy2)
-    gw, gh = (gx2 - gx1).clamp(min=1e-4) * ratio, (gy2 - gy1).clamp(min=1e-4) * ratio
+    gw_raw, gh_raw = (gx2 - gx1).clamp(min=1e-4), (gy2 - gy1).clamp(min=1e-4)
+    gw, gh = gw_raw * ratio, gh_raw * ratio
 
     ix1 = torch.maximum(pcx - 0.5 * pw, gcx - 0.5 * gw)
     iy1 = torch.maximum(pcy - 0.5 * ph, gcy - 0.5 * gh)
@@ -698,7 +860,28 @@ def compute_inner_iou_xyxy(pred_xyxy: torch.Tensor, gt_xyxy: torch.Tensor, ratio
 
     inter = (ix2 - ix1).clamp(min=0.0) * (iy2 - iy1).clamp(min=0.0)
     union = pw * ph + gw * gh - inter + 1e-6
-    return (inter / union).clamp(0.0, 1.0)
+    inner_iou = (inter / union).clamp(0.0, 1.0)
+
+    # Shape-IoU anisotropic axis weights: w_x emphasizes narrow width, w_y emphasizes narrow height
+    gw_p = torch.pow(gw_raw, 1.5)
+    gh_p = torch.pow(gh_raw, 1.5)
+    denom_p = gw_p + gh_p + 1e-6
+    w_x = 2.0 * gh_p / denom_p
+    w_y = 2.0 * gw_p / denom_p
+
+    # Enclosing diagonal squared
+    ex1 = torch.minimum(px1, gx1)
+    ey1 = torch.minimum(py1, gy1)
+    ex2 = torch.maximum(px2, gx2)
+    ey2 = torch.maximum(py2, gy2)
+    c_diag_sq = (ex2 - ex1).clamp(min=1e-4) ** 2 + (ey2 - ey1).clamp(min=1e-4) ** 2 + 1e-6
+
+    shape_dist = (w_x * ((pcx - gcx) ** 2) + w_y * ((pcy - gcy) ** 2)) / c_diag_sq
+    om_x = torch.abs(pw_raw - gw_raw) / torch.maximum(pw_raw, gw_raw).clamp(min=1e-4)
+    om_y = torch.abs(ph_raw - gh_raw) / torch.maximum(ph_raw, gh_raw).clamp(min=1e-4)
+    shape_cost = w_x * torch.pow(1.0 - torch.exp(-om_x), 4) + w_y * torch.pow(1.0 - torch.exp(-om_y), 4)
+
+    return (inner_iou - 0.20 * (shape_dist + 0.5 * shape_cost)).clamp(0.0, 1.0)
 
 
 class APEXAnisotropicWiseInnerBboxLoss(nn.Module):
@@ -962,7 +1145,7 @@ class APEXDetectionModel(DetectionModel):
 
         super().__init__(cfg=cfg, ch=ch, nc=nc, verbose=verbose)
 
-    def _probe_architecture_taps(self) -> Tuple[int, Dict[int, Tuple[int, int]], int, int]:
+    def _probe_architecture_taps(self) -> Tuple[int, Dict[int, Tuple[int, int]], List[int], Dict[int, int]]:
         """Dynamically probes exact backbone & neck taps for ANY YOLO model (YOLO11, YOLO12, YOLO26)."""
         device = next(self.model.parameters()).device
         x = torch.zeros(1, 3, 128, 128, device=device)
@@ -971,8 +1154,8 @@ class APEXDetectionModel(DetectionModel):
         c1_ch = 32
 
         detect_f = getattr(self.model[-1], "f", [15, 18, 21])
-        p3_neck_idx = int(detect_f[0]) if isinstance(detect_f, (list, tuple)) else 15
-        p3_neck_ch = 128
+        neck_indices = [int(idx) for idx in detect_f] if isinstance(detect_f, (list, tuple)) else [15, 18, 21]
+        neck_ch_map: Dict[int, int] = {idx: 128 * (k + 1) for k, idx in enumerate(neck_indices)}
 
         # Find end of backbone (first Upsample layer)
         first_upsample = len(self.model) - 1
@@ -990,8 +1173,8 @@ class APEXDetectionModel(DetectionModel):
                 if isinstance(x, torch.Tensor) and x.ndim == 4:
                     if i == 0:
                         c1_ch = int(x.shape[1])
-                    if i == p3_neck_idx:
-                        p3_neck_ch = int(x.shape[1])
+                    if i in neck_ch_map:
+                        neck_ch_map[i] = int(x.shape[1])
                     s = 128 // max(int(x.shape[-1]), 1)
                     if s in (4, 8, 16, 32) and i < first_upsample:
                         stride_map[s] = (i, int(x.shape[1]))
@@ -1000,13 +1183,15 @@ class APEXDetectionModel(DetectionModel):
             if s not in stride_map:
                 stride_map[s] = (default_idx, 64 * (s // 4))
 
-        return c1_ch, stride_map, p3_neck_idx, p3_neck_ch
+        return c1_ch, stride_map, neck_indices, neck_ch_map
 
     def inject_physics_and_micro_bridges(self):
         if self._bridges_injected:
             return
 
-        c1_ch, taps, p3_neck_idx, p3_neck_ch = self._probe_architecture_taps()
+        c1_ch, taps, neck_indices, neck_ch_map = self._probe_architecture_taps()
+        p3_neck_idx = neck_indices[0]
+        p3_neck_ch = neck_ch_map[p3_neck_idx]
         self.p2_idx, p2_ch = taps[4]
         self.p3_idx, p3_ch = taps[8]
         p4_idx, p4_ch = taps[16]
@@ -1038,14 +1223,23 @@ class APEXDetectionModel(DetectionModel):
             if self.p2_idx not in self.save:
                 self.save = sorted(list(set(self.save) | {int(self.p2_idx)}))
 
+        # Inject Manhattan Coordinate Attention gates on Neck P4 and P5 head inputs
+        for extra_neck_idx in neck_indices[1:]:
+            if not isinstance(self.model[extra_neck_idx], RetinexCoordAttnHeadGate):
+                self.model[extra_neck_idx] = RetinexCoordAttnHeadGate(
+                    self.model[extra_neck_idx],
+                    channels=neck_ch_map[extra_neck_idx],
+                )
+
         self.sr_head = HighFreqPhysicsSRHead(p2_ch=p2_ch, p3_ch=p3_ch, out_ch=3)
         self.mask_head = MultiStage4ChDecoupledMaskHead([p2_ch, p3_ch, p4_ch, p5_ch])
         self.group_criterion = ScaleDecoupled4ChMultiStageLoss()
         self._bridges_injected = True
 
         print(
-            f"[APEX-PCB-YOLO] Injected Fractional AMSR-AGC-Weber Stem (L0), SPD Bypass (L1), "
-            f"P2->P3 Micro-Bridge (L{self.p2_idx}->L{p3_neck_idx}, {p2_ch}->{p3_neck_ch}ch), "
+            f"[APEX-PCB-YOLO] Injected Dichromatic Wavelet-Retinex Stem (L0), Haar DWT Bypass (L1), "
+            f"P2->P3 Wavelet-CoordAttn Bridge (L{self.p2_idx}->L{p3_neck_idx}, {p2_ch}->{p3_neck_ch}ch), "
+            f"P4/P5 Manhattan CoordAttn Gates ({neck_indices[1:]}), "
             f"and 4-Ch Class-Balanced SDice Heads @ stages {self.stage_indices}."
         )
 
@@ -1367,12 +1561,18 @@ def build_greedy_validation_soup(
 
 def main():
     p = argparse.ArgumentParser(description="Train & Evaluate APEX-PCB-YOLO on R4-Final")
-    p.add_argument("--run-key", required=True)
-    p.add_argument("--weights", default="yolo11m.pt")
+    p.add_argument("--run-key", "--name", dest="run_key", default="r4_apex_yolo11m_1536")
+    p.add_argument("--project", default="runs")
+    p.add_argument("--weights", "--model", dest="weights", default="yolo11m.pt")
     p.add_argument("--data", default="datasets/pcb-r4-final-apex-copypaste/data.yaml")
     p.add_argument("--eval-data", default="datasets/pcb-native-reviewed-r4-final/data.yaml")
-    p.add_argument("--lambda-sr", type=float, default=0.08)
-    p.add_argument("--lambda-group", type=float, default=0.18)
+    p.add_argument("--lambda-sr", "--sr-weight", dest="lambda_sr", type=float, default=0.08)
+    p.add_argument("--lambda-group", "--aux-mask-weight", dest="lambda_group", type=float, default=0.18)
+    p.add_argument("--lambda-dice", type=float, default=0.22)
+    p.add_argument("--inner-ratio", type=float, default=1.25)
+    p.add_argument("--tau-kl", type=float, default=0.28)
+    p.add_argument("--soup-top-k", type=int, default=5)
+    p.add_argument("--patience", type=int, default=25)
     p.add_argument("--epochs", type=int, default=65)
     p.add_argument("--imgsz", type=int, default=1536)
     p.add_argument("--batch", type=int, default=4)
@@ -1400,6 +1600,7 @@ def main():
 
     APEXTrainer.lambda_sr = args.lambda_sr
     APEXTrainer.lambda_group = args.lambda_group
+    APEXTrainer.top_k_soup = args.soup_top_k
 
     project_dir = Path("runs") / args.run_key
     if not args.skip_train:
@@ -1407,6 +1608,7 @@ def main():
             "model": args.weights,
             "data": args.data,
             "epochs": args.epochs,
+            "patience": args.patience,
             "imgsz": args.imgsz,
             "batch": args.batch,
             "nbs": args.nbs,
@@ -1441,6 +1643,8 @@ def main():
     candidates = [
         project_dir / "pcb-filtered" / "weights" / "best.pt",
         Path("runs/detect") / project_dir / "pcb-filtered" / "weights" / "best.pt",
+        Path(args.project) / args.run_key / "weights" / "best.pt",
+        Path(args.project) / args.run_key / "pcb-filtered" / "weights" / "best.pt",
     ]
     best_pt = next((c for c in candidates if c.exists()), None)
     assert best_pt is not None, f"Could not find best.pt in {candidates}"
@@ -1452,6 +1656,12 @@ def main():
             imgsz=args.imgsz,
             device=args.device,
         )
+
+    # Also mirror best.pt to runs/<run_key>/pcb-filtered/weights/best.pt if saved under runs/detect
+    canonical_pt = Path("runs") / args.run_key / "pcb-filtered" / "weights" / "best.pt"
+    if best_pt.resolve() != canonical_pt.resolve():
+        canonical_pt.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(str(best_pt), str(canonical_pt))
 
     print(f"\n[APEX Eval] Evaluating {args.run_key} ({best_pt}) on canonical TEST split @ {args.imgsz}px...")
     eval_model = YOLO(str(best_pt))

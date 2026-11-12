@@ -42,6 +42,8 @@ def parse_args():
     p = argparse.ArgumentParser(description="Build Multi-Class Feathered Copy-Paste Dataset for R4-Final")
     p.add_argument(
         "--source",
+        "--src-dir",
+        dest="source",
         type=Path,
         default=Path("datasets/pcb-native-reviewed-r4-final"),
         help="Canonical R4-Final dataset directory",
@@ -54,6 +56,8 @@ def parse_args():
     )
     p.add_argument(
         "--dest",
+        "--dst-dir",
+        dest="dest",
         type=Path,
         default=Path("datasets/pcb-r4-final-apex-copypaste"),
         help="Destination dataset directory with expanded train split",
@@ -61,6 +65,7 @@ def parse_args():
     p.add_argument("--margin", type=float, default=0.30, help="Context margin fraction around each box")
     p.add_argument("--feather-px", type=int, default=6, help="Cosine alpha feathering width in pixels")
     p.add_argument("--max-iou", type=float, default=0.03, help="Max allowed IoU overlap with existing boxes")
+    p.add_argument("--aug-prob", type=float, default=1.0, help="Probability of generating augmented sibling per board")
     p.add_argument("--siblings-per-img", type=int, default=1, help="Number of augmented sibling boards per train image")
     p.add_argument("--seed", type=int, default=42)
     return p.parse_args()

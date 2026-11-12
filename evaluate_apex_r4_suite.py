@@ -53,6 +53,7 @@ CANDIDATES = [
     ("APEX_YOLO11m_1536", "runs/r4_apex_yolo11m_1536/pcb-filtered/weights/best.pt", 1536, True),
     ("APEX_YOLO26s_1536", "runs/r4_apex_yolo26s_1536/pcb-filtered/weights/best.pt", 1536, True),
     ("APEX_YOLO26x_1280", "runs/r4_apex_yolo26x_1280/pcb-filtered/weights/best.pt", 1280, False),
+    ("APEX_YOLOv12s_1536", "runs/r4_apex_yolov12s_1536/pcb-filtered/weights/best.pt", 1536, True),
     ("SOTA_YOLO11m_RetinexEdge_1536", "runs/r4_sota_yolo11m_retinex_agwd_1536/pcb-filtered/weights/best.pt", 1536, True),
     ("SOTA_YOLO26x_RetinexEdge_1280", "runs/r4_sota_yolo26x_retinex_agwd_1280/pcb-filtered/weights/best.pt", 1280, False),
     ("SOTA_YOLO26s_RetinexEdge_1536", "runs/r4_sota_yolo26s_retinex_agwd_1536/pcb-filtered/weights/best.pt", 1536, False),
@@ -252,7 +253,18 @@ def accumulate_image_stat(
 
 
 def main():
-    OUT_JSON.parent.mkdir(parents=True, exist_ok=True)
+    import argparse
+    ap = argparse.ArgumentParser(description="3-Tier APEX Benchmark on R4-Final Test Split")
+    ap.add_argument("--data", default=DATA_YAML)
+    ap.add_argument("--project", default="runs")
+    ap.add_argument("--device", default="0")
+    ap.add_argument("--include-legacy", action="store_true")
+    ap.add_argument("--out-json", type=Path, default=OUT_JSON)
+    args, _ = ap.parse_known_args()
+
+    data_yaml = args.data
+    out_json = args.out_json
+    out_json.parent.mkdir(parents=True, exist_ok=True)
     summary = {"tier1_single_models": {}, "tier2_fullboard_wbf": {}, "tier3_quadrant_hyper_wbf": {}}
     loaded_models = []
 
@@ -260,19 +272,23 @@ def main():
     for name, w_path, imgsz, use_quad in CANDIDATES:
         p = Path(w_path)
         if not p.exists():
-            print(f"  [SKIP] {name}: {w_path} not found")
-            continue
+            alt = Path("runs/detect") / w_path
+            if alt.exists():
+                p = alt
+            else:
+                print(f"  [SKIP] {name}: {w_path} not found")
+                continue
 
         model = YOLO(str(p))
         # Evaluate on VAL first to obtain fair per-class validation weights for Tier 2/3 WBF
         val_metrics = model.val(
-            data=DATA_YAML,
+            data=data_yaml,
             split="val",
             imgsz=imgsz,
             conf=0.001,
             iou=0.50,
             max_det=1000,
-            device=0,
+            device=args.device,
             plots=False,
             verbose=False,
         )
@@ -282,13 +298,13 @@ def main():
 
         # Evaluate on held-out TEST split
         test_metrics = model.val(
-            data=DATA_YAML,
+            data=data_yaml,
             split="test",
             imgsz=imgsz,
             conf=0.001,
             iou=0.50,
             max_det=1000,
-            device=0,
+            device=args.device,
             plots=False,
             verbose=False,
         )
@@ -323,7 +339,7 @@ def main():
 
     if len(top_models) >= 2:
         print("\n================ TIER 2 & 3: PER-CLASS CALIBRATED WBF & QUADRANT HYPER-ENSEMBLE ================")
-        cfg = yaml.safe_load(open(DATA_YAML))
+        cfg = yaml.safe_load(open(data_yaml))
         root = Path(cfg["path"])
         test_imgs = sorted((root / cfg["test"]).glob("*"))
         names = cfg["names"]
@@ -436,14 +452,14 @@ def main():
             f"R={t3_res['recall']:.4f} | AP50={t3_res['per_class_ap50']}"
         )
 
-    OUT_JSON.write_text(json.dumps(summary, indent=2))
+    out_json.write_text(json.dumps(summary, indent=2))
     for rdir in (Path("/mnt/weka/etadevosyan/pcb-yolo/results"), Path("results")):
         try:
             rdir.mkdir(parents=True, exist_ok=True)
             (rdir / "r4_final_apex_sota_summary.json").write_text(json.dumps(summary, indent=2))
         except Exception:
             pass
-    print(f"\nSaved complete 3-Tier SOTA evaluation summary to {OUT_JSON}")
+    print(f"\nSaved complete 3-Tier SOTA evaluation summary to {out_json}")
 
 
 if __name__ == "__main__":
