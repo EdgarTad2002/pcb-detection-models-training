@@ -1647,6 +1647,29 @@ def main():
         if is_warm:
             effective_lr0 = min(args.lr0, 0.0035)
 
+    # Run immediate 3-Tier evaluation on all existing checkpoints + 4 specialists + 2x2/3x3 tiles once
+    # at the very beginning of the job so we get the immediate Super-Ensemble score within 3 minutes!
+    pre_eval_json = Path("results/r4_pre_apex_existing_ensemble.json")
+    if not pre_eval_json.exists() and Path("evaluate_apex_r4_suite.py").exists():
+        print("\n[APEX Step 0] Running immediate 12-Model + 4-Specialist + Native-Tile Super-Ensemble on existing checkpoints...")
+        try:
+            import subprocess
+            subprocess.run(
+                [
+                    sys.executable,
+                    "evaluate_apex_r4_suite.py",
+                    "--data",
+                    args.eval_data,
+                    "--device",
+                    str(args.device),
+                    "--out-json",
+                    str(pre_eval_json),
+                ],
+                check=False,
+            )
+        except Exception as e:
+            print(f"[APEX Step 0] Pre-evaluation warning: {e}")
+
     project_dir = Path("runs") / args.run_key
     if not args.skip_train:
         trainer = APEXTrainer(overrides={
