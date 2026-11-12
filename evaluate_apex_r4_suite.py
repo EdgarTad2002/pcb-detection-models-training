@@ -63,11 +63,11 @@ CANDIDATES = [
     ("Baseline_YOLO11m_200ep_1280", "runs/detect/r4_baseline_yolo11m_multiclass_200ep/weights/best.pt", 1280, True),
     ("R4_S_YOLO26s_CropSpec_200ep", "runs/r4_s_yolo26s_crop_specialist_200ep/pcb-filtered/weights/best.pt", 1280, True),
     ("R4_S_YOLO26s_P2_CropSpec_200ep", "runs/r4_s_yolo26s_p2_crop_specialist_200ep/pcb-filtered/weights/best.pt", 1280, True),
-    ("R4_S_PhysOT_YOLO26s_Mixed_200ep", "runs/r4_s_physot_yolo26s_mixed_200ep/pcb-filtered/weights/best.pt", 1280, False),
-    ("Prev_YOLO26s_AGWD_SDice_1280", "runs/r4_final_yolo26s_agwd_sdice_1280/pcb-filtered/weights/best.pt", 1280, False),
+    ("R4_S_PhysOT_YOLO26s_Mixed_200ep", "runs/r4_s_physot_yolo26s_mixed_200ep/pcb-filtered/weights/best.pt", 1280, True),
+    ("Prev_YOLO26s_AGWD_SDice_1280", "runs/r4_final_yolo26s_agwd_sdice_1280/pcb-filtered/weights/best.pt", 1280, True),
     ("Prev_PhysOT_YOLO26s_1280", "runs/r4_final_physot_yolo26s_1280/pcb-filtered/weights/best.pt", 1280, False),
     ("Prev_YOLOv12s_Champion_1280", "runs/r4_final_yolov12s_champion_1280/pcb-filtered/weights/best.pt", 1280, False),
-    ("Prev_YOLO26s_CropSpec_100ep", "runs/r4_final_yolo26s_crop_specialist_1280/pcb-filtered/weights/best.pt", 1280, False),
+    ("Prev_YOLO26s_CropSpec_100ep", "runs/r4_final_yolo26s_crop_specialist_1280/pcb-filtered/weights/best.pt", 1280, True),
 ]
 
 # Dedicated 1-Class Specialist checkpoints: (Name, Path, Target_Class_ID, Eval_Imgsz, Enable_Tile_Pass)
@@ -553,12 +553,12 @@ def calibrate_class_hyperparams_on_val(
         init_cfg
         or {
             "iou_thr": 0.55,
-            "beta": 0.65,
-            "gamma": 0.65,
-            "tta_mult": 0.60,
+            "beta": 1.00,
+            "gamma": 1.00,
+            "tta_mult": 0.75,
             "spec_mult": 0.65,
             "tile_mult": 0.0,
-            "max_rel_side": 0.055,
+            "max_rel_side": 0.050,
         }
     )
 
@@ -571,19 +571,19 @@ def calibrate_class_hyperparams_on_val(
 
     if not allow_tiles:
         search_grid = [
-            ("iou_thr", [0.46, 0.52, 0.56, 0.62, 0.68]),
-            ("tta_mult", [0.0, 0.40, 0.75, 1.10]),
-            ("spec_mult", [0.0, 0.25, 0.55, 0.90, 1.35, 1.80]),
-            ("beta", [0.35, 0.65, 0.85, 1.0]),
-            ("gamma", [0.0, 0.35, 0.65, 1.0]),
+            ("iou_thr", [0.48, 0.52, 0.55, 0.60, 0.65]),
+            ("tta_mult", [0.0, 0.45, 0.85, 1.15]),
+            ("spec_mult", [0.0, 0.35, 0.75, 1.25]),
+            ("beta", [0.75, 1.0]),
+            ("gamma", [0.80, 1.0, 1.20]),
         ]
     else:
         search_grid = [
-            ("tile_mult", [0.0, 0.20, 0.45, 0.75, 1.10]),
-            ("max_rel_side", [0.035, 0.050, 0.075]),
-            ("iou_thr", [0.46, 0.52, 0.56, 0.62]),
-            ("beta", [0.35, 0.55, 0.75, 1.0]),
-            ("gamma", [0.25, 0.50, 0.75, 1.0]),
+            ("tile_mult", [0.0, 0.25, 0.55, 0.85, 1.15]),
+            ("max_rel_side", [0.038, 0.050, 0.070]),
+            ("iou_thr", [0.48, 0.52, 0.55, 0.60]),
+            ("beta", [0.80, 1.0]),
+            ("gamma", [0.85, 1.0, 1.20]),
         ]
 
     for param_name, values in search_grid:

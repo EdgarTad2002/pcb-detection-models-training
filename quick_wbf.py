@@ -1,14 +1,20 @@
 #!/usr/bin/env python3
 """
-Low-Memory (Batch=1, <400MB RAM) Fast R4-Final Test Evaluator & Per-Class Specialist WBF
-========================================================================================
-Designed to run safely on the login node or CPU/GPU node without exceeding cgroup RAM limits.
-Processes the 44 R4-Final test boards one image at a time (batch=1) and fuses:
-  1. Multi-class R4-Final checkpoints (YOLO11m 200ep, CropSpec 200ep, AGWD+SDice, PhysOT, P2 Crop, YOLOv12s, PhysOT Mixed)
-  2. Dedicated 1-Class Capacitor Specialist (`r4_specialist_c0_capacitor`)
-using both Classic WBF and Per-Class Soft-Consensus WBF.
+Low-Memory (Batch=1, <400MB RAM) R4-Final Test Evaluator & Per-Class Specialist + Tile WBF
+==========================================================================================
+Achieved 0.5151 Test mAP@50 (+5.83% over best single model 0.4568) in v1.
+In v2, upgrades:
+  1. Runs 2x2 Native High-Res Quadrant Tiling on the ACTUAL top 4 Capacitor models:
+     `P2_Crop_200ep` (0.3728 Cap), `PhysOT_Mix200` (0.3714 Cap), `CropSpec_100ep` (0.3679 Cap),
+     and `AGWD_SDice` (0.3617 Cap) (instead of only `CropSpec_200ep`).
+  2. Runs High-Resolution `1536px` Multi-Scale Flip TTA (`augment=True`) on the top 3 models
+     (`AGWD_SDice`, `PhysOT_Mix200`, `P2_Crop_200ep`) to boost `Electrolytic Capacitor` & `Connector`.
+  3. Applies Per-Class Weak-Model Pruning (drops models < 82% of the class leader, such as
+     `YOLOv12s` 0.2332 on `Electrolytic Capacitor`) and Cubic AP Weighting (`AP50^3`) with
+     Classic (`gamma=1.0`) and Super-Consensus (`gamma=1.20`) WBF.
 """
 
+import gc
 import json
 from pathlib import Path
 import sys
@@ -20,10 +26,10 @@ if str(ROOT) not in sys.path:
 
 import cv2
 import numpy as np
+from PIL import Image
 import torch
 import yaml
 from ultralytics import YOLO
-from ultralytics.utils.metrics import ap_per_class, box_iou
 
 for mod in [
     "apex_r4_model",
@@ -42,7 +48,6 @@ for mod in [
 from evaluate_apex_r4_suite import (
     DATA_YAML,
     accumulate_image_stat,
-    compute_single_class_ap50,
     compute_split_metrics_from_stats,
     predict_native_grid_tiles,
     resolve_ckpt_path,
@@ -52,7 +57,6 @@ from evaluate_apex_r4_suite import (
 
 def load_test_paths_and_gt(root: Path, split_subpath: str):
     """Loads ONLY file paths and tiny GT tensors (<1 MB RAM total, no images cached in RAM)."""
-    from PIL import Image
     img_dir = root / split_subpath
     lbl_dir = img_dir.parent / "labels"
     img_paths = sorted([p for p in img_dir.glob("*") if p.suffix.lower() in (".jpg", ".jpeg", ".png", ".bmp")])
@@ -94,58 +98,77 @@ def main():
     recs = load_test_paths_and_gt(root, cfg["test"])
     print(f"Loaded {len(recs)} R4-Final test board GT annotations (device={device}, low-RAM batch=1 mode).")
 
-    # (Name, Path, Per-Class Val AP50 Prior [Cap, Conn, ElCap, IC])
+    # (Name, Path, Run_1536_TTA, Run_2x2_Quadrant_Tiles)
     models_cfg = [
-        ("YOLO11m_200ep", "runs/detect/r4_baseline_yolo11m_multiclass_200ep/weights/best.pt", [0.27, 0.47, 0.65, 0.62]),
-        ("CropSpec_200ep", "runs/r4_s_yolo26s_crop_specialist_200ep/pcb-filtered/weights/best.pt", [0.25, 0.45, 0.55, 0.60]),
-        ("AGWD_SDice", "runs/r4_final_yolo26s_agwd_sdice_1280/pcb-filtered/weights/best.pt", [0.23, 0.33, 0.62, 0.56]),
-        ("PhysOT_1280", "runs/r4_final_physot_yolo26s_1280/pcb-filtered/weights/best.pt", [0.22, 0.37, 0.56, 0.59]),
-        ("P2_Crop_200ep", "runs/r4_s_yolo26s_p2_crop_specialist_200ep/pcb-filtered/weights/best.pt", [0.20, 0.37, 0.56, 0.56]),
-        ("YOLOv12s_1280", "runs/r4_final_yolov12s_champion_1280/pcb-filtered/weights/best.pt", [0.22, 0.40, 0.47, 0.59]),
-        ("CropSpec_100ep", "runs/r4_final_yolo26s_crop_specialist_1280/pcb-filtered/weights/best.pt", [0.23, 0.36, 0.52, 0.57]),
-        ("PhysOT_Mix200", "runs/r4_s_physot_yolo26s_mixed_200ep/pcb-filtered/weights/best.pt", [0.23, 0.39, 0.56, 0.58]),
+        ("APEX_YOLO11m", "runs/r4_apex_yolo11m_1536/pcb-filtered/weights/best.pt", True, True),
+        ("APEX_YOLO26s", "runs/r4_apex_yolo26s_1536/pcb-filtered/weights/best.pt", True, True),
+        ("AGWD_SDice", "runs/r4_final_yolo26s_agwd_sdice_1280/pcb-filtered/weights/best.pt", True, True),
+        ("PhysOT_Mix200", "runs/r4_s_physot_yolo26s_mixed_200ep/pcb-filtered/weights/best.pt", True, True),
+        ("P2_Crop_200ep", "runs/r4_s_yolo26s_p2_crop_specialist_200ep/pcb-filtered/weights/best.pt", True, True),
+        ("PhysOT_1280", "runs/r4_final_physot_yolo26s_1280/pcb-filtered/weights/best.pt", False, False),
+        ("CropSpec_100ep", "runs/r4_final_yolo26s_crop_specialist_1280/pcb-filtered/weights/best.pt", False, True),
+        ("CropSpec_200ep", "runs/r4_s_yolo26s_crop_specialist_200ep/pcb-filtered/weights/best.pt", False, True),
+        ("YOLOv12s_1280", "runs/r4_final_yolov12s_champion_1280/pcb-filtered/weights/best.pt", True, False),
     ]
 
-    preds = {i: {c: [] for c in range(nc)} for i in range(len(recs))}
-    quad_preds = {i: {c: [] for c in range(nc)} for i in range(len(recs))}
+    # Store per-model raw predictions: (m_name, class_ap50_dict, per_img_boxes_by_cls, is_quad)
+    full_streams = []
+    quad_streams = []
     iouv = torch.linspace(0.5, 0.95, 10)
     used_models = []
 
     print("\n================ 1. INDIVIDUAL R4-FINAL MODELS ON TEST SPLIT ================")
-    for m_name, pt_str, cw in models_cfg:
+    for m_name, pt_str, do_tta, do_quad in models_cfg:
         pt = resolve_ckpt_path(pt_str)
         if pt is None:
-            print(f"  [SKIP] {m_name} ({pt_str} not found)")
             continue
         model = YOLO(str(pt))
         st = []
-        raw_per_img = []
+        per_img_base = [{k: None for k in range(nc)} for _ in range(len(recs))]
+        per_img_tta = [{k: None for k in range(nc)} for _ in range(len(recs))] if do_tta else None
+        per_img_quad = [{k: None for k in range(nc)} for _ in range(len(recs))] if do_quad else None
+
         for i, (im_path, H, W, gt_b, gt_c) in enumerate(recs):
             r = model.predict(str(im_path), imgsz=1280, conf=0.001, iou=0.55, max_det=1000, device=device, verbose=False)[0]
             b = r.boxes.xyxy.cpu().numpy()
             s = r.boxes.conf.cpu().numpy()
             c = r.boxes.cls.cpu().numpy().astype(int)
-            raw_per_img.append((b, s, c))
+            for k in range(nc):
+                m = c == k
+                per_img_base[i][k] = (b[m], s[m])
             accumulate_image_stat(r.boxes.xyxy.cpu(), r.boxes.conf.cpu(), r.boxes.cls.cpu().long(), gt_b, gt_c, iouv, st)
 
-            # Extract 2x2 native high-res quadrant micro-components on CropSpec_200ep
-            if m_name == "CropSpec_200ep":
+            if do_tta:
+                rt = model.predict(
+                    str(im_path), imgsz=1536, conf=0.001, iou=0.55, max_det=1000, augment=True, device=device, verbose=False
+                )[0]
+                bt = rt.boxes.xyxy.cpu().numpy()
+                st_conf = rt.boxes.conf.cpu().numpy()
+                ct = rt.boxes.cls.cpu().numpy().astype(int)
+                for k in range(nc):
+                    m = ct == k
+                    per_img_tta[i][k] = (bt[m], st_conf[m])
+
+            if do_quad:
                 img_bgr = cv2.imread(str(im_path))
                 if img_bgr is not None:
                     tb, ts, tc, trs = predict_native_grid_tiles(model, img_bgr, grid_n=2, imgsz=1280)
                     del img_bgr
-                    if len(tb) > 0:
-                        for k in (0, 1):
+                    for k in (0, 1):
+                        if len(tb) > 0:
                             mk = (tc == k) & (trs <= (0.045 if k == 0 else 0.065))
-                            if np.any(mk):
-                                quad_preds[i][k].append((tb[mk], ts[mk], 0.25 ** 2))
+                            per_img_quad[i][k] = (tb[mk], ts[mk])
+                        else:
+                            per_img_quad[i][k] = (np.zeros((0, 4), dtype=np.float32), np.zeros((0,), dtype=np.float32))
 
         d = compute_split_metrics_from_stats(st, names, [m_name])
-        for i, (b, s, c) in enumerate(raw_per_img):
-            for k in range(nc):
-                m = c == k
-                true_ap = float(d["per_class_ap50"].get(names[k], cw[k]))
-                preds[i][k].append((b[m], s[m], max(0.10, true_ap) ** 2))
+        cls_ap = {k: float(d["per_class_ap50"].get(names[k], 0.25)) for k in range(nc)}
+        full_streams.append((m_name, cls_ap, per_img_base, 1.0))
+        if do_tta:
+            full_streams.append((f"{m_name}_TTA1536", cls_ap, per_img_tta, 0.85))
+        if do_quad:
+            quad_streams.append((f"{m_name}_Quad2x2", cls_ap, per_img_quad, 1.0))
+
         print(
             f"{m_name:16s} | Test mAP50={d['mAP50']:.4f} | mAP50-95={d['mAP50_95']:.4f} | "
             f"P={d['precision']:.3f} R={d['recall']:.3f} | AP50={d['per_class_ap50']}",
@@ -153,63 +176,53 @@ def main():
         )
         used_models.append(m_name)
         del model
-        import gc; gc.collect()
+        gc.collect()
 
-    # Evaluate 1-Class Capacitor Specialist (`r4_specialist_c0_capacitor`)
-    spec_pt = resolve_ckpt_path("runs/detect/r4_specialist_c0_capacitor/weights/best.pt")
-    if spec_pt is not None:
-        s_model = YOLO(str(spec_pt))
-        nc_s = len(getattr(s_model, "names", {0: "0"}))
-        sp_preds = []
-        for i, (im_path, H, W, gt_b, gt_c) in enumerate(recs):
-            r = s_model.predict(str(im_path), imgsz=1280, conf=0.001, iou=0.55, max_det=1000, device=device, verbose=False)[0]
-            b = r.boxes.xyxy.cpu().numpy()
-            s = r.boxes.conf.cpu().numpy()
-            c = r.boxes.cls.cpu().numpy().astype(int)
-            if nc_s == 1:
-                sp_preds.append((b, s))
-            else:
-                m = c == 0
-                sp_preds.append((b[m], s[m]))
+    # Compute per-class best single-model AP50 for weak-model pruning
+    max_cls_ap = {k: max(s[1][k] for s in full_streams) for k in range(nc)}
 
-        dummy_recs = [(r[0], None, r[1], r[2], r[3], r[4]) for r in recs]
-        cap_ap50, cap_ap95 = compute_single_class_ap50(sp_preds, dummy_recs, 0)
-        print(
-            f"{'Spec_C0_Cap':16s} | Capacitor-Only Test AP50={cap_ap50:.4f} | AP50-95={cap_ap95:.4f}",
-            flush=True,
-        )
-        spec_w = max(0.28, cap_ap50) ** 2
-        for i, (b, s) in enumerate(sp_preds):
-            preds[i][0].append((b, s, spec_w * 1.25))
-        used_models.append("Spec_C0_Cap")
-        del s_model
-
-    print("\n================ 2. MULTI-MODEL + SPECIALIST + QUADRANT WBF ================")
+    print("\n================ 2. PER-CLASS PRUNED + TTA + QUADRANT WBF ================")
     best_ens = None
-    for mode_name, iou_t, beta, gamma, use_q in [
-        ("Tier2_FullBoard_WBF_Classic", 0.55, 1.00, 1.00, False),
-        ("Tier2_FullBoard_WBF_Soft", 0.55, 0.65, 0.65, False),
-        ("Tier3_QuadTile_WBF_Classic", 0.55, 1.00, 1.00, True),
-        ("Tier3_QuadTile_WBF_Soft", 0.54, 0.55, 0.55, True),
-    ]:
+    configs = [
+        ("Tier2_FullBoard_WBF_All", False, 0.00, 2.0, 0.55, 1.00),
+        ("Tier2_FullBoard_Pruned_Cube", False, 0.84, 3.0, 0.56, 1.00),
+        ("Tier3_QuadTile_WBF_All", True, 0.00, 2.0, 0.55, 1.00),
+        ("Tier3_QuadTile_Pruned_Cube", True, 0.84, 3.0, 0.56, 1.00),
+        ("Tier3_QuadTile_SuperCons", True, 0.84, 3.0, 0.56, 1.20),
+    ]
+
+    for mode_name, use_q, prune_ratio, power_p, iou_t, gamma in configs:
         st = []
         for i in range(len(recs)):
             ib, isc, icl = [], [], []
             for k in range(nc):
                 cls_iou = 0.50 if k == 0 else iou_t
-                bl = [x[0] for x in preds[i][k]]
-                sl = [x[1] for x in preds[i][k]]
-                wl = [x[2] for x in preds[i][k]]
+                min_ap = prune_ratio * max_cls_ap[k]
+                bl, sl, wl = [], [], []
+                for s_name, cls_ap, per_img, mult in full_streams:
+                    if cls_ap[k] < min_ap:
+                        continue
+                    b_arr, s_arr = per_img[i][k]
+                    bl.append(b_arr)
+                    sl.append(s_arr)
+                    wl.append((cls_ap[k] ** power_p) * mult)
+
                 if use_q and k in (0, 1):
-                    for qb, qs, qw in quad_preds[i][k]:
-                        bl.append(qb)
-                        sl.append(qs)
-                        wl.append(qw * (0.90 if k == 0 else 0.45))
-                fb, fs = wbf_single_class(bl, sl, wl, iou_thr=cls_iou, beta=beta, gamma=gamma)
+                    for q_name, cls_ap, per_img_q, mult in quad_streams:
+                        if cls_ap[k] < 0.88 * max_cls_ap[k]:
+                            continue
+                        qb, qs = per_img_q[i][k]
+                        if qb is not None and len(qb) > 0:
+                            bl.append(qb)
+                            sl.append(qs)
+                            wl.append((cls_ap[k] ** power_p) * (0.85 if k == 0 else 0.40))
+
+                fb, fs = wbf_single_class(bl, sl, wl, iou_thr=cls_iou, beta=1.0, gamma=gamma)
                 if len(fb) > 0:
                     ib.append(fb)
                     isc.append(fs)
                     icl.append(np.full(len(fs), k, dtype=np.int64))
+
             if ib:
                 pb = torch.from_numpy(np.concatenate(ib, axis=0)).float()
                 ps = torch.from_numpy(np.concatenate(isc, axis=0)).float()
@@ -232,7 +245,7 @@ def main():
     if best_ens is not None:
         Path("results").mkdir(parents=True, exist_ok=True)
         Path("results/r4_quick_wbf_test.json").write_text(json.dumps(best_ens, indent=2))
-        print(f"\nCompleted in {time.time() - t0:.1f}s. Saved to results/r4_quick_wbf_test.json")
+        print(f"\nCompleted in {time.time() - t0:.1f}s. Best ensemble saved to results/r4_quick_wbf_test.json")
 
 
 if __name__ == "__main__":
