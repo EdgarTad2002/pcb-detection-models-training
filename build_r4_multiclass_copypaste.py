@@ -67,6 +67,8 @@ def parse_args():
     p.add_argument("--max-iou", type=float, default=0.03, help="Max allowed IoU overlap with existing boxes")
     p.add_argument("--aug-prob", type=float, default=1.0, help="Probability of generating augmented sibling per board")
     p.add_argument("--siblings-per-img", type=int, default=1, help="Number of augmented sibling boards per train image")
+    p.add_argument("--crops-per-img", type=int, default=1, help="Number of native high-res 1800x1800 crops per train image")
+    p.add_argument("--crop-size", type=int, default=1800, help="Native high-res window size in pixels")
     p.add_argument("--seed", type=int, default=42)
     return p.parse_args()
 
@@ -345,6 +347,59 @@ def main():
             cv2.imwrite(str(train_dst_img / f"{sib_stem}{img_path.suffix}"), aug_img)
             (train_dst_lbl / f"{sib_stem}.txt").write_text("\n".join(new_lines) + "\n")
             total_written += 1
+
+        # 3. Generate Native High-Resolution Cluster Crop(s) (1800x1800 window from 4112x3008)
+        #    Preserves sub-8px capacitors at ~2.5x native pixel resolution while inpainting
+        #    partially-sliced border boxes with local board median color to prevent false negatives.
+        c_sz = min(args.crop_size, H, W)
+        if args.crops_per_img > 0 and max(H, W) > 1600 and orig_boxes:
+            all_px = [(b[0], *to_xyxy_px(b, W, H)) for b in orig_boxes]
+            # Prioritize centering around Connector (cid=1) or dense Capacitor (cid=0)
+            priority_anchors = [b for b in all_px if b[0] in (1, 0)] or all_px
+            board_median_bgr = np.median(orig_img[::16, ::16], axis=(0, 1)).astype(np.uint8)
+
+            for c_idx in range(args.crops_per_img):
+                anc = rng.choice(priority_anchors)
+                acx = 0.5 * (anc[1] + anc[3]) + rng.uniform(-180.0, 180.0)
+                acy = 0.5 * (anc[2] + anc[4]) + rng.uniform(-180.0, 180.0)
+                cx1 = int(np.clip(round(acx - 0.5 * c_sz), 0, max(0, W - c_sz)))
+                cy1 = int(np.clip(round(acy - 0.5 * c_sz), 0, max(0, H - c_sz)))
+                cx2, cy2 = cx1 + c_sz, cy1 + c_sz
+
+                crop_tile = orig_img[cy1:cy2, cx1:cx2].copy()
+                crop_lines = []
+                for cid, bx1, by1, bx2, by2 in all_px:
+                    ix1 = max(float(cx1), bx1)
+                    iy1 = max(float(cy1), by1)
+                    ix2 = min(float(cx2), bx2)
+                    iy2 = min(float(cy2), by2)
+                    iw = max(0.0, ix2 - ix1)
+                    ih = max(0.0, iy2 - iy1)
+                    inter = iw * ih
+                    if inter <= 0.0:
+                        continue
+                    box_area = max(1.0, (bx2 - bx1) * (by2 - by1))
+                    ioa = inter / box_area
+                    lx1, ly1 = ix1 - cx1, iy1 - cy1
+                    lx2, ly2 = ix2 - cx1, iy2 - cy1
+                    if ioa >= 0.72 and (lx2 - lx1) >= 4.0 and (ly2 - ly1) >= 4.0:
+                        ncx = 0.5 * (lx1 + lx2) / float(c_sz)
+                        ncy = 0.5 * (ly1 + ly2) / float(c_sz)
+                        nbw = (lx2 - lx1) / float(c_sz)
+                        nbh = (ly2 - ly1) / float(c_sz)
+                        crop_lines.append(f"{cid} {ncx:.6f} {ncy:.6f} {nbw:.6f} {nbh:.6f}")
+                    elif ioa > 0.02:
+                        # Inpaint truncated border fragment with local substrate color
+                        px1, py1 = max(0, int(lx1)), max(0, int(ly1))
+                        px2, py2 = min(c_sz, int(round(lx2))), min(c_sz, int(round(ly2)))
+                        if px2 > px1 and py2 > py1:
+                            crop_tile[py1:py2, px1:px2] = board_median_bgr
+
+                if len(crop_lines) >= 3:
+                    crop_stem = f"{img_path.stem}_apexcrc{c_idx}"
+                    cv2.imwrite(str(train_dst_img / f"{crop_stem}{img_path.suffix}"), crop_tile)
+                    (train_dst_lbl / f"{crop_stem}.txt").write_text("\n".join(crop_lines) + "\n")
+                    total_written += 1
 
     # Write data.yaml
     src_cfg = yaml.safe_load((args.source / "data.yaml").read_text())

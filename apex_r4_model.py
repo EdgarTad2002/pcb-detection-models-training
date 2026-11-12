@@ -1559,11 +1559,49 @@ def build_greedy_validation_soup(
     return best_pt
 
 
+def resolve_pcb_warmstart_weights(weights_arg: str) -> Tuple[str, bool]:
+    """
+    If a generic COCO weight (e.g. 'yolo11m.pt', 'yolo26s.pt', 'yolo12s.pt') is requested
+    and an already-trained 200-epoch / 100-epoch R4-Final vanilla checkpoint of the exact
+    same architecture exists on disk, warm-start from the R4-Final checkpoint so training
+    begins at ~46-48% mAP@50 at Epoch 0 instead of cold COCO weights.
+    """
+    warmstart_map = {
+        "yolo11m.pt": [
+            "runs/detect/r4_baseline_yolo11m_multiclass_200ep/weights/best.pt",
+            "runs/r4_baseline_yolo11m_multiclass_200ep/weights/best.pt",
+        ],
+        "yolo26s.pt": [
+            "runs/r4_s_yolo26s_crop_specialist_200ep/pcb-filtered/weights/best.pt",
+            "runs/r4_final_yolo26s_agwd_sdice_1280/pcb-filtered/weights/best.pt",
+        ],
+        "yolo12s.pt": [
+            "runs/r4_final_yolov12s_champion_1280/pcb-filtered/weights/best.pt",
+        ],
+    }
+    base_name = Path(weights_arg).name
+    for cand_str in warmstart_map.get(base_name, []):
+        cand = Path(cand_str)
+        if cand.exists():
+            try:
+                ckpt = torch.load(str(cand), map_location="cpu", weights_only=False)
+                m = ckpt.get("ema") or ckpt.get("model")
+                if m is not None and hasattr(m, "model") and len(m.model) > 1:
+                    # Ensure it is a clean unwrapped backbone so APEX bridges inject once cleanly
+                    if not hasattr(m.model[0], "stem") and not hasattr(m, "_bridges_injected"):
+                        print(f"[APEX WarmStart] Upgrading cold '{weights_arg}' -> R4-Final pretrained '{cand}'")
+                        return str(cand), True
+            except Exception as e:
+                print(f"[APEX WarmStart] Could not inspect {cand}: {e}")
+    return weights_arg, False
+
+
 def main():
     p = argparse.ArgumentParser(description="Train & Evaluate APEX-PCB-YOLO on R4-Final")
     p.add_argument("--run-key", "--name", dest="run_key", default="r4_apex_yolo11m_1536")
     p.add_argument("--project", default="runs")
     p.add_argument("--weights", "--model", dest="weights", default="yolo11m.pt")
+    p.add_argument("--no-warmstart", action="store_true", help="Disable automatic R4-Final checkpoint warm-start")
     p.add_argument("--data", default="datasets/pcb-r4-final-apex-copypaste/data.yaml")
     p.add_argument("--eval-data", default="datasets/pcb-native-reviewed-r4-final/data.yaml")
     p.add_argument("--lambda-sr", "--sr-weight", dest="lambda_sr", type=float, default=0.08)
@@ -1602,10 +1640,17 @@ def main():
     APEXTrainer.lambda_group = args.lambda_group
     APEXTrainer.top_k_soup = args.soup_top_k
 
+    resolved_weights = args.weights
+    effective_lr0 = args.lr0
+    if not args.no_warmstart:
+        resolved_weights, is_warm = resolve_pcb_warmstart_weights(args.weights)
+        if is_warm:
+            effective_lr0 = min(args.lr0, 0.0035)
+
     project_dir = Path("runs") / args.run_key
     if not args.skip_train:
         trainer = APEXTrainer(overrides={
-            "model": args.weights,
+            "model": resolved_weights,
             "data": args.data,
             "epochs": args.epochs,
             "patience": args.patience,
@@ -1620,7 +1665,7 @@ def main():
             "save": True,
             "plots": True,
             "optimizer": args.optimizer,
-            "lr0": args.lr0,
+            "lr0": effective_lr0,
             "lrf": args.lrf,
             "cos_lr": True,
             "momentum": 0.937,
