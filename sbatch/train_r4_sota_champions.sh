@@ -1,13 +1,12 @@
 #!/bin/bash
 #SBATCH --job-name=pcb_r4_sota
 #SBATCH --partition=research
-#SBATCH --qos=research
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
 #SBATCH --gres=gpu:1
 #SBATCH --mem=64G
-#SBATCH --time=24:00:00
+#SBATCH --time=23:59:00
 #SBATCH --output=/mnt/weka/etadevosyan/pcb-yolo/logs/r4_sota_champions_%j.out
 #SBATCH --error=/mnt/weka/etadevosyan/pcb-yolo/logs/r4_sota_champions_%j.err
 
