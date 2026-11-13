@@ -16,9 +16,15 @@ In v2, upgrades:
 
 import gc
 import json
+import os
 from pathlib import Path
 import sys
 import time
+
+# Prevent PyTorch OneDNN / MKL-DNN from caching multi-GB conv scratchpads across shapes on CPU login nodes
+os.environ.setdefault("LRU_CACHE_CAPACITY", "1")
+os.environ.setdefault("OMP_NUM_THREADS", "4")
+os.environ.setdefault("MKL_NUM_THREADS", "4")
 
 ROOT = Path(__file__).resolve().parent
 if str(ROOT) not in sys.path:
@@ -30,6 +36,8 @@ from PIL import Image
 import torch
 import yaml
 from ultralytics import YOLO
+
+cv2.setNumThreads(2)
 
 for mod in [
     "apex_r4_model",
@@ -88,7 +96,8 @@ def load_test_paths_and_gt(root: Path, split_subpath: str):
 
 def main():
     device = "0" if torch.cuda.is_available() else "cpu"
-    torch.set_num_threads(8)
+    is_cpu = device == "cpu"
+    torch.set_num_threads(4 if is_cpu else 8)
     cfg = yaml.safe_load(open(DATA_YAML))
     root = Path(cfg["path"])
     names = cfg["names"]
@@ -96,15 +105,19 @@ def main():
 
     t0 = time.time()
     recs = load_test_paths_and_gt(root, cfg["test"])
-    print(f"Loaded {len(recs)} R4-Final test board GT annotations (device={device}, low-RAM batch=1 mode).")
+    cache_dir = Path("results/wbf_cache_v3")
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    print(f"Loaded {len(recs)} R4-Final test board GT annotations (device={device}, low-RAM cached mode).")
 
     # (Name, Path, Native_Imgsz, Run_1536_Flip_TTA, Run_2x2_Quadrant_Tiles)
+    # Note: 2x2 Quadrant Tiles are only needed on the s-scale Capacitor specialists;
+    # heavy m/x-scale models contribute full-board 1536px/1280px predictions for ElCap, IC, and Connector.
     models_cfg = [
-        ("APEX_YOLO11m", "runs/r4_apex_yolo11m_1536/pcb-filtered/weights/best.pt", 1536, True, True),
-        ("APEX_YOLO26s", "runs/r4_apex_yolo26s_1536/pcb-filtered/weights/best.pt", 1536, True, True),
-        ("APEX_YOLO26x", "runs/r4_apex_yolo26x_1280/pcb-filtered/weights/best.pt", 1280, True, False),
-        ("APEX_YOLOv12s", "runs/r4_apex_yolov12s_1536/pcb-filtered/weights/best.pt", 1536, True, True),
-        ("YOLO11m_200ep", "runs/detect/r4_baseline_yolo11m_multiclass_200ep/weights/best.pt", 1280, True, True),
+        ("APEX_YOLO11m", "runs/r4_apex_yolo11m_1536/pcb-filtered/weights/best.pt", 1536, not is_cpu, False),
+        ("APEX_YOLO26s", "runs/r4_apex_yolo26s_1536/pcb-filtered/weights/best.pt", 1536, not is_cpu, True),
+        ("APEX_YOLO26x", "runs/r4_apex_yolo26x_1280/pcb-filtered/weights/best.pt", 1280, not is_cpu, False),
+        ("APEX_YOLOv12s", "runs/r4_apex_yolov12s_1536/pcb-filtered/weights/best.pt", 1536, not is_cpu, False),
+        ("YOLO11m_200ep", "runs/detect/r4_baseline_yolo11m_multiclass_200ep/weights/best.pt", 1280, not is_cpu, False),
         ("AGWD_SDice", "runs/r4_final_yolo26s_agwd_sdice_1280/pcb-filtered/weights/best.pt", 1280, True, True),
         ("PhysOT_Mix200", "runs/r4_s_physot_yolo26s_mixed_200ep/pcb-filtered/weights/best.pt", 1280, True, True),
         ("P2_Crop_200ep", "runs/r4_s_yolo26s_p2_crop_specialist_200ep/pcb-filtered/weights/best.pt", 1280, True, True),
@@ -125,6 +138,28 @@ def main():
         pt = resolve_ckpt_path(pt_str)
         if pt is None:
             continue
+
+        cache_file = cache_dir / f"{m_name}_{int(pt.stat().st_mtime)}.pt"
+        if cache_file.exists():
+            cached = torch.load(str(cache_file), map_location="cpu", weights_only=False)
+            d = cached["metrics"]
+            cls_ap = cached["cls_ap"]
+            full_streams.append((m_name, cls_ap, cached["per_img_base"], 1.0))
+            if cached.get("per_img_hi") is not None:
+                full_streams.append((f"{m_name}_1536", cls_ap, cached["per_img_hi"], 0.85))
+            if cached.get("per_img_flp") is not None:
+                full_streams.append((f"{m_name}_Flip", cls_ap, cached["per_img_flp"], 0.80))
+            if cached.get("per_img_quad") is not None:
+                quad_streams.append((f"{m_name}_Quad2x2", cls_ap, cached["per_img_quad"], 1.0))
+            print(
+                f"{m_name:16s} | Test mAP50={d['mAP50']:.4f} | mAP50-95={d['mAP50_95']:.4f} | "
+                f"P={d['precision']:.3f} R={d['recall']:.3f} | AP50={d['per_class_ap50']} [cached]",
+                flush=True,
+            )
+            used_models.append(m_name)
+            continue
+
+        print(f"  [Run] {m_name} ({pt.name}, imgsz={native_sz}, tta={do_tta}, quad={do_quad})...", end="", flush=True)
         model = YOLO(str(pt))
         st = []
         per_img_base = [{k: None for k in range(nc)} for _ in range(len(recs))]
@@ -132,59 +167,78 @@ def main():
         per_img_flp = [{k: None for k in range(nc)} for _ in range(len(recs))] if do_tta else None
         per_img_quad = [{k: None for k in range(nc)} for _ in range(len(recs))] if do_quad else None
 
-        for i, (im_path, H, W, gt_b, gt_c) in enumerate(recs):
-            img_bgr = cv2.imread(str(im_path))
-            if img_bgr is None:
-                continue
-            r = model.predict(img_bgr, imgsz=native_sz, conf=0.001, iou=0.55, max_det=1000, device=device, verbose=False)[0]
-            b = r.boxes.xyxy.cpu().numpy()
-            s = r.boxes.conf.cpu().numpy()
-            c = r.boxes.cls.cpu().numpy().astype(int)
-            for k in range(nc):
-                m = c == k
-                per_img_base[i][k] = (b[m], s[m])
-            accumulate_image_stat(r.boxes.xyxy.cpu(), r.boxes.conf.cpu(), r.boxes.cls.cpu().long(), gt_b, gt_c, iouv, st)
-
-            if do_tta:
-                if per_img_hi is not None:
-                    rh = model.predict(
-                        img_bgr, imgsz=1536, conf=0.001, iou=0.55, max_det=1000, device=device, verbose=False
-                    )[0]
-                    bh = rh.boxes.xyxy.cpu().numpy()
-                    sh = rh.boxes.conf.cpu().numpy()
-                    ch = rh.boxes.cls.cpu().numpy().astype(int)
-                    for k in range(nc):
-                        m = ch == k
-                        per_img_hi[i][k] = (bh[m], sh[m])
-
-                img_flp = cv2.flip(img_bgr, 1)
-                rf = model.predict(
-                    img_flp, imgsz=native_sz, conf=0.001, iou=0.55, max_det=1000, device=device, verbose=False
-                )[0]
-                del img_flp
-                bf = rf.boxes.xyxy.cpu().numpy().copy()
-                if len(bf) > 0:
-                    x1_old = bf[:, 0].copy()
-                    bf[:, 0] = float(W) - bf[:, 2]
-                    bf[:, 2] = float(W) - x1_old
-                sf = rf.boxes.conf.cpu().numpy()
-                cf = rf.boxes.cls.cpu().numpy().astype(int)
+        with torch.inference_mode():
+            for i, (im_path, H, W, gt_b, gt_c) in enumerate(recs):
+                img_bgr = cv2.imread(str(im_path))
+                if img_bgr is None:
+                    continue
+                r = model.predict(img_bgr, imgsz=native_sz, conf=0.001, iou=0.55, max_det=1000, device=device, verbose=False)[0]
+                b = r.boxes.xyxy.cpu().numpy()
+                s = r.boxes.conf.cpu().numpy()
+                c = r.boxes.cls.cpu().numpy().astype(int)
                 for k in range(nc):
-                    m = cf == k
-                    per_img_flp[i][k] = (bf[m], sf[m])
+                    m = c == k
+                    per_img_base[i][k] = (b[m], s[m])
+                accumulate_image_stat(r.boxes.xyxy.cpu(), r.boxes.conf.cpu(), r.boxes.cls.cpu().long(), gt_b, gt_c, iouv, st)
+                del r
 
-            if do_quad:
-                tb, ts, tc, trs = predict_native_grid_tiles(model, img_bgr, grid_n=2, imgsz=1280)
-                for k in (0, 1):
-                    if len(tb) > 0:
-                        mk = (tc == k) & (trs <= (0.045 if k == 0 else 0.065))
-                        per_img_quad[i][k] = (tb[mk], ts[mk])
-                    else:
-                        per_img_quad[i][k] = (np.zeros((0, 4), dtype=np.float32), np.zeros((0,), dtype=np.float32))
-            del img_bgr
+                if do_tta:
+                    if per_img_hi is not None:
+                        rh = model.predict(
+                            img_bgr, imgsz=1536, conf=0.001, iou=0.55, max_det=1000, device=device, verbose=False
+                        )[0]
+                        bh = rh.boxes.xyxy.cpu().numpy()
+                        sh = rh.boxes.conf.cpu().numpy()
+                        ch = rh.boxes.cls.cpu().numpy().astype(int)
+                        for k in range(nc):
+                            m = ch == k
+                            per_img_hi[i][k] = (bh[m], sh[m])
+                        del rh
+
+                    img_flp = cv2.flip(img_bgr, 1)
+                    rf = model.predict(
+                        img_flp, imgsz=native_sz, conf=0.001, iou=0.55, max_det=1000, device=device, verbose=False
+                    )[0]
+                    del img_flp
+                    bf = rf.boxes.xyxy.cpu().numpy().copy()
+                    if len(bf) > 0:
+                        x1_old = bf[:, 0].copy()
+                        bf[:, 0] = float(W) - bf[:, 2]
+                        bf[:, 2] = float(W) - x1_old
+                    sf = rf.boxes.conf.cpu().numpy()
+                    cf = rf.boxes.cls.cpu().numpy().astype(int)
+                    for k in range(nc):
+                        m = cf == k
+                        per_img_flp[i][k] = (bf[m], sf[m])
+                    del rf
+
+                if do_quad:
+                    tb, ts, tc, trs = predict_native_grid_tiles(model, img_bgr, grid_n=2, imgsz=1280)
+                    for k in (0, 1):
+                        if len(tb) > 0:
+                            mk = (tc == k) & (trs <= (0.045 if k == 0 else 0.065))
+                            per_img_quad[i][k] = (tb[mk], ts[mk])
+                        else:
+                            per_img_quad[i][k] = (np.zeros((0, 4), dtype=np.float32), np.zeros((0,), dtype=np.float32))
+                del img_bgr
+                if (i + 1) % 11 == 0:
+                    print(f" [{i+1}/{len(recs)}]", end="", flush=True)
+                    gc.collect()
+        print(" done.", flush=True)
 
         d = compute_split_metrics_from_stats(st, names, [m_name])
         cls_ap = {k: float(d["per_class_ap50"].get(names[k], 0.25)) for k in range(nc)}
+        torch.save(
+            {
+                "metrics": d,
+                "cls_ap": cls_ap,
+                "per_img_base": per_img_base,
+                "per_img_hi": per_img_hi,
+                "per_img_flp": per_img_flp,
+                "per_img_quad": per_img_quad,
+            },
+            str(cache_file),
+        )
         full_streams.append((m_name, cls_ap, per_img_base, 1.0))
         if per_img_hi is not None:
             full_streams.append((f"{m_name}_1536", cls_ap, per_img_hi, 0.85))
