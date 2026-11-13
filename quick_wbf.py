@@ -113,11 +113,11 @@ def main():
     # Note: 2x2 Quadrant Tiles are only needed on the s-scale Capacitor specialists;
     # heavy m/x-scale models contribute full-board 1536px/1280px predictions for ElCap, IC, and Connector.
     models_cfg = [
-        ("APEX_YOLO11m", "runs/r4_apex_yolo11m_1536/pcb-filtered/weights/best.pt", 1536, not is_cpu, False),
-        ("APEX_YOLO26s", "runs/r4_apex_yolo26s_1536/pcb-filtered/weights/best.pt", 1536, not is_cpu, True),
-        ("APEX_YOLO26x", "runs/r4_apex_yolo26x_1280/pcb-filtered/weights/best.pt", 1280, not is_cpu, False),
-        ("APEX_YOLOv12s", "runs/r4_apex_yolov12s_1536/pcb-filtered/weights/best.pt", 1536, not is_cpu, False),
-        ("YOLO11m_200ep", "runs/detect/r4_baseline_yolo11m_multiclass_200ep/weights/best.pt", 1280, not is_cpu, False),
+        ("APEX_YOLO11m", "runs/r4_apex_yolo11m_1536/pcb-filtered/weights/best.pt", 1536, True, False),
+        ("APEX_YOLO26s", "runs/r4_apex_yolo26s_1536/pcb-filtered/weights/best.pt", 1536, True, True),
+        ("APEX_YOLO26x", "runs/r4_apex_yolo26x_1280/pcb-filtered/weights/best.pt", 1280, True, False),
+        ("APEX_YOLOv12s", "runs/r4_apex_yolov12s_1536/pcb-filtered/weights/best.pt", 1536, True, False),
+        ("YOLO11m_200ep", "runs/detect/r4_baseline_yolo11m_multiclass_200ep/weights/best.pt", 1280, True, False),
         ("AGWD_SDice", "runs/r4_final_yolo26s_agwd_sdice_1280/pcb-filtered/weights/best.pt", 1280, True, True),
         ("PhysOT_Mix200", "runs/r4_s_physot_yolo26s_mixed_200ep/pcb-filtered/weights/best.pt", 1280, True, True),
         ("P2_Crop_200ep", "runs/r4_s_yolo26s_p2_crop_specialist_200ep/pcb-filtered/weights/best.pt", 1280, True, True),
