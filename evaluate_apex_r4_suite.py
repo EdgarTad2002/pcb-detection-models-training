@@ -80,20 +80,27 @@ SPECIALIST_CANDIDATES = [
 
 
 def resolve_ckpt_path(w_path: str) -> Optional[Path]:
+    p_rel = Path(w_path)
+    stripped = str(w_path).replace("runs/detect/", "")
     for cand in [
-        Path(w_path),
-        Path("runs/detect") / w_path,
-        Path(w_path.replace("runs/detect/", "runs/")),
-        Path(w_path.replace("best.pt", "last.pt")),
+        p_rel,
+        Path("external/DCD-Net/runs/detect") / p_rel,
+        Path("external/DCD-Net/runs/detect") / stripped,
+        Path("external/DCD-Net") / p_rel,
+        Path("runs/detect") / p_rel,
+        Path(str(w_path).replace("runs/detect/", "runs/")),
+        Path(str(w_path).replace("best.pt", "last.pt")),
+        Path("external/DCD-Net/runs/detect") / str(w_path).replace("best.pt", "last.pt"),
     ]:
         if cand.exists():
             return cand
     # Also search parent run directory for any .pt file if best.pt was renamed
-    run_dir = Path(w_path).parent.parent
-    if run_dir.exists():
-        pts = sorted(run_dir.rglob("*.pt"))
-        if pts:
-            return pts[0]
+    for base_root in [Path("."), Path("external/DCD-Net/runs/detect"), Path("external/DCD-Net")]:
+        run_dir = (base_root / p_rel).parent.parent
+        if run_dir.exists():
+            pts = sorted(run_dir.rglob("*.pt"))
+            if pts:
+                return pts[0]
     return None
 
 
@@ -442,17 +449,32 @@ def extract_split_predictions_for_streams(
                 m = c_np == c
                 per_cls_data[c][img_idx]["base"].append((b_np[m], s_np[m], float(val_cw.get(c, 0.20))))
 
-            # Run Multi-Scale Flip TTA (`augment=True`) and `1536px` high-res pass on top 3 models
+            # Run explicit 1536px + Horizontal Flip TTA (works on all models including end-to-end YOLO26s)
             if rank_idx < 3:
-                r_tta = model.predict(
-                    img_bgr, imgsz=max(imgsz, 1536), conf=0.001, iou=0.55, max_det=1000, augment=True, verbose=False
+                r_hi = model.predict(
+                    img_bgr, imgsz=max(imgsz, 1536), conf=0.001, iou=0.55, max_det=1000, verbose=False
                 )[0]
-                bt_np = r_tta.boxes.xyxy.cpu().numpy()
-                st_np = r_tta.boxes.conf.cpu().numpy()
-                ct_np = r_tta.boxes.cls.cpu().numpy().astype(int)
+                bh_np = r_hi.boxes.xyxy.cpu().numpy()
+                sh_np = r_hi.boxes.conf.cpu().numpy()
+                ch_np = r_hi.boxes.cls.cpu().numpy().astype(int)
+
+                img_flp = cv2.flip(img_bgr, 1)
+                r_flp = model.predict(
+                    img_flp, imgsz=imgsz, conf=0.001, iou=0.55, max_det=1000, verbose=False
+                )[0]
+                bf_np = r_flp.boxes.xyxy.cpu().numpy().copy()
+                if len(bf_np) > 0:
+                    x1_old = bf_np[:, 0].copy()
+                    bf_np[:, 0] = float(W) - bf_np[:, 2]
+                    bf_np[:, 2] = float(W) - x1_old
+                sf_np = r_flp.boxes.conf.cpu().numpy()
+                cf_np = r_flp.boxes.cls.cpu().numpy().astype(int)
+
                 for c in range(nc):
-                    m = ct_np == c
-                    per_cls_data[c][img_idx]["tta"].append((bt_np[m], st_np[m], float(val_cw.get(c, 0.20))))
+                    mh = ch_np == c
+                    mf = cf_np == c
+                    per_cls_data[c][img_idx]["tta"].append((bh_np[mh], sh_np[mh], float(val_cw.get(c, 0.20))))
+                    per_cls_data[c][img_idx]["tta"].append((bf_np[mf], sf_np[mf], float(val_cw.get(c, 0.20)) * 0.85))
 
             # Run 2x2 and 3x3 native high-res tile passes on top 2 tile-enabled models
             if use_tile and rank_idx < 4:
@@ -477,7 +499,6 @@ def extract_split_predictions_for_streams(
                     conf=0.001,
                     iou=0.55,
                     max_det=1000,
-                    augment=is_tta,
                     verbose=False,
                 )[0]
                 bs_np = r_s.boxes.xyxy.cpu().numpy()

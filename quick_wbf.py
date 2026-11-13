@@ -98,38 +98,45 @@ def main():
     recs = load_test_paths_and_gt(root, cfg["test"])
     print(f"Loaded {len(recs)} R4-Final test board GT annotations (device={device}, low-RAM batch=1 mode).")
 
-    # (Name, Path, Run_1536_TTA, Run_2x2_Quadrant_Tiles)
+    # (Name, Path, Native_Imgsz, Run_1536_Flip_TTA, Run_2x2_Quadrant_Tiles)
     models_cfg = [
-        ("APEX_YOLO11m", "runs/r4_apex_yolo11m_1536/pcb-filtered/weights/best.pt", True, True),
-        ("APEX_YOLO26s", "runs/r4_apex_yolo26s_1536/pcb-filtered/weights/best.pt", True, True),
-        ("AGWD_SDice", "runs/r4_final_yolo26s_agwd_sdice_1280/pcb-filtered/weights/best.pt", True, True),
-        ("PhysOT_Mix200", "runs/r4_s_physot_yolo26s_mixed_200ep/pcb-filtered/weights/best.pt", True, True),
-        ("P2_Crop_200ep", "runs/r4_s_yolo26s_p2_crop_specialist_200ep/pcb-filtered/weights/best.pt", True, True),
-        ("PhysOT_1280", "runs/r4_final_physot_yolo26s_1280/pcb-filtered/weights/best.pt", False, False),
-        ("CropSpec_100ep", "runs/r4_final_yolo26s_crop_specialist_1280/pcb-filtered/weights/best.pt", False, True),
-        ("CropSpec_200ep", "runs/r4_s_yolo26s_crop_specialist_200ep/pcb-filtered/weights/best.pt", False, True),
-        ("YOLOv12s_1280", "runs/r4_final_yolov12s_champion_1280/pcb-filtered/weights/best.pt", True, False),
+        ("APEX_YOLO11m", "runs/r4_apex_yolo11m_1536/pcb-filtered/weights/best.pt", 1536, True, True),
+        ("APEX_YOLO26s", "runs/r4_apex_yolo26s_1536/pcb-filtered/weights/best.pt", 1536, True, True),
+        ("APEX_YOLO26x", "runs/r4_apex_yolo26x_1280/pcb-filtered/weights/best.pt", 1280, True, False),
+        ("APEX_YOLOv12s", "runs/r4_apex_yolov12s_1536/pcb-filtered/weights/best.pt", 1536, True, True),
+        ("YOLO11m_200ep", "runs/detect/r4_baseline_yolo11m_multiclass_200ep/weights/best.pt", 1280, True, True),
+        ("AGWD_SDice", "runs/r4_final_yolo26s_agwd_sdice_1280/pcb-filtered/weights/best.pt", 1280, True, True),
+        ("PhysOT_Mix200", "runs/r4_s_physot_yolo26s_mixed_200ep/pcb-filtered/weights/best.pt", 1280, True, True),
+        ("P2_Crop_200ep", "runs/r4_s_yolo26s_p2_crop_specialist_200ep/pcb-filtered/weights/best.pt", 1280, True, True),
+        ("PhysOT_1280", "runs/r4_final_physot_yolo26s_1280/pcb-filtered/weights/best.pt", 1280, False, False),
+        ("CropSpec_100ep", "runs/r4_final_yolo26s_crop_specialist_1280/pcb-filtered/weights/best.pt", 1280, False, True),
+        ("CropSpec_200ep", "runs/r4_s_yolo26s_crop_specialist_200ep/pcb-filtered/weights/best.pt", 1280, False, True),
+        ("YOLOv12s_1280", "runs/r4_final_yolov12s_champion_1280/pcb-filtered/weights/best.pt", 1280, True, False),
     ]
 
-    # Store per-model raw predictions: (m_name, class_ap50_dict, per_img_boxes_by_cls, is_quad)
+    # Store per-model raw predictions: (m_name, class_ap50_dict, per_img_boxes_by_cls, mult)
     full_streams = []
     quad_streams = []
     iouv = torch.linspace(0.5, 0.95, 10)
     used_models = []
 
     print("\n================ 1. INDIVIDUAL R4-FINAL MODELS ON TEST SPLIT ================")
-    for m_name, pt_str, do_tta, do_quad in models_cfg:
+    for m_name, pt_str, native_sz, do_tta, do_quad in models_cfg:
         pt = resolve_ckpt_path(pt_str)
         if pt is None:
             continue
         model = YOLO(str(pt))
         st = []
         per_img_base = [{k: None for k in range(nc)} for _ in range(len(recs))]
-        per_img_tta = [{k: None for k in range(nc)} for _ in range(len(recs))] if do_tta else None
+        per_img_hi = [{k: None for k in range(nc)} for _ in range(len(recs))] if (do_tta and native_sz < 1536) else None
+        per_img_flp = [{k: None for k in range(nc)} for _ in range(len(recs))] if do_tta else None
         per_img_quad = [{k: None for k in range(nc)} for _ in range(len(recs))] if do_quad else None
 
         for i, (im_path, H, W, gt_b, gt_c) in enumerate(recs):
-            r = model.predict(str(im_path), imgsz=1280, conf=0.001, iou=0.55, max_det=1000, device=device, verbose=False)[0]
+            img_bgr = cv2.imread(str(im_path))
+            if img_bgr is None:
+                continue
+            r = model.predict(img_bgr, imgsz=native_sz, conf=0.001, iou=0.55, max_det=1000, device=device, verbose=False)[0]
             b = r.boxes.xyxy.cpu().numpy()
             s = r.boxes.conf.cpu().numpy()
             c = r.boxes.cls.cpu().numpy().astype(int)
@@ -139,33 +146,50 @@ def main():
             accumulate_image_stat(r.boxes.xyxy.cpu(), r.boxes.conf.cpu(), r.boxes.cls.cpu().long(), gt_b, gt_c, iouv, st)
 
             if do_tta:
-                rt = model.predict(
-                    str(im_path), imgsz=1536, conf=0.001, iou=0.55, max_det=1000, augment=True, device=device, verbose=False
+                if per_img_hi is not None:
+                    rh = model.predict(
+                        img_bgr, imgsz=1536, conf=0.001, iou=0.55, max_det=1000, device=device, verbose=False
+                    )[0]
+                    bh = rh.boxes.xyxy.cpu().numpy()
+                    sh = rh.boxes.conf.cpu().numpy()
+                    ch = rh.boxes.cls.cpu().numpy().astype(int)
+                    for k in range(nc):
+                        m = ch == k
+                        per_img_hi[i][k] = (bh[m], sh[m])
+
+                img_flp = cv2.flip(img_bgr, 1)
+                rf = model.predict(
+                    img_flp, imgsz=native_sz, conf=0.001, iou=0.55, max_det=1000, device=device, verbose=False
                 )[0]
-                bt = rt.boxes.xyxy.cpu().numpy()
-                st_conf = rt.boxes.conf.cpu().numpy()
-                ct = rt.boxes.cls.cpu().numpy().astype(int)
+                del img_flp
+                bf = rf.boxes.xyxy.cpu().numpy().copy()
+                if len(bf) > 0:
+                    x1_old = bf[:, 0].copy()
+                    bf[:, 0] = float(W) - bf[:, 2]
+                    bf[:, 2] = float(W) - x1_old
+                sf = rf.boxes.conf.cpu().numpy()
+                cf = rf.boxes.cls.cpu().numpy().astype(int)
                 for k in range(nc):
-                    m = ct == k
-                    per_img_tta[i][k] = (bt[m], st_conf[m])
+                    m = cf == k
+                    per_img_flp[i][k] = (bf[m], sf[m])
 
             if do_quad:
-                img_bgr = cv2.imread(str(im_path))
-                if img_bgr is not None:
-                    tb, ts, tc, trs = predict_native_grid_tiles(model, img_bgr, grid_n=2, imgsz=1280)
-                    del img_bgr
-                    for k in (0, 1):
-                        if len(tb) > 0:
-                            mk = (tc == k) & (trs <= (0.045 if k == 0 else 0.065))
-                            per_img_quad[i][k] = (tb[mk], ts[mk])
-                        else:
-                            per_img_quad[i][k] = (np.zeros((0, 4), dtype=np.float32), np.zeros((0,), dtype=np.float32))
+                tb, ts, tc, trs = predict_native_grid_tiles(model, img_bgr, grid_n=2, imgsz=1280)
+                for k in (0, 1):
+                    if len(tb) > 0:
+                        mk = (tc == k) & (trs <= (0.045 if k == 0 else 0.065))
+                        per_img_quad[i][k] = (tb[mk], ts[mk])
+                    else:
+                        per_img_quad[i][k] = (np.zeros((0, 4), dtype=np.float32), np.zeros((0,), dtype=np.float32))
+            del img_bgr
 
         d = compute_split_metrics_from_stats(st, names, [m_name])
         cls_ap = {k: float(d["per_class_ap50"].get(names[k], 0.25)) for k in range(nc)}
         full_streams.append((m_name, cls_ap, per_img_base, 1.0))
-        if do_tta:
-            full_streams.append((f"{m_name}_TTA1536", cls_ap, per_img_tta, 0.85))
+        if per_img_hi is not None:
+            full_streams.append((f"{m_name}_1536", cls_ap, per_img_hi, 0.85))
+        if per_img_flp is not None:
+            full_streams.append((f"{m_name}_Flip", cls_ap, per_img_flp, 0.80))
         if do_quad:
             quad_streams.append((f"{m_name}_Quad2x2", cls_ap, per_img_quad, 1.0))
 

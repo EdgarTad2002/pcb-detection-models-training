@@ -1581,18 +1581,19 @@ def resolve_pcb_warmstart_weights(weights_arg: str) -> Tuple[str, bool]:
     }
     base_name = Path(weights_arg).name
     for cand_str in warmstart_map.get(base_name, []):
-        cand = Path(cand_str)
-        if cand.exists():
-            try:
-                ckpt = torch.load(str(cand), map_location="cpu", weights_only=False)
-                m = ckpt.get("ema") or ckpt.get("model")
-                if m is not None and hasattr(m, "model") and len(m.model) > 1:
-                    # Ensure it is a clean unwrapped backbone so APEX bridges inject once cleanly
-                    if not hasattr(m.model[0], "stem") and not hasattr(m, "_bridges_injected"):
-                        print(f"[APEX WarmStart] Upgrading cold '{weights_arg}' -> R4-Final pretrained '{cand}'")
-                        return str(cand), True
-            except Exception as e:
-                print(f"[APEX WarmStart] Could not inspect {cand}: {e}")
+        for prefix in [Path("."), Path("external/DCD-Net/runs/detect"), Path("external/DCD-Net")]:
+            cand = prefix / cand_str
+            if cand.exists():
+                try:
+                    ckpt = torch.load(str(cand), map_location="cpu", weights_only=False)
+                    m = ckpt.get("ema") or ckpt.get("model")
+                    if m is not None and hasattr(m, "model") and len(m.model) > 1:
+                        # Ensure it is a clean unwrapped backbone so APEX bridges inject once cleanly
+                        if not hasattr(m.model[0], "stem") and not hasattr(m, "_bridges_injected"):
+                            print(f"[APEX WarmStart] Upgrading cold '{weights_arg}' -> R4-Final pretrained '{cand}'")
+                            return str(cand), True
+                except Exception as e:
+                    print(f"[APEX WarmStart] Could not inspect {cand}: {e}")
     return weights_arg, False
 
 
@@ -1633,6 +1634,7 @@ def main():
     p.add_argument("--max-det", type=int, default=1000)
     p.add_argument("--seed", type=int, default=42)
     p.add_argument("--skip-train", action="store_true")
+    p.add_argument("--force-train", action="store_true")
     p.add_argument("--no-soup", action="store_true")
     args = p.parse_args()
 
@@ -1647,30 +1649,22 @@ def main():
         if is_warm:
             effective_lr0 = min(args.lr0, 0.0035)
 
-    # Run immediate 3-Tier evaluation on all existing checkpoints + 4 specialists + 2x2/3x3 tiles once
-    # at the very beginning of the job so we get the immediate Super-Ensemble score within 3 minutes!
-    pre_eval_json = Path("results/r4_pre_apex_existing_ensemble.json")
-    if not pre_eval_json.exists() and Path("evaluate_apex_r4_suite.py").exists():
-        print("\n[APEX Step 0] Running immediate 12-Model + 4-Specialist + Native-Tile Super-Ensemble on existing checkpoints...")
-        try:
-            import subprocess
-            subprocess.run(
-                [
-                    sys.executable,
-                    "evaluate_apex_r4_suite.py",
-                    "--data",
-                    args.eval_data,
-                    "--device",
-                    str(args.device),
-                    "--out-json",
-                    str(pre_eval_json),
-                ],
-                check=False,
-            )
-        except Exception as e:
-            print(f"[APEX Step 0] Pre-evaluation warning: {e}")
-
     project_dir = Path("runs") / args.run_key
+    candidates = [
+        project_dir / "pcb-filtered" / "weights" / "best.pt",
+        Path("external/DCD-Net/runs/detect") / project_dir / "pcb-filtered" / "weights" / "best.pt",
+        Path("external/DCD-Net") / project_dir / "pcb-filtered" / "weights" / "best.pt",
+        Path("runs/detect") / project_dir / "pcb-filtered" / "weights" / "best.pt",
+        Path(args.project) / args.run_key / "weights" / "best.pt",
+        Path(args.project) / args.run_key / "pcb-filtered" / "weights" / "best.pt",
+        Path("external/DCD-Net/runs/detect") / args.project / args.run_key / "pcb-filtered" / "weights" / "best.pt",
+    ]
+    existing_best = next((c for c in candidates if c.exists()), None)
+    if existing_best is not None and not args.force_train:
+        print(f"\n[APEX Resume] Found completed checkpoint for {args.run_key} at {existing_best} — skipping training!")
+        args.skip_train = True
+
+    trainer = None
     if not args.skip_train:
         trainer = APEXTrainer(overrides={
             "model": resolved_weights,
@@ -1682,7 +1676,7 @@ def main():
             "nbs": args.nbs,
             "workers": args.workers,
             "device": args.device,
-            "project": str(project_dir),
+            "project": str(project_dir.resolve()),
             "name": "pcb-filtered",
             "exist_ok": True,
             "save": True,
@@ -1707,17 +1701,13 @@ def main():
             "seed": args.seed,
         })
         trainer.train()
+        if getattr(trainer, "best", None) is not None:
+            candidates.insert(0, Path(trainer.best))
 
-    candidates = [
-        project_dir / "pcb-filtered" / "weights" / "best.pt",
-        Path("runs/detect") / project_dir / "pcb-filtered" / "weights" / "best.pt",
-        Path(args.project) / args.run_key / "weights" / "best.pt",
-        Path(args.project) / args.run_key / "pcb-filtered" / "weights" / "best.pt",
-    ]
     best_pt = next((c for c in candidates if c.exists()), None)
     assert best_pt is not None, f"Could not find best.pt in {candidates}"
 
-    if not args.skip_train and not args.no_soup:
+    if not args.no_soup and not (best_pt.parent / "best_soup.pt").exists():
         build_greedy_validation_soup(
             best_pt=best_pt,
             val_data_yaml=args.eval_data,
