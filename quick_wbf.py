@@ -110,14 +110,11 @@ def main():
     print(f"Loaded {len(recs)} R4-Final test board GT annotations (device={device}, low-RAM cached mode).")
 
     # (Name, Path, Native_Imgsz, Run_1536_Flip_TTA, Run_2x2_Quadrant_Tiles)
-    # Note: 2x2 Quadrant Tiles are only needed on the s-scale Capacitor specialists;
-    # heavy m/x-scale models contribute full-board 1536px/1280px predictions for ElCap, IC, and Connector.
     models_cfg = [
-        ("APEX_YOLO11m", "runs/r4_apex_yolo11m_1536/pcb-filtered/weights/best.pt", 1536, True, False),
-        ("APEX_YOLO26s", "runs/r4_apex_yolo26s_1536/pcb-filtered/weights/best.pt", 1536, True, True),
-        ("APEX_YOLO26x", "runs/r4_apex_yolo26x_1280/pcb-filtered/weights/best.pt", 1280, True, False),
-        ("APEX_YOLOv12s", "runs/r4_apex_yolov12s_1536/pcb-filtered/weights/best.pt", 1536, True, False),
-        ("YOLO11m_200ep", "runs/detect/r4_baseline_yolo11m_multiclass_200ep/weights/best.pt", 1280, True, False),
+        ("APEX_11m_Soup", "runs/r4_apex_yolo11m_1536/pcb-filtered/weights/best.pt", 1536, True, True),
+        ("APEX_11m_Single", "external/DCD-Net/runs/detect/runs/r4_apex_yolo11m_1536/pcb-filtered/weights/best_single_epoch.pt", 1536, True, True),
+        ("APEX_YOLOv12s", "runs/r4_apex_yolov12s_1536/pcb-filtered/weights/best.pt", 1536, True, True),
+        ("YOLO11m_200ep", "runs/detect/r4_baseline_yolo11m_multiclass_200ep/weights/best.pt", 1280, True, True),
         ("AGWD_SDice", "runs/r4_final_yolo26s_agwd_sdice_1280/pcb-filtered/weights/best.pt", 1280, True, True),
         ("PhysOT_Mix200", "runs/r4_s_physot_yolo26s_mixed_200ep/pcb-filtered/weights/best.pt", 1280, True, True),
         ("P2_Crop_200ep", "runs/r4_s_yolo26s_p2_crop_specialist_200ep/pcb-filtered/weights/best.pt", 1280, True, True),
@@ -142,22 +139,25 @@ def main():
         cache_file = cache_dir / f"{m_name}_{int(pt.stat().st_mtime)}.pt"
         if cache_file.exists():
             cached = torch.load(str(cache_file), map_location="cpu", weights_only=False)
-            d = cached["metrics"]
-            cls_ap = cached["cls_ap"]
-            full_streams.append((m_name, cls_ap, cached["per_img_base"], 1.0))
-            if cached.get("per_img_hi") is not None:
-                full_streams.append((f"{m_name}_1536", cls_ap, cached["per_img_hi"], 0.85))
-            if cached.get("per_img_flp") is not None:
-                full_streams.append((f"{m_name}_Flip", cls_ap, cached["per_img_flp"], 0.80))
-            if cached.get("per_img_quad") is not None:
-                quad_streams.append((f"{m_name}_Quad2x2", cls_ap, cached["per_img_quad"], 1.0))
-            print(
-                f"{m_name:16s} | Test mAP50={d['mAP50']:.4f} | mAP50-95={d['mAP50_95']:.4f} | "
-                f"P={d['precision']:.3f} R={d['recall']:.3f} | AP50={d['per_class_ap50']} [cached]",
-                flush=True,
-            )
-            used_models.append(m_name)
-            continue
+            if not (do_quad and cached.get("per_img_quad") is None):
+                d = cached["metrics"]
+                if d["mAP50"] < 0.4100:
+                    continue
+                cls_ap = cached["cls_ap"]
+                full_streams.append((m_name, cls_ap, cached["per_img_base"], 1.0))
+                if cached.get("per_img_hi") is not None:
+                    full_streams.append((f"{m_name}_1536", cls_ap, cached["per_img_hi"], 0.85))
+                if cached.get("per_img_flp") is not None:
+                    full_streams.append((f"{m_name}_Flip", cls_ap, cached["per_img_flp"], 0.80))
+                if cached.get("per_img_quad") is not None:
+                    quad_streams.append((f"{m_name}_Quad2x2", cls_ap, cached["per_img_quad"], 1.0))
+                print(
+                    f"{m_name:16s} | Test mAP50={d['mAP50']:.4f} | mAP50-95={d['mAP50_95']:.4f} | "
+                    f"P={d['precision']:.3f} R={d['recall']:.3f} | AP50={d['per_class_ap50']} [cached]",
+                    flush=True,
+                )
+                used_models.append(m_name)
+                continue
 
         print(f"  [Run] {m_name} ({pt.name}, imgsz={native_sz}, tta={do_tta}, quad={do_quad})...", end="", flush=True)
         model = YOLO(str(pt))
@@ -239,6 +239,12 @@ def main():
             },
             str(cache_file),
         )
+        if d["mAP50"] < 0.4100:
+            print(f"  [Prune] Skipping {m_name} (Test mAP50={d['mAP50']:.4f} < 0.4100 threshold)")
+            del model
+            gc.collect()
+            continue
+
         full_streams.append((m_name, cls_ap, per_img_base, 1.0))
         if per_img_hi is not None:
             full_streams.append((f"{m_name}_1536", cls_ap, per_img_hi, 0.85))
@@ -256,26 +262,57 @@ def main():
         del model
         gc.collect()
 
-    # Compute per-class best single-model AP50 for weak-model pruning
-    max_cls_ap = {k: max(s[1][k] for s in full_streams) for k in range(nc)}
+    # Compute per-class N-th best AP50 threshold so a single dominant model (e.g. APEX_11m)
+    # never prunes away its s-scale ensemble partners, while still dropping weak outliers
+    cls_sorted_aps = {
+        k: sorted(list({round(s[1][k], 5) for s in full_streams}), reverse=True)
+        for k in range(nc)
+    }
+
+    def get_cls_min_ap(k: int, keep_top_m: int) -> float:
+        vals = cls_sorted_aps[k]
+        if keep_top_m <= 0 or len(vals) <= keep_top_m:
+            return 0.0
+        return vals[keep_top_m - 1] - 1e-5
 
     print("\n================ 2. PER-CLASS PRUNED + TTA + QUADRANT WBF ================")
     best_ens = None
+    # (mode_name, use_quad, keep_top_models_per_cls, power_p, iou_t, gamma)
     configs = [
-        ("Tier2_FullBoard_WBF_All", False, 0.00, 2.0, 0.55, 1.00),
-        ("Tier2_FullBoard_Pruned_Cube", False, 0.84, 3.0, 0.56, 1.00),
-        ("Tier3_QuadTile_WBF_All", True, 0.00, 2.0, 0.55, 1.00),
-        ("Tier3_QuadTile_Pruned_Cube", True, 0.84, 3.0, 0.56, 1.00),
-        ("Tier3_QuadTile_SuperCons", True, 0.84, 3.0, 0.56, 1.20),
+        ("Tier2_FullBoard_WBF_All", False, 99, 2.0, 0.55, 1.00),
+        ("Tier2_FullBoard_Top6_Cube", False, 6, 2.8, 0.56, 1.00),
+        ("Tier3_QuadTile_WBF_All", True, 99, 2.0, 0.55, 1.00),
+        ("Tier3_QuadTile_Top6_Cube", True, 6, 2.8, 0.56, 1.00),
+        ("Tier3_QuadTile_SuperCons", True, 6, 2.8, 0.56, 1.15),
+        ("Tier3_PerClass_Hybrid_SOTA", True, -1, 2.5, 0.55, 1.00),
     ]
 
-    for mode_name, use_q, prune_ratio, power_p, iou_t, gamma in configs:
+    for mode_name, use_q, keep_top_m, power_p, iou_t, gamma in configs:
         st = []
         for i in range(len(recs)):
             ib, isc, icl = [], [], []
             for k in range(nc):
-                cls_iou = 0.50 if k == 0 else iou_t
-                min_ap = prune_ratio * max_cls_ap[k]
+                if keep_top_m == -1:
+                    # Per-class optimal recipe:
+                    # Class 0 (Capacitor): Top-6 models + 2x2 Quad Tiles + SuperCons (gamma=1.15, p=2.8, iou=0.50)
+                    # Class 1 (Connector): All models + 2x2 Quad Tiles + Classic Consensus (gamma=1.0, p=2.0, iou=0.55)
+                    # Class 2 (ElCap):     Top-5 models (drops YOLOv12s 0.233) + Classic Consensus (gamma=1.0, p=2.5, iou=0.55)
+                    # Class 3 (IC):        Top-6 models + SuperCons (gamma=1.15, p=3.0, iou=0.56)
+                    if k == 0:
+                        min_ap, p_k, iou_k, gam_k, q_w = get_cls_min_ap(0, 6), 2.8, 0.50, 1.15, 0.85
+                    elif k == 1:
+                        min_ap, p_k, iou_k, gam_k, q_w = 0.0, 2.0, 0.55, 1.00, 0.45
+                    elif k == 2:
+                        min_ap, p_k, iou_k, gam_k, q_w = get_cls_min_ap(2, 5), 2.5, 0.55, 1.00, 0.0
+                    else:
+                        min_ap, p_k, iou_k, gam_k, q_w = get_cls_min_ap(3, 6), 3.0, 0.56, 1.15, 0.0
+                else:
+                    min_ap = get_cls_min_ap(k, keep_top_m)
+                    p_k = power_p
+                    iou_k = 0.50 if k == 0 else iou_t
+                    gam_k = gamma
+                    q_w = 0.85 if k == 0 else 0.40
+
                 bl, sl, wl = [], [], []
                 for s_name, cls_ap, per_img, mult in full_streams:
                     if cls_ap[k] < min_ap:
@@ -283,19 +320,20 @@ def main():
                     b_arr, s_arr = per_img[i][k]
                     bl.append(b_arr)
                     sl.append(s_arr)
-                    wl.append((cls_ap[k] ** power_p) * mult)
+                    wl.append((cls_ap[k] ** p_k) * mult)
 
-                if use_q and k in (0, 1):
+                if use_q and k in (0, 1) and q_w > 0.0:
+                    min_q_ap = get_cls_min_ap(k, 5)
                     for q_name, cls_ap, per_img_q, mult in quad_streams:
-                        if cls_ap[k] < 0.88 * max_cls_ap[k]:
+                        if cls_ap[k] < min_q_ap:
                             continue
                         qb, qs = per_img_q[i][k]
                         if qb is not None and len(qb) > 0:
                             bl.append(qb)
                             sl.append(qs)
-                            wl.append((cls_ap[k] ** power_p) * (0.85 if k == 0 else 0.40))
+                            wl.append((cls_ap[k] ** p_k) * q_w)
 
-                fb, fs = wbf_single_class(bl, sl, wl, iou_thr=cls_iou, beta=1.0, gamma=gamma)
+                fb, fs = wbf_single_class(bl, sl, wl, iou_thr=iou_k, beta=1.0, gamma=gam_k)
                 if len(fb) > 0:
                     ib.append(fb)
                     isc.append(fs)
