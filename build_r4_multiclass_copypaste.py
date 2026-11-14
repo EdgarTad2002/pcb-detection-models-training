@@ -265,8 +265,8 @@ def main():
 
     # Paste schedule per sibling board: (class_id, min_count, max_count, scale_range)
     paste_plan = [
+        (2, 4, 8, (0.85, 1.18)),  # Electrolytic Capacitor (top priority minority boost!)
         (1, 3, 6, (0.85, 1.15)),  # Connector (minority class boost!)
-        (2, 2, 5, (0.85, 1.15)),  # Electrolytic Capacitor (minority class boost!)
         (3, 1, 3, (0.85, 1.15)),  # IC
         (0, 6, 12, (0.80, 1.25)), # Micro-Capacitor
     ]
@@ -314,13 +314,32 @@ def main():
                         continue
                     k_rot = rng.choice([0, 1, 2, 3])
                     crop, rel_box = rotate_crop_and_relbox(crop, item["rel_box"], k_rot)
+                    # For Electrolytic Capacitor (cid=2): apply continuous 360-deg rotation on circular cans
+                    # and sleeve hue/saturation jitter (simulating blue, green, gold, black, and silver cans)
+                    if cid == 2:
+                        rx1, ry1, rx2, ry2 = rel_box
+                        ar_can = max(rx2 - rx1, ry2 - ry1) / max(min(rx2 - rx1, ry2 - ry1), 1e-4)
+                        if ar_can < 1.25 and rng.random() < 0.75:
+                            ang = rng.uniform(0.0, 360.0)
+                            M_r = cv2.getRotationMatrix2D((crop.shape[1] * 0.5, crop.shape[0] * 0.5), ang, 1.0)
+                            crop = cv2.warpAffine(
+                                crop, M_r, (crop.shape[1], crop.shape[0]),
+                                flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_REFLECT_101
+                            )
+                        if rng.random() < 0.65:
+                            hsv = cv2.cvtColor(crop, cv2.COLOR_BGR2HSV).astype(np.float32)
+                            hsv[:, :, 0] = (hsv[:, :, 0] + rng.uniform(-35.0, 35.0)) % 180.0
+                            hsv[:, :, 1] = np.clip(hsv[:, :, 1] * rng.uniform(0.75, 1.35), 0.0, 255.0)
+                            crop = cv2.cvtColor(hsv.astype(np.uint8), cv2.COLOR_HSV2BGR)
+
                     sc = rng.uniform(s_min, s_max)
                     ch, cw = max(8, int(round(crop.shape[0] * sc))), max(8, int(round(crop.shape[1] * sc)))
                     if ch >= H // 2 or cw >= W // 2:
                         continue
                     crop = cv2.resize(crop, (cw, ch), interpolation=cv2.INTER_LINEAR)
 
-                    for _attempt in range(18):
+                    max_attempts = 40 if cid == 2 else 18
+                    for _attempt in range(max_attempts):
                         x1 = rng.randint(4, max(5, W - cw - 4))
                         y1 = rng.randint(4, max(5, H - ch - 4))
                         cand_xyxy = (float(x1), float(y1), float(x1 + cw), float(y1 + ch))
@@ -354,8 +373,11 @@ def main():
         c_sz = min(args.crop_size, H, W)
         if args.crops_per_img > 0 and max(H, W) > 1600 and orig_boxes:
             all_px = [(b[0], *to_xyxy_px(b, W, H)) for b in orig_boxes]
-            # Prioritize centering around Connector (cid=1) or dense Capacitor (cid=0)
-            priority_anchors = [b for b in all_px if b[0] in (1, 0)] or all_px
+            # Prioritize centering around Electrolytic Capacitor (cid=2, 3x weight), Connector (cid=1, 2x), or Capacitor (cid=0)
+            elcap_anc = [b for b in all_px if b[0] == 2]
+            conn_anc = [b for b in all_px if b[0] == 1]
+            cap_anc = [b for b in all_px if b[0] == 0]
+            priority_anchors = (elcap_anc * 3 + conn_anc * 2 + cap_anc) or all_px
             board_median_bgr = np.median(orig_img[::16, ::16], axis=(0, 1)).astype(np.uint8)
 
             for c_idx in range(args.crops_per_img):

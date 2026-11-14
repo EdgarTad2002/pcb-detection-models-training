@@ -631,26 +631,29 @@ class HighFreqPhysicsSRHead(nn.Module):
 
 
 # ---------------------------------------------------------------------------
-# 1. 4-Channel Class-Balanced Scale-Decoupled Multi-Stage Auxiliary Head & Loss
+# 1. 5-Channel Class-Decoupled Multi-Stage Auxiliary Head & Loss (APEX v3)
 # ---------------------------------------------------------------------------
 class MultiStage4ChDecoupledMaskHead(nn.Module):
     """
-    Projects intermediate backbone stages [P2, P3, P4, P5] into 4-channel masks:
+    Projects intermediate backbone stages [P2, P3, P4, P5] into 5 class-decoupled channels:
       Ch 0: Micro-Capacitor (Class 0)
       Ch 1: Anisotropic Connector (Class 1)
       Ch 2: Component Boundary Contour Ring (3x3 morphological gradient)
-      Ch 3: Macro IC & Electrolytic Capacitor (Classes 2, 3)
+      Ch 3: Dedicated Cylindrical Electrolytic Capacitor (Class 2, Elliptical Radial Disk)
+      Ch 4: Macro IC (Class 3)
+    (Retains class name `MultiStage4ChDecoupledMaskHead` for backward import compatibility.)
     """
     __module__ = "apex_r4_model"
 
-    def __init__(self, channels_list: List[int]):
+    def __init__(self, channels_list: List[int], out_channels: int = 5):
         super().__init__()
+        self.out_channels = int(out_channels)
         self.heads = nn.ModuleList([
             nn.Sequential(
                 nn.Conv2d(ch, 32, kernel_size=3, padding=1, bias=False),
                 nn.BatchNorm2d(32),
                 nn.SiLU(inplace=True),
-                nn.Conv2d(32, 4, kernel_size=1),
+                nn.Conv2d(32, self.out_channels, kernel_size=1),
                 nn.Sigmoid(),
             )
             for ch in channels_list
@@ -666,8 +669,9 @@ class MultiStage4ChDecoupledMaskHead(nn.Module):
 
 class ScaleDecoupled4ChMultiStageLoss(nn.Module):
     """
-    4-Channel Scale-Decoupled Multi-Stage Squared-Dice Loss over [P2, P3, P4, P5].
-    Dedicated Connector channel (Ch 1) directly addresses the R4-Final Connector AP bottleneck.
+    5-Channel Scale-Decoupled Multi-Stage Squared-Dice Loss over [P2, P3, P4, P5].
+    Decouples Electrolytic Capacitor (Ch 3, supervised with an inscribed elliptical radial disk target)
+    from Macro IC (Ch 4) to eliminate feature entanglement and boost rare Electrolytic Capacitor recall.
     """
 
     def __init__(
@@ -683,12 +687,12 @@ class ScaleDecoupled4ChMultiStageLoss(nn.Module):
         self.bce_weight = bce_weight
         self.dice_weight = dice_weight
 
-        # [w_cap, w_conn, w_bound, w_macro]
+        # [w_cap, w_conn, w_bound, w_elcap, w_ic]
         self.channel_weights_per_stage = [
-            (0.45, 0.25, 0.20, 0.10),  # P2 (Stride 4): Cap + Connector + Boundary focus
-            (0.40, 0.28, 0.20, 0.12),  # P3 (Stride 8): Cap + Connector + Boundary focus
-            (0.15, 0.30, 0.20, 0.35),  # P4 (Stride 16): Connector + Macro IC/ElCap focus
-            (0.10, 0.25, 0.20, 0.45),  # P5 (Stride 32): Macro IC/ElCap + Connector focus
+            (0.40, 0.22, 0.18, 0.12, 0.08),  # P2 (Stride 4): Cap + Connector + Boundary + Small ElCap
+            (0.32, 0.24, 0.16, 0.18, 0.10),  # P3 (Stride 8): Cap + Connector + Medium ElCap
+            (0.12, 0.24, 0.14, 0.28, 0.22),  # P4 (Stride 16): ElCap + Connector + IC focus
+            (0.08, 0.20, 0.12, 0.32, 0.28),  # P5 (Stride 32): Large ElCap + Macro IC focus
         ]
 
     @staticmethod
@@ -702,12 +706,16 @@ class ScaleDecoupled4ChMultiStageLoss(nn.Module):
         th, tw = target_hw
         y_cap = torch.zeros((bs, 1, th, tw), device=device, dtype=torch.float32)
         y_conn = torch.zeros((bs, 1, th, tw), device=device, dtype=torch.float32)
-        y_macro = torch.zeros((bs, 1, th, tw), device=device, dtype=torch.float32)
+        y_elcap = torch.zeros((bs, 1, th, tw), device=device, dtype=torch.float32)
+        y_ic = torch.zeros((bs, 1, th, tw), device=device, dtype=torch.float32)
 
         if "bboxes" in batch and len(batch["bboxes"]) > 0:
             bboxes = batch["bboxes"]
             batch_idx = batch["batch_idx"].long()
             cls_tensor = batch["cls"].long().view(-1) if "cls" in batch else torch.zeros_like(batch_idx)
+
+            yy_grid = torch.arange(th, device=device, dtype=torch.float32).view(th, 1)
+            xx_grid = torch.arange(tw, device=device, dtype=torch.float32).view(1, tw)
 
             for b_idx in range(bs):
                 mask_b = batch_idx == b_idx
@@ -734,15 +742,22 @@ class ScaleDecoupled4ChMultiStageLoss(nn.Module):
                             y_cap[b_idx, 0, y1:y2, x1:x2] = 1.0
                         elif c_val == 1:
                             y_conn[b_idx, 0, y1:y2, x1:x2] = 1.0
+                        elif c_val == 2:
+                            # Soft elliptical radial disk target for cylindrical Electrolytic Capacitor
+                            sub_y = (yy_grid[y1:y2, :] - cy_px) / max(half_h, 1.0)
+                            sub_x = (xx_grid[:, x1:x2] - cx_px) / max(half_w, 1.0)
+                            r_sq = sub_y * sub_y + sub_x * sub_x
+                            disk = (r_sq <= 1.15).float()
+                            y_elcap[b_idx, 0, y1:y2, x1:x2] = torch.maximum(y_elcap[b_idx, 0, y1:y2, x1:x2], disk)
                         else:
-                            y_macro[b_idx, 0, y1:y2, x1:x2] = 1.0
+                            y_ic[b_idx, 0, y1:y2, x1:x2] = 1.0
 
-        y_all = torch.maximum(torch.maximum(y_cap, y_conn), y_macro)
+        y_all = torch.maximum(torch.maximum(y_cap, y_conn), torch.maximum(y_elcap, y_ic))
         dilated = F.max_pool2d(y_all, kernel_size=3, stride=1, padding=1)
         eroded = -F.max_pool2d(-y_all, kernel_size=3, stride=1, padding=1)
         y_bound = (dilated - eroded).clamp(0.0, 1.0)
 
-        return torch.cat([y_cap, y_conn, y_bound, y_macro], dim=1)
+        return torch.cat([y_cap, y_conn, y_bound, y_elcap, y_ic], dim=1)
 
     def _ch_loss(self, pred_1ch: torch.Tensor, target_1ch: torch.Tensor) -> torch.Tensor:
         bce = binary_cross_entropy_loss(pred_1ch, target_1ch)
@@ -755,19 +770,17 @@ class ScaleDecoupled4ChMultiStageLoss(nn.Module):
         for s_idx in range(num_stages):
             p_stage = stage_preds[s_idx].float()
             lam = self.stage_weights[s_idx]
-            weights_4 = self.channel_weights_per_stage[min(s_idx, 3)]
+            weights_c = self.channel_weights_per_stage[min(s_idx, 3)]
 
             if p_stage.shape[-2:] != target_masks_p2.shape[-2:]:
                 y_stage = F.adaptive_max_pool2d(target_masks_p2.float(), output_size=p_stage.shape[-2:])
             else:
                 y_stage = target_masks_p2.float()
 
-            s_loss = (
-                weights_4[0] * self._ch_loss(p_stage[:, 0:1], y_stage[:, 0:1])
-                + weights_4[1] * self._ch_loss(p_stage[:, 1:2], y_stage[:, 1:2])
-                + weights_4[2] * self._ch_loss(p_stage[:, 2:3], y_stage[:, 2:3])
-                + weights_4[3] * self._ch_loss(p_stage[:, 3:4], y_stage[:, 3:4])
-            )
+            n_ch = min(p_stage.shape[1], y_stage.shape[1], len(weights_c))
+            s_loss = torch.tensor(0.0, device=p_stage.device, dtype=torch.float32)
+            for c_i in range(n_ch):
+                s_loss = s_loss + weights_c[c_i] * self._ch_loss(p_stage[:, c_i : c_i + 1], y_stage[:, c_i : c_i + 1])
             total_loss = total_loss + lam * s_loss
         return total_loss, {}
 
@@ -1037,8 +1050,8 @@ class QualityVarifocalClassBalancedBCE(nn.Module):
         self.label_smoothing = float(label_smoothing)
         self.lambda_dice = float(lambda_dice)
         self.smooth_dice = float(smooth_dice)
-        # Boost minority Connector (Class 1) and Electrolytic Capacitor (Class 2)
-        w = [1.00, 1.45, 1.35, 1.15] if nc == 4 else [1.0] * nc
+        # Boost minority Connector (Class 1) and Electrolytic Capacitor (Class 2 = 1.75x)
+        w = [1.00, 1.45, 1.75, 1.15] if nc == 4 else [1.0] * nc
         self.register_buffer("cls_weights", torch.tensor(w, dtype=torch.float32).view(1, 1, -1))
 
     def forward(self, pred_scores: torch.Tensor, target_scores: torch.Tensor) -> torch.Tensor:
@@ -1058,34 +1071,42 @@ class QualityVarifocalClassBalancedBCE(nn.Module):
             neg_mod = 0.25 + 0.75 * torch.pow(p, 1.5)
             vfl_weight = pos_mask * pos_mod + neg_mask * neg_mod
 
+            # 3. Forensic Capacitor (0) <-> Electrolytic Capacitor (2) Mutual-Exclusion Penalty:
+            #    Explicitly penalizes Class-2 false-positive logits on true Class-0 (Capacitor) anchors
+            #    and Class-0 logits on true Class-2 (Electrolytic Capacitor) anchors!
+            if logits.shape[-1] >= 4:
+                is_cap_anchor = (targets[:, :, 0:1] > 1e-3).float()
+                is_elcap_anchor = (targets[:, :, 2:3] > 1e-3).float()
+                mutual_excl = torch.ones_like(vfl_weight)
+                mutual_excl[:, :, 2:3] = 1.0 + 1.25 * is_cap_anchor * (1.0 - is_elcap_anchor)
+                mutual_excl[:, :, 0:1] = 1.0 + 1.25 * is_elcap_anchor * (1.0 - is_cap_anchor)
+                vfl_weight = vfl_weight * mutual_excl
+
             cw = self.cls_weights.to(logits.device)
             if cw.shape[-1] != logits.shape[-1]:
                 cw = torch.ones((1, 1, logits.shape[-1]), device=logits.device)
             weighted_bce = raw_bce * vfl_weight * cw
 
-            # 3. Calibrated In-Head Squared-Dice term (summed to match reduction='sum' convention of Ultralytics bce)
+            # 4. Calibrated In-Head Squared-Dice term (summed to match reduction='sum' convention of Ultralytics bce)
             if self.lambda_dice > 0.0:
                 p_prob = torch.sigmoid(logits)
-                # Normalize per class across anchors
                 inter = (p_prob * q_soft).sum(dim=1)
                 p_sum = (p_prob ** 2).sum(dim=1)
                 q_sum = (q_soft ** 2).sum(dim=1)
                 sdice = 1.0 - (2.0 * inter + self.smooth_dice) / (p_sum + q_sum + self.smooth_dice)
-                # Scale SDice to match total positive target score mass so Ultralytics' `/ target_scores_sum` normalizes cleanly
                 pos_mass = targets.sum(dim=(1, 2), keepdim=True).clamp(min=1.0)
                 sdice_scaled = (sdice.unsqueeze(1) * cw).mean(dim=-1, keepdim=True) * pos_mass
                 total = weighted_bce.sum() + self.lambda_dice * sdice_scaled.sum()
-                # Return tensor whose .sum() equals `total` (Ultralytics calls `self.bce(pred_scores, target_scores).sum()`)
                 return total.view(1, 1, 1).to(pred_scores.dtype)
 
             return weighted_bce.to(pred_scores.dtype)
 
 
-def inject_apex_into_single_loss(crit: nn.Module):
+def inject_apex_into_single_loss(crit: nn.Module, preserve_assigner: bool = False):
     """Upgrades a single v8DetectionLoss instance with APEX Box Loss, Assigner, and Quality-Varifocal BCE."""
     if hasattr(crit, "bbox_loss") and not isinstance(crit.bbox_loss, APEXAnisotropicWiseInnerBboxLoss):
         crit.bbox_loss = APEXAnisotropicWiseInnerBboxLoss(crit.bbox_loss, inner_ratio=1.25)
-    if hasattr(crit, "assigner") and not isinstance(crit.assigner, APEXDynamicKAssigner):
+    if not preserve_assigner and hasattr(crit, "assigner") and not isinstance(crit.assigner, APEXDynamicKAssigner):
         nc = getattr(crit, "nc", 4)
         crit.assigner = APEXDynamicKAssigner(topk=12, num_classes=nc, alpha=0.5, beta=3.0)
     if hasattr(crit, "bce") and not isinstance(crit.bce, QualityVarifocalClassBalancedBCE):
@@ -1094,12 +1115,16 @@ def inject_apex_into_single_loss(crit: nn.Module):
 
 
 def inject_apex_into_criterion(criterion: nn.Module) -> nn.Module:
-    inject_apex_into_single_loss(criterion)
-    # Also support YOLO26 E2EDetectLoss (which holds one2many and one2one v8DetectionLoss instances)
-    for sub_attr in ("one2many", "one2one"):
-        sub_crit = getattr(criterion, sub_attr, None)
-        if sub_crit is not None:
-            inject_apex_into_single_loss(sub_crit)
+    is_e2e = hasattr(criterion, "one2many") or hasattr(criterion, "one2one")
+    if is_e2e:
+        # For YOLO26 E2EDetectLoss: preserve YOLO26's native STAL assigner (topk=10 on one2many,
+        # strict topk=1 on one2one) and ProgLoss 100% intact while injecting AGWD+InnerWIoU and QualityVFL!
+        for sub_attr in ("one2many", "one2one"):
+            sub_crit = getattr(criterion, sub_attr, None)
+            if sub_crit is not None:
+                inject_apex_into_single_loss(sub_crit, preserve_assigner=True)
+    else:
+        inject_apex_into_single_loss(criterion, preserve_assigner=False)
     return criterion
 
 
@@ -1734,6 +1759,29 @@ def main():
         device=args.device,
         plots=False,
     )
+
+    # For YOLO26 dual-head models, also evaluate the One-to-Many (end2end=False) head + NMS
+    det_head = getattr(getattr(eval_model, "model", None), "model", [None])[-1]
+    if det_head is not None and (hasattr(det_head, "end2end") or hasattr(det_head, "one2one_cv2")):
+        eval_o2m = YOLO(str(best_pt))
+        eval_o2m.model.model[-1].end2end = False
+        metrics_o2m = eval_o2m.val(
+            data=args.eval_data,
+            split="test",
+            imgsz=args.imgsz,
+            batch=args.batch,
+            conf=0.001,
+            iou=0.50,
+            max_det=args.max_det,
+            device=args.device,
+            plots=False,
+        )
+        print(
+            f"[APEX Dual-Head Eval] end2end=True (O2O) mAP50={float(metrics.box.map50):.4f} | "
+            f"end2end=False (O2M) mAP50={float(metrics_o2m.box.map50):.4f}"
+        )
+        if float(metrics_o2m.box.map50) > float(metrics.box.map50):
+            metrics = metrics_o2m
 
     per_class_ap50 = {}
     for idx, cls_idx in enumerate(metrics.box.ap_class_index):

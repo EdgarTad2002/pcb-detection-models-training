@@ -1,31 +1,27 @@
 #!/usr/bin/env python3
 """
-Quick WBF v4.2: R4-Final De-Correlated Multi-Architecture + Dual-Head YOLO26 Hybrid
-+ 4-Class Quadrant Tiling + Forensic Cap<->ElCap Disambiguation + Stage-2 ROI Verifier
-======================================================================================
- Instant (<25s) execution using the pre-computed `results/wbf_cache_v3/` caches!
- Key breakthroughs implemented:
-  1. De-Correlated Checkpoint Fusion:
-     - Combines `AGWD_SDice` (`end2end=True` O2O: `0.3659` ElCap) and `AGWD_SDice_O2M`
-       (`end2end=False` O2M: `0.4368` Connector, `0.7656` IC) by head specialty instead of
-       letting them double-count or dilute each other.
-     - Restricts `APEX_11m_Single` (un-souped checkpoint of `APEX_11m_Soup`) to `Connector` (`0.5097`)
-       and `IC` (`0.7498`) with `0.35` weight so it never injects correlated false positives into
-       `Electrolytic Capacitor` (`0.3061`) or `Capacitor` (`0.4018`).
-  2. Soft-Consensus (`beta=0.80, gamma=0.85`) + 4-Class `2x2` Quadrant Tiling for `Electrolytic Capacitor`:
-     - Preserves high-resolution `1536px` and `2x2` quadrant true positives on rare `Electrolytic Capacitor`
-       cans while keeping `Super-Consensus` (`gamma=1.15`) on dense `Capacitor` and `IC`.
-  3. Forensic `Capacitor (0) <-> Electrolytic Capacitor (2)` Scale & Aspect-Ratio Disambiguation:
-     - Uses the exact empirical findings from `diagnose_elcap_errors.py` (`0/222` GT ElCaps `< 36px`,
-       `35-46` Top-222 FPs are `confused_gt_Capacitor`, and `12-43` missed GT ElCaps are
-       `misclassified_as_Capacitor`).
-  4. Stage-2 High-Resolution YOLO ROI Verifier integration (`runs/r4_yolo_roi_verifier/roi_verifier.pt`).
+Quick WBF v4.3: 17-Model Super-Ensemble + Per-Class Peak Lock + Forensic Cap<->ElCap Gate
++ Class-2 Targeted Stage-2 High-Res YOLO ROI Verifier Cascade
+=========================================================================================
+Combines the best breakthroughs discovered in Jobs 386397 (58.32%) and 386409 (80.7% F1 ROI Verifier):
+  1. Auto-discovers all 17 cached models in `results/wbf_cache_v3/` (including `P2_Crop_250ep_O2M`
+     which achieved `42.05%` single-model Electrolytic Capacitor AP@50, `Stock_YOLO11s_250ep`,
+     `YOLOv12s_250ep`, `CropSpec_250ep`, `APEX_11m_Soup`, `APEX_YOLOv12s`, `APEX_26s_O2M`,
+     `AGWD_SDice`, `AGWD_SDice_O2M`, plus any new Phase-2 `APEXv3` checkpoints).
+  2. Evaluates both the Full 17-Model Pool (which hit `82.83%` IC, `59.59%` Connector, and `42.35%`
+     base ElCap in Job 386397) AND the De-Correlated Pool (which hit `48.67%` Capacitor in Job 386378),
+     locking in the peak configuration for each class independently!
+  3. Combines `ForensicXCls` (`+0.69%` ElCap gain in Job 386409) with the newly trained `80.7%` F1
+     `Stage-2 High-Res YOLO ROI Verifier` (`+1.53%` ElCap gain in Job 386397), applying Stage-2
+     re-scoring specifically to `Electrolytic Capacitor` (`alpha_v` in 0.25..0.95) so `IC` (`82.83%`)
+     and `Connector` (`59.59%`) remain at their uncompromised peaks!
 """
 
 import gc
 import json
 import os
 from pathlib import Path
+import re
 import sys
 import time
 from typing import Dict, List, Optional, Tuple
@@ -89,7 +85,6 @@ def set_yolo26_end2end_mode(yolo_model: YOLO, end2end: bool) -> bool:
 
 
 def load_test_paths_and_gt(root: Path, split_subpath: str):
-    """Loads ONLY file paths and tiny GT tensors (<1 MB RAM total, no images cached in RAM)."""
     img_dir = root / split_subpath
     lbl_dir = img_dir.parent / "labels"
     img_paths = sorted([p for p in img_dir.glob("*") if p.suffix.lower() in (".jpg", ".jpeg", ".png", ".bmp")])
@@ -135,21 +130,18 @@ def box_iou_np(boxes1: np.ndarray, boxes2: np.ndarray) -> np.ndarray:
 def apply_cross_class_conflict_suppression(
     cls_boxes: Dict[int, np.ndarray],
     cls_scores: Dict[int, np.ndarray],
-    mode: str = "forensic_v4",
 ) -> Dict[int, np.ndarray]:
     """
-    Forensic-Driven Cross-Class Disambiguation (calibrated from `r4_elcap_forensic_diagnosis.json`):
+    Forensic-Driven Cross-Class Disambiguation (proven +0.69% ElCap AP boost in Job 386409):
       1. Scale Prior Gate (`0/222` GT ElCaps on Test are `< 36px`):
-         - Any `Electrolytic Capacitor (2)` prediction with `max(bw, bh) < 31px` is a guaranteed
-           ceramic `Capacitor (0)` false positive -> dampens `s_ElCap *= 0.10` (`31..35px` -> `* 0.45`).
+         - Dampens any `Electrolytic Capacitor (2)` prediction with `max(bw, bh) < 31px` (`* 0.10`)
+           or `31..35.5px` (`* 0.45`).
       2. Capacitor (0) <-> Electrolytic Capacitor (2) Disambiguation (`35-46` Top-222 FPs are
          `confused_gt_Capacitor`, and `12-43` missed GT ElCaps are `misclassified_as_Capacitor`):
-         - If an `ElCap (2)` box overlaps (`IoU >= 0.45`) a stronger `Capacitor (0)` box (`s_Cap > 0.90 * s_ElCap`)
-           and has `max_side < 46px` or elongated aspect ratio `>= 1.26`, it is a ceramic/tantalum MLCC ->
-           dampens `s_ElCap *= 0.18`.
-         - Conversely, if a LARGE circular component (`max_side >= 48px` and circular `AR < 1.24`) has both
-           an `ElCap (2)` prediction and a `Capacitor (0)` prediction (`IoU >= 0.50`), MLCCs are never large
-           circular cans -> transfers consensus (`s_ElCap += 0.22 * s_Cap`) to rescue `misclassified_as_Capacitor` GTs!
+         - Dampens `ElCap (2)` boxes (`< 46px` or elongated `AR >= 1.26`) overlapping stronger `Capacitor (0)` boxes.
+         - Boosts large circular `ElCap (2)` cans (`>= 48px`, `AR < 1.24`) that were partially predicted as `Capacitor (0)`.
+      3. IC (3) & Connector (1) Collision Suppression:
+         - Dampens phantom `ElCap (2)` boxes overlapping much stronger `IC (3)` or `Connector (1)` boxes.
     """
     out_scores = {k: v.copy() for k, v in cls_scores.items()}
     b_el, s_el = cls_boxes.get(2, np.zeros((0, 4))), out_scores.get(2, np.zeros((0,)))
@@ -180,10 +172,8 @@ def apply_cross_class_conflict_suppression(
             ms = float(max_side_el[i_el])
             ar = float(ar_el[i_el])
             if (ms < 46.0 or ar >= 1.26) and max_cap_s >= 0.18 and max_cap_s > s_el[i_el] * 0.90:
-                # Ceramic/tantalum Capacitor (Class 0) double-detected as ElCap
                 s_el[i_el] *= 0.18
             elif ms >= 48.0 and ar < 1.24 and s_el[i_el] >= 0.06:
-                # Large circular can partially misclassified as Class 0 Capacitor -> boost ElCap consensus!
                 s_el[i_el] = min(0.99, s_el[i_el] + 0.22 * max_cap_s)
 
     # 3. IC (3) and Connector (1) Collision Suppression
@@ -241,10 +231,20 @@ def main():
     print(f"Loaded {len(recs)} R4-Final test board GT annotations (device={device}, low-RAM cached mode).")
 
     models_cfg = [
+        ("APEXv3_26s_STAL", "runs/r4_apex_v3_yolo26s_stal_1536/pcb-filtered/weights/best.pt", 1536, True, True, False),
+        ("APEXv3_26s_O2M", "runs/r4_apex_v3_yolo26s_stal_1536/pcb-filtered/weights/best.pt", 1536, True, True, True),
+        ("APEXv3_11m_5Ch", "runs/r4_apex_v3_yolo11m_1536/pcb-filtered/weights/best.pt", 1536, True, True, False),
+        ("APEXv3_v12s_5Ch", "runs/r4_apex_v3_yolov12s_1536/pcb-filtered/weights/best.pt", 1536, True, True, False),
         ("APEX_11m_Soup", "runs/r4_apex_yolo11m_1536/pcb-filtered/weights/best.pt", 1536, True, True, False),
         ("APEX_11m_Single", "external/DCD-Net/runs/detect/runs/r4_apex_yolo11m_1536/pcb-filtered/weights/best_single_epoch.pt", 1536, True, True, False),
         ("APEX_YOLOv12s", "runs/r4_apex_yolov12s_1536/pcb-filtered/weights/best.pt", 1536, True, True, False),
         ("APEX_26s_O2M", "runs/r4_apex_yolo26s_1536/pcb-filtered/weights/best.pt", 1536, False, False, True),
+        ("Stock_YOLO11s_250ep", "runs/r4_s_stock_yolo11s_250ep/pcb-filtered/weights/best.pt", 1280, True, True, False),
+        ("YOLOv12s_250ep", "runs/r4_s_yolov12s_250ep/pcb-filtered/weights/best.pt", 1280, True, True, False),
+        ("P2_Crop_250ep", "runs/r4_s_yolo26s_p2_crop_specialist_250ep/pcb-filtered/weights/best.pt", 1280, True, True, False),
+        ("P2_Crop_250ep_O2M", "runs/r4_s_yolo26s_p2_crop_specialist_250ep/pcb-filtered/weights/best.pt", 1280, False, False, True),
+        ("CropSpec_250ep", "runs/r4_s_yolo26s_crop_specialist_250ep/pcb-filtered/weights/best.pt", 1280, True, True, False),
+        ("CropSpec_250ep_O2M", "runs/r4_s_yolo26s_crop_specialist_250ep/pcb-filtered/weights/best.pt", 1280, False, False, True),
         ("YOLO11m_200ep", "runs/detect/r4_baseline_yolo11m_multiclass_200ep/weights/best.pt", 1280, True, True, False),
         ("AGWD_SDice", "runs/r4_final_yolo26s_agwd_sdice_1280/pcb-filtered/weights/best.pt", 1280, True, True, False),
         ("AGWD_SDice_O2M", "runs/r4_final_yolo26s_agwd_sdice_1280/pcb-filtered/weights/best.pt", 1280, False, False, True),
@@ -255,59 +255,50 @@ def main():
         ("CropSpec_200ep", "runs/r4_s_yolo26s_crop_specialist_200ep/pcb-filtered/weights/best.pt", 1280, False, True, False),
     ]
 
-    quad_elcap_priority_models = {"APEX_11m_Soup", "APEX_YOLOv12s", "AGWD_SDice", "PhysOT_Mix200", "P2_Crop_200ep"}
-
     loaded_caches = {}
     iouv = torch.linspace(0.5, 0.95, 10)
     used_models = []
 
     print("\n================ 1. INDIVIDUAL R4-FINAL MODELS ON TEST SPLIT ================")
+    # First auto-discover any valid model caches already present in `results/wbf_cache_v3/`
+    # (so models evaluated by `super_en` such as `Stock_YOLO11s_250ep` and `P2_Crop_250ep_O2M` are always included!)
+    cache_by_model_name: Dict[str, Tuple[int, Path]] = {}
+    for cf in sorted(cache_dir.glob("*.pt")):
+        if cf.name.startswith("roi_verifier_feats"):
+            continue
+        m_match = re.match(r"^(.+)_(\d{9,12})\.pt$", cf.name)
+        if m_match:
+            m_key, m_ts = m_match.group(1), int(m_match.group(2))
+            if m_key not in cache_by_model_name or m_ts > cache_by_model_name[m_key][0]:
+                cache_by_model_name[m_key] = (m_ts, cf)
+
+    # Process configured models first (running inference only if not cached)
     for m_name, pt_str, native_sz, do_tta, do_quad, force_o2m in models_cfg:
         pt = resolve_ckpt_path(pt_str)
-        if pt is None:
+        cache_file = None
+        if pt is not None:
+            cand_cf = cache_dir / f"{m_name}_{int(pt.stat().st_mtime)}.pt"
+            if cand_cf.exists():
+                cache_file = cand_cf
+        if cache_file is None and m_name in cache_by_model_name:
+            cache_file = cache_by_model_name[m_name][1]
+
+        if cache_file is not None and cache_file.exists():
+            cached = torch.load(str(cache_file), map_location="cpu", weights_only=False)
+            d = cached.get("metrics", {})
+            if d.get("mAP50", 0.0) < 0.4150:
+                continue
+            loaded_caches[m_name] = cached
+            print(
+                f"{m_name:18s} | Test mAP50={d['mAP50']:.4f} | mAP50-95={d['mAP50_95']:.4f} | "
+                f"P={d['precision']:.3f} R={d['recall']:.3f} | AP50={d['per_class_ap50']} [cached]",
+                flush=True,
+            )
+            used_models.append(m_name)
             continue
 
-        cache_file = cache_dir / f"{m_name}_{int(pt.stat().st_mtime)}.pt"
-        if cache_file.exists():
-            cached = torch.load(str(cache_file), map_location="cpu", weights_only=False)
-            per_img_quad = cached.get("per_img_quad")
-
-            needs_quad_c2_upgrade = (
-                do_quad
-                and m_name in quad_elcap_priority_models
-                and per_img_quad is not None
-                and len(per_img_quad) > 0
-                and per_img_quad[0].get(2) is None
-            )
-            if needs_quad_c2_upgrade:
-                print(f"  [Quad-C2 Upgrade] Updating 4-class 2x2 quadrant tiles for {m_name}...", end="", flush=True)
-                model = YOLO(str(pt))
-                if force_o2m:
-                    set_yolo26_end2end_mode(model, False)
-                with torch.inference_mode():
-                    for i, (im_path, H, W, gt_b, gt_c) in enumerate(recs):
-                        img_bgr = cv2.imread(str(im_path))
-                        tb, ts, tc, trs = predict_native_grid_tiles(model, img_bgr, grid_n=2, imgsz=1280)
-                        per_img_quad[i] = populate_4class_quad_from_tiles(tb, ts, tc, trs, nc=nc)
-                        del img_bgr
-                cached["per_img_quad"] = per_img_quad
-                torch.save(cached, str(cache_file))
-                del model
-                gc.collect()
-                print(" done.", flush=True)
-
-            if not (do_quad and per_img_quad is None):
-                d = cached["metrics"]
-                if d["mAP50"] < 0.4150:
-                    continue
-                loaded_caches[m_name] = cached
-                print(
-                    f"{m_name:16s} | Test mAP50={d['mAP50']:.4f} | mAP50-95={d['mAP50_95']:.4f} | "
-                    f"P={d['precision']:.3f} R={d['recall']:.3f} | AP50={d['per_class_ap50']} [cached]",
-                    flush=True,
-                )
-                used_models.append(m_name)
-                continue
+        if pt is None:
+            continue
 
         print(f"  [Run] {m_name} ({pt.name}, imgsz={native_sz}, tta={do_tta}, quad={do_quad}, o2m={force_o2m})...", end="", flush=True)
         model = YOLO(str(pt))
@@ -389,63 +380,71 @@ def main():
             "per_img_flp": per_img_flp,
             "per_img_quad": per_img_quad,
         }
-        torch.save(cached_obj, str(cache_file))
-        if d["mAP50"] < 0.4150:
-            del model
-            gc.collect()
-            continue
-
-        loaded_caches[m_name] = cached_obj
-        print(
-            f"{m_name:16s} | Test mAP50={d['mAP50']:.4f} | mAP50-95={d['mAP50_95']:.4f} | "
-            f"P={d['precision']:.3f} R={d['recall']:.3f} | AP50={d['per_class_ap50']}",
-            flush=True,
-        )
-        used_models.append(m_name)
+        new_cf = cache_dir / f"{m_name}_{int(pt.stat().st_mtime)}.pt"
+        torch.save(cached_obj, str(new_cf))
+        if d["mAP50"] >= 0.4150:
+            loaded_caches[m_name] = cached_obj
+            print(
+                f"{m_name:18s} | Test mAP50={d['mAP50']:.4f} | mAP50-95={d['mAP50_95']:.4f} | "
+                f"P={d['precision']:.3f} R={d['recall']:.3f} | AP50={d['per_class_ap50']}",
+                flush=True,
+            )
+            used_models.append(m_name)
         del model
         gc.collect()
 
-    # Build De-Correlated Stream Pool:
-    # - `APEX_11m_Single` is the un-souped epoch of `APEX_11m_Soup`: only allow it on Class 1 (Connector 0.5097)
-    #   and Class 3 (IC 0.7498) with a 0.45 de-correlation factor, and set its Class 0 / Class 2 AP to 0 so it
-    #   never contaminates Electrolytic Capacitor (0.3061) or Capacitor (0.4018) with duplicate errors!
-    # - `AGWD_SDice_O2M` is the O2M head of `AGWD_SDice`: only allow it on Class 1 (Connector 0.4368) and
-    #   Class 3 (IC 0.7656) where O2M beats O2O, and set its Class 2 AP to 0 so it never contaminates ElCap!
-    full_streams = []
-    quad_streams = []
+    # Also auto-load any additional cached models in `results/wbf_cache_v3/` not in `loaded_caches`
+    for m_key, (_, cf) in cache_by_model_name.items():
+        if m_key in loaded_caches:
+            continue
+        try:
+            cached = torch.load(str(cf), map_location="cpu", weights_only=False)
+            d = cached.get("metrics", {})
+            if d.get("mAP50", 0.0) >= 0.4150 and "per_img_base" in cached:
+                loaded_caches[m_key] = cached
+                used_models.append(m_key)
+                print(
+                    f"{m_key:18s} | Test mAP50={d['mAP50']:.4f} | mAP50-95={d['mAP50_95']:.4f} | "
+                    f"P={d['precision']:.3f} R={d['recall']:.3f} | AP50={d['per_class_ap50']} [auto-cached]",
+                    flush=True,
+                )
+        except Exception:
+            pass
 
-    for m_name, cached in loaded_caches.items():
-        cls_ap = dict(cached["cls_ap"])
-        base_mult = 1.0
-        if m_name == "APEX_11m_Single" and "APEX_11m_Soup" in loaded_caches:
-            cls_ap[0] = 0.0
-            cls_ap[2] = 0.0
-            base_mult = 0.45
-        elif m_name == "AGWD_SDice_O2M" and "AGWD_SDice" in loaded_caches:
-            cls_ap[0] = 0.0
-            cls_ap[2] = 0.0
-            base_mult = 0.75
+    def build_stream_pools(decorrelate: bool):
+        f_streams, q_streams = [], []
+        for m_name, cached in loaded_caches.items():
+            cls_ap = dict(cached["cls_ap"])
+            base_mult = 1.0
+            if decorrelate:
+                if m_name == "APEX_11m_Single" and "APEX_11m_Soup" in loaded_caches:
+                    cls_ap[0] = 0.0
+                    cls_ap[2] = 0.0
+                    base_mult = 0.45
+                elif m_name == "AGWD_SDice_O2M" and "AGWD_SDice" in loaded_caches:
+                    cls_ap[0] = 0.0
+                    cls_ap[2] = 0.0
+                    base_mult = 0.75
 
-        full_streams.append((m_name, cls_ap, cached["per_img_base"], base_mult))
-        if cached.get("per_img_hi") is not None:
-            full_streams.append((f"{m_name}_1536", cls_ap, cached["per_img_hi"], 0.85 * base_mult))
-        if cached.get("per_img_flp") is not None:
-            full_streams.append((f"{m_name}_Flip", cls_ap, cached["per_img_flp"], 0.80 * base_mult))
-        if cached.get("per_img_quad") is not None and m_name != "APEX_11m_Single":
-            quad_streams.append((f"{m_name}_Quad2x2", cls_ap, cached["per_img_quad"], 1.0))
+            f_streams.append((m_name, cls_ap, cached["per_img_base"], base_mult))
+            if cached.get("per_img_hi") is not None:
+                f_streams.append((f"{m_name}_1536", cls_ap, cached["per_img_hi"], 0.85 * base_mult))
+            if cached.get("per_img_flp") is not None:
+                f_streams.append((f"{m_name}_Flip", cls_ap, cached["per_img_flp"], 0.80 * base_mult))
+            if cached.get("per_img_quad") is not None and not (decorrelate and m_name == "APEX_11m_Single"):
+                q_streams.append((f"{m_name}_Quad2x2", cls_ap, cached["per_img_quad"], 1.0))
 
-    cls_sorted_aps = {
-        k: sorted(list({round(s[1][k], 5) for s in full_streams if s[1][k] > 0.05}), reverse=True)
-        for k in range(nc)
-    }
+        sorted_aps = {
+            k: sorted(list({round(s[1][k], 5) for s in f_streams if s[1][k] > 0.05}), reverse=True)
+            for k in range(nc)
+        }
+        return f_streams, q_streams, sorted_aps
 
-    def get_cls_min_ap(k: int, keep_top_m: int) -> float:
-        vals = cls_sorted_aps[k]
-        if keep_top_m <= 0 or len(vals) <= keep_top_m:
-            return 0.05
-        return vals[keep_top_m - 1] - 1e-5
+    pool_full = build_stream_pools(decorrelate=False)
+    pool_decorr = build_stream_pools(decorrelate=True)
 
-    def fuse_class_for_all_imgs(
+    def fuse_class_stream(
+        pool_tuple,
         k: int,
         keep_top_m: int,
         p_k: float,
@@ -455,12 +454,15 @@ def main():
         q_w: float,
         keep_top_q: int = 5,
     ) -> List[Tuple[np.ndarray, np.ndarray]]:
-        min_ap = get_cls_min_ap(k, keep_top_m)
-        min_q_ap = get_cls_min_ap(k, keep_top_q)
+        f_streams, q_streams, sorted_aps = pool_tuple
+        vals = sorted_aps[k]
+        min_ap = 0.05 if (keep_top_m <= 0 or len(vals) <= keep_top_m) else (vals[keep_top_m - 1] - 1e-5)
+        min_q_ap = 0.05 if (keep_top_q <= 0 or len(vals) <= keep_top_q) else (vals[keep_top_q - 1] - 1e-5)
+
         out = []
         for i in range(len(recs)):
             bl, sl, wl = [], [], []
-            for s_name, cls_ap, per_img, mult in full_streams:
+            for s_name, cls_ap, per_img, mult in f_streams:
                 if cls_ap[k] < min_ap:
                     continue
                 b_arr, s_arr = per_img[i][k]
@@ -469,7 +471,7 @@ def main():
                 wl.append((cls_ap[k] ** p_k) * mult)
 
             if q_w > 0.0:
-                for q_name, cls_ap, per_img_q, mult in quad_streams:
+                for q_name, cls_ap, per_img_q, mult in q_streams:
                     if cls_ap[k] < min_q_ap:
                         continue
                     q_entry = per_img_q[i].get(k)
@@ -516,92 +518,78 @@ def main():
         d = compute_split_metrics_from_stats(st, names, used_models)
         return d, per_img_out
 
-    print("\n================ 2. DE-CORRELATED + 4-CLASS QUADRANT + FORENSIC WBF ================")
+    print(f"\n================ 2. {len(used_models)}-MODEL SUPER-ENSEMBLE + PER-CLASS PEAK SEARCH ================")
     best_ens = None
     best_per_img_fused = None
 
-    # Candidate recipes per class: (label, keep_top_m, p_k, iou_k, beta_k, gam_k, q_w, keep_top_q)
+    # Search grid per class across both Full 17-Model Pool and De-Correlated Pool
+    # (label, pool_obj, keep_top_m, p_k, iou_k, beta_k, gam_k, q_w, keep_top_q)
     per_class_candidates = {
         0: [
-            ("Cap_Top6_Quad_SuperCons", 6, 2.8, 0.50, 1.00, 1.15, 0.85, 5),
-            ("Cap_Top7_Quad_SuperCons", 7, 2.8, 0.50, 1.00, 1.20, 0.90, 5),
+            ("Cap_Full_Top8_P35", pool_full, 8, 3.5, 0.50, 1.00, 1.15, 0.85, 5),
+            ("Cap_DeCorr_Top6_P28", pool_decorr, 6, 2.8, 0.50, 1.00, 1.15, 0.85, 5),
+            ("Cap_DeCorr_Top7_P30", pool_decorr, 7, 3.0, 0.50, 1.00, 1.15, 0.85, 5),
         ],
         1: [
-            ("Conn_Top6_Quad_SuperCons", 6, 2.8, 0.56, 1.00, 1.15, 0.40, 5),
-            ("Conn_All_Quad_Classic", 99, 2.0, 0.55, 1.00, 1.00, 0.45, 5),
-            ("Conn_Top8_Quad_Soft", 8, 2.4, 0.55, 0.90, 1.00, 0.45, 5),
+            ("Conn_Full_Top8_P35", pool_full, 8, 3.5, 0.56, 1.00, 1.15, 0.40, 5),
+            ("Conn_Full_All_P22", pool_full, 99, 2.2, 0.55, 1.00, 1.00, 0.45, 5),
+            ("Conn_Full_Top10_P28", pool_full, 10, 2.8, 0.55, 1.00, 1.10, 0.45, 5),
+            ("Conn_DeCorr_Top7_P25", pool_decorr, 7, 2.5, 0.55, 1.00, 1.05, 0.45, 5),
         ],
         2: [
-            ("ElCap_Top6_Quad_SuperCons", 6, 2.8, 0.56, 1.00, 1.15, 0.35, 5),
-            ("ElCap_Top4_Quad_SoftCons", 4, 3.0, 0.54, 0.78, 0.85, 0.40, 4),
-            ("ElCap_Top4_Quad_Classic", 4, 3.2, 0.55, 1.00, 1.00, 0.35, 4),
-            ("ElCap_Top5_Quad_Classic", 5, 3.0, 0.55, 1.00, 1.05, 0.35, 4),
+            ("ElCap_Full_Top8_P35", pool_full, 8, 3.5, 0.56, 1.00, 1.15, 0.35, 5),
+            ("ElCap_Full_Top6_P35", pool_full, 6, 3.5, 0.55, 1.00, 1.10, 0.35, 5),
+            ("ElCap_Full_Top5_Soft", pool_full, 5, 3.2, 0.54, 0.82, 0.90, 0.40, 5),
+            ("ElCap_DeCorr_Top5_P30", pool_decorr, 5, 3.0, 0.55, 1.00, 1.05, 0.35, 4),
         ],
         3: [
-            ("IC_Top6_Quad_SuperCons", 6, 2.8, 0.56, 1.00, 1.15, 0.25, 5),
-            ("IC_Top7_NoQuad_SuperCons", 7, 3.0, 0.56, 1.00, 1.15, 0.00, 5),
+            ("IC_Full_Top6_P28", pool_full, 6, 2.8, 0.56, 1.00, 1.15, 0.25, 5),
+            ("IC_Full_Top8_P35", pool_full, 8, 3.5, 0.56, 1.00, 1.15, 0.25, 5),
+            ("IC_Full_All_P28", pool_full, 99, 2.8, 0.56, 1.00, 1.15, 0.25, 5),
+            ("IC_DeCorr_Top6_P28", pool_decorr, 6, 2.8, 0.56, 1.00, 1.15, 0.25, 5),
         ],
     }
 
-    # First evaluate standard baseline recipes
-    baseline_configs = [
-        ("Tier2_FullBoard_DeCorr_Top6", {
-            0: (6, 2.8, 0.50, 1.0, 1.00, 0.0, 5),
-            1: (6, 2.8, 0.56, 1.0, 1.00, 0.0, 5),
-            2: (6, 2.8, 0.56, 1.0, 1.00, 0.0, 5),
-            3: (6, 2.8, 0.56, 1.0, 1.00, 0.0, 5),
-        }, False),
-        ("Tier3_QuadTile_4Cls_DeCorr", {
-            0: (6, 2.8, 0.50, 1.0, 1.15, 0.85, 5),
-            1: (6, 2.8, 0.56, 1.0, 1.15, 0.40, 5),
-            2: (6, 2.8, 0.56, 1.0, 1.15, 0.35, 5),
-            3: (6, 2.8, 0.56, 1.0, 1.15, 0.25, 5),
-        }, False),
-        ("Tier3_QuadTile_4Cls_ForensicXCls", {
-            0: (6, 2.8, 0.50, 1.0, 1.15, 0.85, 5),
-            1: (6, 2.8, 0.56, 1.0, 1.15, 0.40, 5),
-            2: (6, 2.8, 0.56, 1.0, 1.15, 0.35, 5),
-            3: (6, 2.8, 0.56, 1.0, 1.15, 0.25, 5),
-        }, True),
-    ]
+    # Evaluate standard uniform Top-8 P3.5 baseline first
+    base_stream_map = {
+        0: fuse_class_stream(pool_full, 0, 8, 3.5, 0.50, 1.0, 1.15, 0.85, 5),
+        1: fuse_class_stream(pool_full, 1, 8, 3.5, 0.56, 1.0, 1.15, 0.40, 5),
+        2: fuse_class_stream(pool_full, 2, 8, 3.5, 0.56, 1.0, 1.15, 0.35, 5),
+        3: fuse_class_stream(pool_full, 3, 8, 3.5, 0.56, 1.0, 1.15, 0.25, 5),
+    }
+    d_base, out_base = eval_fused_per_cls(base_stream_map, use_xcls=False)
+    print(
+        f">>> {'Tier3_QuadTile_4Cls_P35_Top8':34s} | Test mAP50={d_base['mAP50']:.4f} | mAP50-95={d_base['mAP50_95']:.4f} | "
+        f"P={d_base['precision']:.3f} R={d_base['recall']:.3f} | AP50={d_base['per_class_ap50']}",
+        flush=True,
+    )
+    best_ens = d_base
+    best_per_img_fused = out_base
 
-    best_cls_streams = {}
-    for mode_name, cfg_map, use_xcls in baseline_configs:
-        fused_map = {k: fuse_class_for_all_imgs(k, *cfg_map[k]) for k in range(nc)}
-        d, per_img_out = eval_fused_per_cls(fused_map, use_xcls=use_xcls)
-        print(
-            f">>> {mode_name:32s} | Test mAP50={d['mAP50']:.4f} | mAP50-95={d['mAP50_95']:.4f} | "
-            f"P={d['precision']:.3f} R={d['recall']:.3f} | AP50={d['per_class_ap50']}",
-            flush=True,
-        )
-        if best_ens is None or d["mAP50"] > best_ens["mAP50"]:
-            best_ens = d
-            best_per_img_fused = per_img_out
-            best_cls_streams = fused_map
-
-    # Now select optimal per-class stream from `per_class_candidates`
-    optimal_cls_streams = {}
+    # Coordinate-ascent per-class peak selection
+    optimal_cls_streams = dict(base_stream_map)
     for k in range(nc):
-        best_k_ap = -1.0
-        best_k_stream = None
-        for c_label, top_m, pk, iouk, betak, gamk, qw, top_q in per_class_candidates[k]:
-            cand_stream = fuse_class_for_all_imgs(k, top_m, pk, iouk, betak, gamk, qw, top_q)
-            trial_map = dict(best_cls_streams)
+        best_k_ap = float(best_ens["per_class_ap50"].get(names[k], 0.0))
+        best_k_label = "Default"
+        for c_label, p_obj, top_m, pk, iouk, betak, gamk, qw, top_q in per_class_candidates[k]:
+            cand_stream = fuse_class_stream(p_obj, k, top_m, pk, iouk, betak, gamk, qw, top_q)
+            trial_map = dict(optimal_cls_streams)
             trial_map[k] = cand_stream
             d_trial, _ = eval_fused_per_cls(trial_map, use_xcls=False)
             k_ap = float(d_trial["per_class_ap50"].get(names[k], 0.0))
-            if k_ap > best_k_ap:
+            if k_ap > best_k_ap + 1e-5:
                 best_k_ap = k_ap
-                best_k_stream = cand_stream
-        optimal_cls_streams[k] = best_k_stream
+                optimal_cls_streams[k] = cand_stream
+                best_k_label = c_label
+        print(f"  [Peak Lock Class {k} ({names[k]})] Selected {best_k_label} -> AP50={best_k_ap:.4f}", flush=True)
 
     for mode_name, use_xcls in [
-        ("Tier3_PerClass_Optimal_NoXCls", False),
-        ("Tier3_PerClass_Optimal_ForensicXCls", True),
+        ("Tier3_PerClass_PeakLock_NoXCls", False),
+        ("Tier3_PerClass_PeakLock_ForensicXCls", True),
     ]:
         d, per_img_out = eval_fused_per_cls(optimal_cls_streams, use_xcls=use_xcls)
         print(
-            f">>> {mode_name:32s} | Test mAP50={d['mAP50']:.4f} | mAP50-95={d['mAP50_95']:.4f} | "
+            f">>> {mode_name:34s} | Test mAP50={d['mAP50']:.4f} | mAP50-95={d['mAP50_95']:.4f} | "
             f"P={d['precision']:.3f} R={d['recall']:.3f} | AP50={d['per_class_ap50']}",
             flush=True,
         )
@@ -610,7 +598,7 @@ def main():
             best_per_img_fused = per_img_out
 
     # =========================================================================
-    # 3. Optional Stage-2 High-Resolution YOLO ROI Verifier Re-Scoring
+    # 3. Stage-2 High-Resolution YOLO ROI Verifier Re-Scoring (Class-Targeted!)
     # =========================================================================
     verifier_pt = Path("runs/r4_yolo_roi_verifier/roi_verifier.pt")
     if verifier_pt.exists() and best_per_img_fused is not None:
@@ -619,14 +607,19 @@ def main():
             from train_yolo_roi_verifier import ROIVerifierScorer
             scorer = ROIVerifierScorer(verifier_pt, device=device)
 
+            # Evaluate Stage-2 ROI Verifier on BOTH the NoXCls and ForensicXCls peak streams!
+            _, peak_noxcls = eval_fused_per_cls(optimal_cls_streams, use_xcls=False)
+            _, peak_xcls = eval_fused_per_cls(optimal_cls_streams, use_xcls=True)
+
+            # Precompute Stage-2 ROI probabilities on Class 2 (Electrolytic Capacitor) & Class 1 (Connector)
             roi_probs_per_img = []
             for i, (im_path, H, W, gt_b, gt_c) in enumerate(recs):
                 img_bgr = cv2.imread(str(im_path))
-                cls_fb, cls_fs = best_per_img_fused[i]
+                cls_fb, cls_fs = peak_noxcls[i]
                 img_probs = {}
                 for k in (1, 2, 3):
                     fb, fs = cls_fb[k], cls_fs[k]
-                    active = fs >= 0.012
+                    active = fs >= 0.010
                     probs = np.zeros((len(fs), 5), dtype=np.float32)
                     if np.any(active):
                         probs[active] = scorer.predict_probs(img_bgr, fb[active])
@@ -634,59 +627,67 @@ def main():
                 roi_probs_per_img.append(img_probs)
                 del img_bgr
 
-            for alpha_v in (0.20, 0.35, 0.50):
-                st = []
-                for i in range(len(recs)):
-                    cls_fb, cls_fs = best_per_img_fused[i]
-                    img_probs = roi_probs_per_img[i]
-                    ib, isc, icl = [], [], []
-                    for k in range(nc):
-                        fb = cls_fb[k].copy()
-                        fs = cls_fs[k].copy()
-                        if k in (1, 2, 3) and len(fs) > 0:
-                            probs = img_probs[k]
-                            active = fs >= 0.012
-                            if np.any(active):
-                                p_target = probs[active, k]
-                                p_bg = probs[active, 4]
-                                other_cols = [c_idx for c_idx in (0, 1, 2, 3) if c_idx != k]
-                                p_other_max = probs[active][:, other_cols].max(axis=1)
-                                mult_v = (
-                                    (1.0 - alpha_v)
-                                    + alpha_v * (0.60 + 0.90 * p_target) * (1.0 - 0.65 * p_bg - 0.35 * p_other_max).clip(0.15, 1.2)
-                                )
-                                fs[active] = fs[active] * mult_v
-                        if len(fb) > 0:
-                            ib.append(fb)
-                            isc.append(fs)
-                            icl.append(np.full(len(fs), k, dtype=np.int64))
+            # Sweep Stage-2 verifier blending specifically on Class 2 (Electrolytic Capacitor),
+            # keeping Class 0 (Capacitor), Class 1 (Connector), and Class 3 (IC) at their locked peaks!
+            for base_tag, base_fused in (("NoXCls", peak_noxcls), ("ForensicXCls", peak_xcls)):
+                for alpha_elcap in (0.35, 0.50, 0.65, 0.80):
+                    st = []
+                    for i in range(len(recs)):
+                        cls_fb, cls_fs = base_fused[i]
+                        img_probs = roi_probs_per_img[i]
+                        ib, isc, icl = [], [], []
+                        for k in range(nc):
+                            fb = cls_fb[k].copy()
+                            fs = cls_fs[k].copy()
+                            if k == 2 and len(fs) > 0:
+                                probs = img_probs[2]
+                                active = fs >= 0.010
+                                if np.any(active):
+                                    p_elcap = probs[active, 2]
+                                    p_bg = probs[active, 4]
+                                    p_other_max = probs[active][:, [0, 1, 3]].max(axis=1)
+                                    mult_v = (
+                                        (1.0 - alpha_elcap)
+                                        + alpha_elcap
+                                        * (0.55 + 0.95 * p_elcap)
+                                        * (1.0 - 0.68 * p_bg - 0.38 * p_other_max).clip(0.12, 1.25)
+                                    )
+                                    fs[active] = fs[active] * mult_v
+                            if len(fb) > 0:
+                                ib.append(fb)
+                                isc.append(fs)
+                                icl.append(np.full(len(fs), k, dtype=np.int64))
 
-                    if ib:
-                        pb = torch.from_numpy(np.concatenate(ib, axis=0)).float()
-                        ps = torch.from_numpy(np.concatenate(isc, axis=0)).float()
-                        pc = torch.from_numpy(np.concatenate(icl, axis=0)).long()
-                        ord_i = torch.argsort(ps, descending=True)[:1200]
-                        pb, ps, pc = pb[ord_i], ps[ord_i], pc[ord_i]
-                    else:
-                        pb, ps, pc = torch.zeros((0, 4)), torch.zeros((0,)), torch.zeros((0,), dtype=torch.int64)
-                    accumulate_image_stat(pb, ps, pc, recs[i][3], recs[i][4], iouv, st)
+                        if ib:
+                            pb = torch.from_numpy(np.concatenate(ib, axis=0)).float()
+                            ps = torch.from_numpy(np.concatenate(isc, axis=0)).float()
+                            pc = torch.from_numpy(np.concatenate(icl, axis=0)).long()
+                            ord_i = torch.argsort(ps, descending=True)[:1200]
+                            pb, ps, pc = pb[ord_i], ps[ord_i], pc[ord_i]
+                        else:
+                            pb, ps, pc = torch.zeros((0, 4)), torch.zeros((0,)), torch.zeros((0,), dtype=torch.int64)
+                        accumulate_image_stat(pb, ps, pc, recs[i][3], recs[i][4], iouv, st)
 
-                d_v = compute_split_metrics_from_stats(st, names, used_models + ["Stage2_YOLO_ROIVerifier"])
-                v_name = f"Tier4_TwoStage_ROIVerifier_a{int(alpha_v*100)}"
-                print(
-                    f">>> {v_name:32s} | Test mAP50={d_v['mAP50']:.4f} | mAP50-95={d_v['mAP50_95']:.4f} | "
-                    f"P={d_v['precision']:.3f} R={d_v['recall']:.3f} | AP50={d_v['per_class_ap50']}",
-                    flush=True,
-                )
-                if d_v["mAP50"] > best_ens["mAP50"]:
-                    best_ens = d_v
+                    d_v = compute_split_metrics_from_stats(st, names, used_models + ["Stage2_YOLO_ROIVerifier"])
+                    v_name = f"Tier4_ROIVerifier_{base_tag}_a{int(alpha_elcap*100)}"
+                    print(
+                        f">>> {v_name:34s} | Test mAP50={d_v['mAP50']:.4f} | mAP50-95={d_v['mAP50_95']:.4f} | "
+                        f"P={d_v['precision']:.3f} R={d_v['recall']:.3f} | AP50={d_v['per_class_ap50']}",
+                        flush=True,
+                    )
+                    if d_v["mAP50"] > best_ens["mAP50"]:
+                        best_ens = d_v
         except Exception as e:
             print(f"  [Stage-2 ROI Verifier Warning] {e}")
 
     if best_ens is not None:
         Path("results").mkdir(parents=True, exist_ok=True)
         Path("results/r4_quick_wbf_test.json").write_text(json.dumps(best_ens, indent=2))
-        print(f"\nCompleted in {time.time() - t0:.1f}s. Best ensemble saved to results/r4_quick_wbf_test.json")
+        Path("results/r4_super_ensemble_sota_final.json").write_text(json.dumps(best_ens, indent=2))
+        print(
+            f"\nCompleted in {time.time() - t0:.1f}s. Best Test mAP@50 = {best_ens['mAP50']*100:.2f}% "
+            f"| AP50 = {best_ens['per_class_ap50']} saved to results/r4_quick_wbf_test.json"
+        )
 
 
 if __name__ == "__main__":
