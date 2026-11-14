@@ -1,11 +1,11 @@
 #!/bin/bash
-#SBATCH --job-name=wbf_r4_v4
-#SBATCH --partition=research
+#SBATCH --job-name=wbf_r4_v42
+#SBATCH --partition=research_cpu
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=32G
-#SBATCH --time=03:00:00
-#SBATCH --output=logs/wbf_r4_eval_%j.out
-#SBATCH --error=logs/wbf_r4_eval_%j.err
+#SBATCH --time=02:00:00
+#SBATCH --output=logs/wbf_v42_cpu_%j.out
+#SBATCH --error=logs/wbf_v42_cpu_%j.err
 
 set -euo pipefail
 
@@ -25,9 +25,9 @@ export MKL_NUM_THREADS=8
 export LRU_CACHE_CAPACITY=16
 
 echo "========================================================================"
-echo "[Step 1/3] Phase 0: YOLO26 O2M (end2end=False) Ablation & ElCap Forensics"
+echo "[Step 1/3] Phase 0 Evaluation: Quick WBF v4 (O2M + 4-Class Quad + Forensic XCls)"
 echo "========================================================================"
-/mnt/weka/etadevosyan/.conda/envs/pcb-yolo/bin/python diagnose_elcap_errors.py
+/mnt/weka/etadevosyan/.conda/envs/pcb-yolo/bin/python quick_wbf.py
 
 echo "========================================================================"
 echo "[Step 2/3] Phase 1: Train Stage-2 High-Res YOLO ROI Specialist Verifier"
@@ -35,6 +35,6 @@ echo "========================================================================"
 /mnt/weka/etadevosyan/.conda/envs/pcb-yolo/bin/python train_yolo_roi_verifier.py
 
 echo "========================================================================"
-echo "[Step 3/3] Phase 0+1 Evaluation: Quick WBF v4 + 4-Class Quad + ROI Verifier"
+echo "[Step 3/3] Phase 1 Evaluation: Quick WBF v4 + Stage-2 YOLO ROI Verifier"
 echo "========================================================================"
 /mnt/weka/etadevosyan/.conda/envs/pcb-yolo/bin/python quick_wbf.py

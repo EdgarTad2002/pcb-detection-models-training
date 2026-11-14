@@ -421,20 +421,26 @@ def collect_split_crops(
 
         for b, c in zip(gt_b, gt_c):
             bw, bh = b[2] - b[0], b[3] - b[1]
-            # Keep all Connector (1), ElCap (2), IC (3); subsample Capacitor (0) so it doesn't drown rare classes
+            # Balanced cap per class so CPU feature extraction finishes in ~5 minutes instead of 2.5 hours
+            max_per_cls = (1400 if c == 2 else 950) if (is_train and device == "cpu") else 99999
+            if counts[int(c)] >= max_per_cls:
+                continue
             if c == 0:
-                keep_prob = 0.30 if max(bw, bh) >= 16.0 else 0.08
+                keep_prob = 0.14 if max(bw, bh) >= 18.0 else 0.03
                 if rng.random() > keep_prob:
                     continue
+            elif is_train and c in (1, 3) and device == "cpu" and rng.random() > 0.35:
+                continue
             crop, geom = extract_context_crop(img_bgr, b, crop_size=crop_size)
             crops.append(crop)
             geoms.append(geom)
             labels.append(int(c))
             counts[int(c)] += 1
 
-            # Oversample Electrolytic Capacitor (2) and Connector (1) during training
-            if is_train and c == 2:
-                for _ in range(3):
+            # Oversample Electrolytic Capacitor (2) during training
+            n_elcap_aug = 1 if device == "cpu" else 3
+            if is_train and c == 2 and counts[2] < max_per_cls:
+                for _ in range(n_elcap_aug):
                     jit_b = b + np.array(
                         [
                             rng.uniform(-0.08, 0.08) * bw,
@@ -446,19 +452,12 @@ def collect_split_crops(
                     )
                     c_raw, _ = extract_context_crop(img_bgr, jit_b, crop_size=crop_size)
                     c_aug = augment_elcap_crop(c_raw, rng)
-                    # Recompute geometry descriptor on augmented crop
                     _, g_aug = extract_context_crop(c_aug, np.array([0, 0, bw, bh], dtype=np.float32), crop_size=crop_size)
                     g_aug[:4] = geom[:4]
                     crops.append(c_aug)
                     geoms.append(g_aug)
                     labels.append(2)
                     counts[2] += 1
-            elif is_train and c == 1 and rng.random() < 0.60:
-                c_flp = cv2.flip(crop, 1 if rng.random() < 0.5 else 0)
-                crops.append(c_flp)
-                geoms.append(geom.copy())
-                labels.append(1)
-                counts[1] += 1
 
         # 1. Fast Geometric & Boundary Hard-Negative Confuser Crops (IoU < 0.10 with any GT)
         # Samples off-center/shifted patches near ICs, Connectors, and high-gradient background rings/holes
@@ -477,21 +476,21 @@ def collect_split_crops(
             ry1 = rng.uniform(0.0, max(1.0, H - rh))
             hard_neg_candidates.append([rx1, ry1, rx1 + rw, ry1 + rh])
 
-        if hard_neg_candidates:
+        if hard_neg_candidates and counts[4] < (1200 if (is_train and device == "cpu") else 99999):
             hnc = np.array(hard_neg_candidates, dtype=np.float32)
             ious = box_iou_np(hnc, gt_b) if len(gt_b) > 0 else np.zeros((len(hnc), 0), dtype=np.float32)
             max_ious = ious.max(axis=1) if ious.shape[1] > 0 else np.zeros(len(hnc), dtype=np.float32)
-            valid_hn = hnc[max_ious < 0.08]
-            rng.shuffle(valid_hn := list(valid_hn))
-            for hb in valid_hn[: (5 if is_train else 4)]:
+            valid_hn = list(hnc[max_ious < 0.08])
+            rng.shuffle(valid_hn)
+            for hb in valid_hn[: (3 if is_train else 3)]:
                 crop, geom = extract_context_crop(img_bgr, hb, crop_size=crop_size)
                 crops.append(crop)
                 geoms.append(geom)
                 labels.append(4)
                 counts[4] += 1
 
-        # 2. Mine Real Stage-1 False-Positive boxes on GPU (or on every 8th board on CPU for speed)
-        run_miner = (stage1_model is not None) and (device != "cpu" or (idx % 8 == 0))
+        # 2. Mine Real Stage-1 False-Positive boxes on GPU (skip full-board 1536px on CPU for 10x speed)
+        run_miner = (stage1_model is not None) and (device != "cpu")
         if run_miner:
             with torch.inference_mode():
                 r = stage1_model.predict(img_bgr, imgsz=1536, conf=0.05, iou=0.55, max_det=300, device=device, verbose=False)[0]
@@ -524,8 +523,8 @@ def collect_split_crops(
 
 def main():
     p = argparse.ArgumentParser(description="Train Two-Stage YOLO High-Resolution ROI Verifier")
-    p.add_argument("--crop-size", type=int, default=192)
-    p.add_argument("--epochs", type=int, default=45)
+    p.add_argument("--crop-size", type=int, default=128)
+    p.add_argument("--epochs", type=int, default=30)
     p.add_argument("--batch-size", type=int, default=128)
     p.add_argument("--lr", type=float, default=1.5e-3)
     p.add_argument("--device", default="0" if torch.cuda.is_available() else "cpu")
@@ -535,7 +534,8 @@ def main():
     cfg = yaml.safe_load(open(DATA_YAML))
     root = Path(cfg["path"])
 
-    # Resolve our best pretrained YOLO backbones on disk (no internet download needed)
+    # Resolve our best pretrained YOLO backbones on disk (1 on CPU for 3x faster extraction, 2 on GPU)
+    max_backbones = 1 if args.device == "cpu" else 2
     cand_backbones = [
         "runs/r4_apex_yolo11m_1536/pcb-filtered/weights/best.pt",
         "runs/r4_apex_yolov12s_1536/pcb-filtered/weights/best.pt",
@@ -546,37 +546,48 @@ def main():
         pt = resolve_ckpt_path(c_str)
         if pt is not None:
             resolved_backbones.append((c_str, pt))
-        if len(resolved_backbones) >= 2:
+        if len(resolved_backbones) >= max_backbones:
             break
 
     assert len(resolved_backbones) >= 1, "No trained R4 YOLO checkpoint found to extract ROI pyramid features!"
     print(f"[Stage-2 ROI Verifier] Using {len(resolved_backbones)} pretrained YOLO backbones: {[x[0] for x in resolved_backbones]}")
 
-    # Use primary Stage-1 detector to mine real Hard-Negative False Positives on train/val boards
-    miner_model = YOLO(str(resolved_backbones[0][1]))
-    print("\n[Step 1/3] Collecting GT + 4x Rotated ElCap + Mined Stage-1 Hard-Negative ROI Crops...")
-    tr_crops, tr_geoms, tr_labels = collect_split_crops(
-        root, cfg["train"], miner_model, crop_size=args.crop_size, is_train=True, device=args.device
-    )
-    val_crops, val_geoms, val_labels = collect_split_crops(
-        root, cfg["val"], miner_model, crop_size=args.crop_size, is_train=False, device=args.device
-    )
-    del miner_model
-    gc.collect()
+    feat_cache_pt = Path("results/wbf_cache_v3") / f"roi_verifier_feats_sz{args.crop_size}.pt"
+    feat_cache_pt.parent.mkdir(parents=True, exist_ok=True)
 
-    print("\n[Step 2/3] Extracting Multi-Scale YOLO Pyramid + Radial-Circular Geometry Features...")
-    extractor = YoloBackbonePyramidFeatureExtractor(
-        [x[1] for x in resolved_backbones], device=args.device, crop_size=args.crop_size
-    )
-    X_train = extractor.extract_batch(tr_crops, tr_geoms, batch_size=64)
-    y_train = torch.tensor(tr_labels, dtype=torch.long)
-    del tr_crops, tr_geoms
-    gc.collect()
+    if feat_cache_pt.exists():
+        print(f"\n[Step 1-2/3] Loading cached ROI pyramid features from {feat_cache_pt}...")
+        fc = torch.load(str(feat_cache_pt), map_location="cpu", weights_only=False)
+        X_train, y_train = fc["X_train"], fc["y_train"]
+        X_val, y_val = fc["X_val"], fc["y_val"]
+    else:
+        miner_model = YOLO(str(resolved_backbones[0][1]))
+        print("\n[Step 1/3] Collecting GT + 4x Rotated ElCap + Mined Stage-1 Hard-Negative ROI Crops...")
+        tr_crops, tr_geoms, tr_labels = collect_split_crops(
+            root, cfg["train"], miner_model, crop_size=args.crop_size, is_train=True, device=args.device
+        )
+        val_crops, val_geoms, val_labels = collect_split_crops(
+            root, cfg["val"], miner_model, crop_size=args.crop_size, is_train=False, device=args.device
+        )
+        del miner_model
+        gc.collect()
 
-    X_val = extractor.extract_batch(val_crops, val_geoms, batch_size=64)
-    y_val = torch.tensor(val_labels, dtype=torch.long)
-    del val_crops, val_geoms, extractor
-    gc.collect()
+        print("\n[Step 2/3] Extracting Multi-Scale YOLO Pyramid + Radial-Circular Geometry Features...")
+        extractor = YoloBackbonePyramidFeatureExtractor(
+            [x[1] for x in resolved_backbones], device=args.device, crop_size=args.crop_size
+        )
+        X_train = extractor.extract_batch(tr_crops, tr_geoms, batch_size=64)
+        y_train = torch.tensor(tr_labels, dtype=torch.long)
+        del tr_crops, tr_geoms
+        gc.collect()
+
+        X_val = extractor.extract_batch(val_crops, val_geoms, batch_size=64)
+        y_val = torch.tensor(val_labels, dtype=torch.long)
+        del val_crops, val_geoms, extractor
+        gc.collect()
+
+        torch.save({"X_train": X_train, "y_train": y_train, "X_val": X_val, "y_val": y_val}, str(feat_cache_pt))
+        print(f"  Cached extracted features to {feat_cache_pt}")
 
     in_dim = int(X_train.shape[1])
     print(f"  Extracted feature dimension = {in_dim} | Train samples = {len(X_train)} | Val samples = {len(X_val)}")
@@ -596,6 +607,10 @@ def main():
 
     train_loader = DataLoader(TensorDataset(X_train, y_train), batch_size=args.batch_size, shuffle=True)
 
+    out_dir = Path("runs/r4_yolo_roi_verifier")
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out_pt = out_dir / "roi_verifier.pt"
+
     best_val_score = -1.0
     best_sd = None
     print("\n[Step 3/3] Training AttentiveCosineROIVerifier...")
@@ -604,7 +619,6 @@ def main():
         total_loss = 0.0
         for bx, by in train_loader:
             bx, by = bx.to(device_t), by.to(device_t)
-            # Feature-space Mixup (alpha=0.2) for calibrated probabilities
             if random.random() < 0.35 and len(bx) > 4:
                 lam = float(np.random.beta(0.2, 0.2))
                 perm = torch.randperm(len(bx), device=device_t)
@@ -626,7 +640,6 @@ def main():
             total_loss += float(loss.item()) * len(bx)
         scheduler.step()
 
-        # Evaluate on Val crops (specifically tracking Electrolytic Capacitor F1 + Hard-BG rejection accuracy)
         model.eval()
         with torch.inference_mode():
             val_logits = model(X_val.to(device_t)).cpu()
@@ -647,6 +660,19 @@ def main():
             if score > best_val_score:
                 best_val_score = score
                 best_sd = {k: v.cpu().clone() for k, v in model.state_dict().items()}
+                torch.save(
+                    {
+                        "state_dict": best_sd,
+                        "in_dim": in_dim,
+                        "hidden_dim": 512,
+                        "num_classes": 5,
+                        "crop_size": args.crop_size,
+                        "backbone_paths": [x[0] for x in resolved_backbones],
+                        "best_val_score": best_val_score,
+                        "classes": VERIFIER_CLASSES,
+                    },
+                    str(out_pt),
+                )
 
         if epoch % 5 == 0 or epoch == args.epochs:
             print(
@@ -656,22 +682,6 @@ def main():
                 flush=True,
             )
 
-    out_dir = Path("runs/r4_yolo_roi_verifier")
-    out_dir.mkdir(parents=True, exist_ok=True)
-    out_pt = out_dir / "roi_verifier.pt"
-    torch.save(
-        {
-            "state_dict": best_sd,
-            "in_dim": in_dim,
-            "hidden_dim": 512,
-            "num_classes": 5,
-            "crop_size": args.crop_size,
-            "backbone_paths": [x[0] for x in resolved_backbones],
-            "best_val_score": best_val_score,
-            "classes": VERIFIER_CLASSES,
-        },
-        str(out_pt),
-    )
     print(f"\n[Stage-2 ROI Verifier] Saved best verifier checkpoint to {out_pt} in {time.time() - t0:.1f}s.")
 
 
