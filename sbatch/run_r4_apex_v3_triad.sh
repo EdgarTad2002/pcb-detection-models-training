@@ -25,49 +25,40 @@ export OMP_NUM_THREADS=8
 export MKL_NUM_THREADS=8
 
 PY="/mnt/weka/etadevosyan/.conda/envs/pcb-yolo/bin/python"
+DATA_YAML="datasets/pcb-native-reviewed-r4-final/data.yaml"
 
 echo "========================================================================"
-echo "[Step 1/5] Rebuild R4-Final Copy-Paste v2 (3x ElCap Native Crops + 360-Rot + Sleeve Color)"
-echo "========================================================================"
-$PY build_r4_multiclass_copypaste.py \
-    --source datasets/pcb-native-reviewed-r4-final \
-    --dest datasets/pcb-r4-final-apex-v3-copypaste \
-    --siblings-per-img 1 \
-    --crops-per-img 1 \
-    --crop-size 1800
-
-echo "========================================================================"
-echo "[Step 2/5] Train Family 1: APEXv3_YOLO26s_STAL_1536 (Preserved STAL + ProgLoss + 5-Ch ElCap Head)"
+echo "[Step 1/4] Train Family 1: APEXv3_YOLO26s_STAL_1536 (Preserved STAL + ProgLoss + 5-Ch ElCap Head)"
 echo "========================================================================"
 $PY apex_r4_model.py \
     --run-key r4_apex_v3_yolo26s_stal_1536 \
     --weights yolo26s.pt \
-    --data datasets/pcb-r4-final-apex-v3-copypaste/data.yaml \
-    --eval-data datasets/pcb-native-reviewed-r4-final/data.yaml \
-    --imgsz 1536 --batch 4 --epochs 55 --patience 20 --lr0 0.0035
+    --data "$DATA_YAML" \
+    --eval-data "$DATA_YAML" \
+    --imgsz 1536 --batch 4 --epochs 80 --patience 25 --lr0 0.0035
 
 echo "========================================================================"
-echo "[Step 3/5] Train Family 2: APEXv3_YOLO11m_5Ch_1536 (5-Ch ElCap Radial Disk + Mutual Exclusion)"
+echo "[Step 2/4] Train Family 2: APEXv3_YOLO11m_5Ch_1536 (5-Ch ElCap Radial Disk + Mutual Exclusion)"
 echo "========================================================================"
 $PY apex_r4_model.py \
     --run-key r4_apex_v3_yolo11m_1536 \
     --weights yolo11m.pt \
-    --data datasets/pcb-r4-final-apex-v3-copypaste/data.yaml \
-    --eval-data datasets/pcb-native-reviewed-r4-final/data.yaml \
-    --imgsz 1536 --batch 4 --epochs 55 --patience 20 --lr0 0.0035
+    --data "$DATA_YAML" \
+    --eval-data "$DATA_YAML" \
+    --imgsz 1536 --batch 4 --epochs 80 --patience 25 --lr0 0.0035
 
 echo "========================================================================"
-echo "[Step 4/5] Train Family 3: APEXv3_YOLOv12s_5Ch_1536 (Area-Attention A2 + 5-Ch ElCap Radial Disk)"
+echo "[Step 3/4] Train Family 3: APEXv3_YOLOv12s_5Ch_1536 (Area-Attention A2 + 5-Ch ElCap Radial Disk)"
 echo "========================================================================"
 $PY apex_r4_model.py \
     --run-key r4_apex_v3_yolov12s_1536 \
     --weights yolo12s.pt \
-    --data datasets/pcb-r4-final-apex-v3-copypaste/data.yaml \
-    --eval-data datasets/pcb-native-reviewed-r4-final/data.yaml \
-    --imgsz 1536 --batch 4 --epochs 55 --patience 20 --lr0 0.0035
+    --data "$DATA_YAML" \
+    --eval-data "$DATA_YAML" \
+    --imgsz 1536 --batch 4 --epochs 80 --patience 25 --lr0 0.0035
 
 echo "========================================================================"
-echo "[Step 5/5] Run Stage-2 YOLO ROI Verifier + Quick WBF v4.2 Final Evaluation"
+echo "[Step 4/4] Run Stage-2 YOLO ROI Verifier + Quick WBF v4.4 Final Evaluation"
 echo "========================================================================"
 $PY train_yolo_roi_verifier.py --device 0 --crop-size 192 --epochs 40
 $PY quick_wbf.py
