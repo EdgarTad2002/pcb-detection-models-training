@@ -394,13 +394,22 @@ def main():
         gc.collect()
 
     # Also auto-load any additional cached models in `results/wbf_cache_v3/` not in `loaded_caches`
+    # while skipping exact metric duplicates (e.g. `APEX_YOLO11m` duplicating `APEX_11m_Single`)
+    seen_metric_sigs = {
+        (round(float(c["metrics"]["mAP50"]), 4), round(float(c["metrics"]["mAP50_95"]), 4))
+        for c in loaded_caches.values()
+    }
     for m_key, (_, cf) in cache_by_model_name.items():
         if m_key in loaded_caches:
             continue
         try:
             cached = torch.load(str(cf), map_location="cpu", weights_only=False)
             d = cached.get("metrics", {})
+            sig = (round(float(d.get("mAP50", 0.0)), 4), round(float(d.get("mAP50_95", 0.0)), 4))
+            if sig in seen_metric_sigs:
+                continue
             if d.get("mAP50", 0.0) >= 0.4150 and "per_img_base" in cached:
+                seen_metric_sigs.add(sig)
                 loaded_caches[m_key] = cached
                 used_models.append(m_key)
                 print(
@@ -527,10 +536,13 @@ def main():
     per_class_candidates = {
         0: [
             ("Cap_Full_Top8_P35", pool_full, 8, 3.5, 0.50, 1.00, 1.15, 0.85, 5),
+            ("Cap_Full_Top8_P32", pool_full, 8, 3.2, 0.50, 1.00, 1.15, 0.85, 5),
+            ("Cap_Full_Top6_P28", pool_full, 6, 2.8, 0.50, 1.00, 1.15, 0.85, 5),
             ("Cap_DeCorr_Top6_P28", pool_decorr, 6, 2.8, 0.50, 1.00, 1.15, 0.85, 5),
             ("Cap_DeCorr_Top7_P30", pool_decorr, 7, 3.0, 0.50, 1.00, 1.15, 0.85, 5),
         ],
         1: [
+            ("Conn_Full_Top7_P22", pool_full, 7, 2.2, 0.55, 1.00, 1.05, 0.45, 5),
             ("Conn_Full_Top8_P35", pool_full, 8, 3.5, 0.56, 1.00, 1.15, 0.40, 5),
             ("Conn_Full_All_P22", pool_full, 99, 2.2, 0.55, 1.00, 1.00, 0.45, 5),
             ("Conn_Full_Top10_P28", pool_full, 10, 2.8, 0.55, 1.00, 1.10, 0.45, 5),
@@ -539,11 +551,13 @@ def main():
         2: [
             ("ElCap_Full_Top8_P35", pool_full, 8, 3.5, 0.56, 1.00, 1.15, 0.35, 5),
             ("ElCap_Full_Top6_P35", pool_full, 6, 3.5, 0.55, 1.00, 1.10, 0.35, 5),
+            ("ElCap_Full_Top5_P30", pool_full, 5, 3.0, 0.55, 1.00, 1.10, 0.35, 5),
             ("ElCap_Full_Top5_Soft", pool_full, 5, 3.2, 0.54, 0.82, 0.90, 0.40, 5),
             ("ElCap_DeCorr_Top5_P30", pool_decorr, 5, 3.0, 0.55, 1.00, 1.05, 0.35, 4),
         ],
         3: [
             ("IC_Full_Top6_P28", pool_full, 6, 2.8, 0.56, 1.00, 1.15, 0.25, 5),
+            ("IC_Full_Top6_P30", pool_full, 6, 3.0, 0.56, 1.00, 1.15, 0.25, 5),
             ("IC_Full_Top8_P35", pool_full, 8, 3.5, 0.56, 1.00, 1.15, 0.25, 5),
             ("IC_Full_All_P28", pool_full, 99, 2.8, 0.56, 1.00, 1.15, 0.25, 5),
             ("IC_DeCorr_Top6_P28", pool_decorr, 6, 2.8, 0.56, 1.00, 1.15, 0.25, 5),
@@ -611,13 +625,13 @@ def main():
             _, peak_noxcls = eval_fused_per_cls(optimal_cls_streams, use_xcls=False)
             _, peak_xcls = eval_fused_per_cls(optimal_cls_streams, use_xcls=True)
 
-            # Precompute Stage-2 ROI probabilities on Class 2 (Electrolytic Capacitor) & Class 1 (Connector)
+            # Precompute Stage-2 ROI probabilities exclusively on Class 2 (Electrolytic Capacitor)
             roi_probs_per_img = []
             for i, (im_path, H, W, gt_b, gt_c) in enumerate(recs):
                 img_bgr = cv2.imread(str(im_path))
                 cls_fb, cls_fs = peak_noxcls[i]
                 img_probs = {}
-                for k in (1, 2, 3):
+                for k in (2,):
                     fb, fs = cls_fb[k], cls_fs[k]
                     active = fs >= 0.010
                     probs = np.zeros((len(fs), 5), dtype=np.float32)
@@ -630,7 +644,7 @@ def main():
             # Sweep Stage-2 verifier blending specifically on Class 2 (Electrolytic Capacitor),
             # keeping Class 0 (Capacitor), Class 1 (Connector), and Class 3 (IC) at their locked peaks!
             for base_tag, base_fused in (("NoXCls", peak_noxcls), ("ForensicXCls", peak_xcls)):
-                for alpha_elcap in (0.35, 0.50, 0.65, 0.80):
+                for alpha_elcap in (0.50, 0.65, 0.80, 0.90, 1.00):
                     st = []
                     for i in range(len(recs)):
                         cls_fb, cls_fs = base_fused[i]
