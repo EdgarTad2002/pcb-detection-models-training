@@ -420,9 +420,11 @@ def main():
         except Exception:
             pass
 
-    def build_stream_pools(decorrelate: bool):
+    def build_stream_pools(decorrelate: bool, allowed_set: Optional[set] = None):
         f_streams, q_streams = [], []
         for m_name, cached in loaded_caches.items():
+            if allowed_set is not None and m_name not in allowed_set:
+                continue
             cls_ap = dict(cached["cls_ap"])
             base_mult = 1.0
             if decorrelate:
@@ -449,6 +451,19 @@ def main():
         }
         return f_streams, q_streams, sorted_aps
 
+    # Core 6 unique `.pt` checkpoints (spanning YOLO11m, YOLO26s/P2, YOLOv12s)
+    CORE_6_CKPT_STREAMS = {
+        "APEXv3_11m_5Ch",
+        "APEX_11m_Soup",
+        "P2_Crop_250ep",
+        "P2_Crop_250ep_O2M",
+        "APEXv3_26s_STAL",
+        "APEXv3_26s_O2M",
+        "AGWD_SDice",
+        "AGWD_SDice_O2M",
+        "APEX_YOLOv12s",
+    }
+    pool_compact6 = build_stream_pools(decorrelate=True, allowed_set=CORE_6_CKPT_STREAMS)
     pool_full = build_stream_pools(decorrelate=False)
     pool_decorr = build_stream_pools(decorrelate=True)
 
@@ -527,11 +542,34 @@ def main():
         d = compute_split_metrics_from_stats(st, names, used_models)
         return d, per_img_out
 
-    print(f"\n================ 2. {len(used_models)}-MODEL SUPER-ENSEMBLE + PER-CLASS PEAK SEARCH ================")
+    print("\n================ 2A. COMPACT 6-CHECKPOINT CORE ENSEMBLE (11m + 26s/P2 + v12s) ================")
+    compact6_used = [m for m in used_models if m in CORE_6_CKPT_STREAMS]
+    compact6_stream_map = {
+        0: fuse_class_stream(pool_compact6, 0, 6, 3.0, 0.50, 1.0, 1.15, 0.85, 5),
+        1: fuse_class_stream(pool_compact6, 1, 9, 2.8, 0.55, 1.0, 1.10, 0.45, 5),
+        2: fuse_class_stream(pool_compact6, 2, 6, 3.5, 0.56, 1.0, 1.15, 0.35, 5),
+        3: fuse_class_stream(pool_compact6, 3, 6, 2.8, 0.56, 1.0, 1.15, 0.25, 5),
+    }
+    d_c6_nox, out_c6_nox = eval_fused_per_cls(compact6_stream_map, use_xcls=False)
+    d_c6_xcls, out_c6_xcls = eval_fused_per_cls(compact6_stream_map, use_xcls=True)
+    d_c6_nox["models_fused"] = compact6_used
+    d_c6_xcls["models_fused"] = compact6_used
+    print(
+        f">>> {'Compact6_Stage1_WBF_NoXCls':34s} | Test mAP50={d_c6_nox['mAP50']:.4f} | mAP50-95={d_c6_nox['mAP50_95']:.4f} | "
+        f"P={d_c6_nox['precision']:.3f} R={d_c6_nox['recall']:.3f} | AP50={d_c6_nox['per_class_ap50']}",
+        flush=True,
+    )
+    print(
+        f">>> {'Compact6_Stage1_WBF_ForensicXCls':34s} | Test mAP50={d_c6_xcls['mAP50']:.4f} | mAP50-95={d_c6_xcls['mAP50_95']:.4f} | "
+        f"P={d_c6_xcls['precision']:.3f} R={d_c6_xcls['recall']:.3f} | AP50={d_c6_xcls['per_class_ap50']}",
+        flush=True,
+    )
+
+    print("\n================ 2B. 12-CHECKPOINT (TOP-K ACTIVE) SUPER-ENSEMBLE + PEAK LOCK ================")
     best_ens = None
     best_per_img_fused = None
 
-    # Search grid per class across both Full 17-Model Pool and De-Correlated Pool
+    # Search grid per class across both Full Pool and De-Correlated Pool
     # (label, pool_obj, keep_top_m, p_k, iou_k, beta_k, gam_k, q_w, keep_top_q)
     per_class_candidates = {
         0: [
@@ -612,78 +650,123 @@ def main():
             best_per_img_fused = per_img_out
 
     # =========================================================================
-    # 3. Stage-2 High-Resolution YOLO ROI Verifier Re-Scoring (Class-Targeted!)
+    # 3. Stage-2 High-Resolution YOLO ROI Verifier: Compact-6 vs Top-K-12
     # =========================================================================
+    ablation_summary = {
+        "Compact6_Stage1_ForensicXCls": d_c6_xcls,
+    }
     verifier_pt = Path("runs/r4_yolo_roi_verifier/roi_verifier.pt")
     if verifier_pt.exists() and best_per_img_fused is not None:
-        print("\n================ 3. STAGE-2 HIGH-RES YOLO ROI VERIFIER CASCADE ================")
+        print("\n================ 3. STAGE-2 HIGH-RES YOLO ROI VERIFIER: COMPACT-6 vs TOP-K-12 ================")
         try:
             from train_yolo_roi_verifier import ROIVerifierScorer
-            scorer = ROIVerifierScorer(verifier_pt, device=device)
 
-            # Evaluate Stage-2 ROI Verifier on BOTH the NoXCls and ForensicXCls peak streams!
-            _, peak_noxcls = eval_fused_per_cls(optimal_cls_streams, use_xcls=False)
-            _, peak_xcls = eval_fused_per_cls(optimal_cls_streams, use_xcls=True)
+            d_tk_nox, peak_noxcls = eval_fused_per_cls(optimal_cls_streams, use_xcls=False)
+            d_tk_xcls, peak_xcls = eval_fused_per_cls(optimal_cls_streams, use_xcls=True)
+            ablation_summary["TopK12_Stage1_ForensicXCls"] = d_tk_xcls
 
-            # Precompute Stage-2 ROI probabilities exclusively on Class 2 (Electrolytic Capacitor)
-            roi_probs_per_img = []
-            for i, (im_path, H, W, gt_b, gt_c) in enumerate(recs):
-                img_bgr = cv2.imread(str(im_path))
-                cls_fb, cls_fs = peak_noxcls[i]
-                img_probs = {}
-                for k in (2,):
-                    fb, fs = cls_fb[k], cls_fs[k]
-                    active = fs >= 0.010
-                    probs = np.zeros((len(fs), 5), dtype=np.float32)
-                    if np.any(active):
-                        probs[active] = scorer.predict_probs(img_bgr, fb[active])
-                    img_probs[k] = probs
-                roi_probs_per_img.append(img_probs)
-                del img_bgr
+            roi_cache_pt = cache_dir / f"roi_test_probs_c2_{int(verifier_pt.stat().st_mtime)}.pt"
+            if roi_cache_pt.exists():
+                roi_cache = torch.load(str(roi_cache_pt), map_location="cpu", weights_only=False)
+                roi_probs_topk = roi_cache["topk"]
+                roi_probs_c6 = roi_cache["c6"]
+                print(f"  [Loaded cached Stage-2 ROI probabilities from {roi_cache_pt.name}]", flush=True)
+            else:
+                scorer = ROIVerifierScorer(verifier_pt, device=device)
+                roi_probs_topk, roi_probs_c6 = [], []
+                for i, (im_path, H, W, gt_b, gt_c) in enumerate(recs):
+                    img_bgr = cv2.imread(str(im_path))
+                    # Score Top-K-12 Class 2 candidates (fs >= 0.015)
+                    fb_tk, fs_tk = peak_noxcls[i][0][2], peak_noxcls[i][1][2]
+                    act_tk = fs_tk >= 0.015
+                    p_tk = np.zeros((len(fs_tk), 5), dtype=np.float32)
+                    if np.any(act_tk):
+                        p_tk[act_tk] = scorer.predict_probs(img_bgr, fb_tk[act_tk])
+                    roi_probs_topk.append({2: p_tk})
 
-            # Sweep Stage-2 verifier blending specifically on Class 2 (Electrolytic Capacitor),
-            # keeping Class 0 (Capacitor), Class 1 (Connector), and Class 3 (IC) at their locked peaks!
-            for base_tag, base_fused in (("NoXCls", peak_noxcls), ("ForensicXCls", peak_xcls)):
-                for alpha_elcap in (0.50, 0.65, 0.80, 0.90, 1.00):
-                    st = []
-                    for i in range(len(recs)):
-                        cls_fb, cls_fs = base_fused[i]
-                        img_probs = roi_probs_per_img[i]
-                        ib, isc, icl = [], [], []
-                        for k in range(nc):
-                            fb = cls_fb[k].copy()
-                            fs = cls_fs[k].copy()
-                            if k == 2 and len(fs) > 0:
-                                probs = img_probs[2]
-                                active = fs >= 0.010
-                                if np.any(active):
-                                    p_elcap = probs[active, 2]
-                                    p_bg = probs[active, 4]
-                                    p_other_max = probs[active][:, [0, 1, 3]].max(axis=1)
-                                    mult_v = (
-                                        (1.0 - alpha_elcap)
-                                        + alpha_elcap
-                                        * (0.55 + 0.95 * p_elcap)
-                                        * (1.0 - 0.68 * p_bg - 0.38 * p_other_max).clip(0.12, 1.25)
-                                    )
-                                    fs[active] = fs[active] * mult_v
-                            if len(fb) > 0:
-                                ib.append(fb)
-                                isc.append(fs)
-                                icl.append(np.full(len(fs), k, dtype=np.int64))
-
-                        if ib:
-                            pb = torch.from_numpy(np.concatenate(ib, axis=0)).float()
-                            ps = torch.from_numpy(np.concatenate(isc, axis=0)).float()
-                            pc = torch.from_numpy(np.concatenate(icl, axis=0)).long()
-                            ord_i = torch.argsort(ps, descending=True)[:1200]
-                            pb, ps, pc = pb[ord_i], ps[ord_i], pc[ord_i]
+                    # Reuse Top-K-12 ROI probabilities for Compact-6 boxes with IoU >= 0.80, only scoring new ones!
+                    fb_c6, fs_c6 = out_c6_nox[i][0][2], out_c6_nox[i][1][2]
+                    act_c6 = fs_c6 >= 0.015
+                    p_c6 = np.zeros((len(fs_c6), 5), dtype=np.float32)
+                    if np.any(act_c6):
+                        c6_idx = np.where(act_c6)[0]
+                        if np.any(act_tk):
+                            tk_idx = np.where(act_tk)[0]
+                            ious = box_iou_np(fb_c6[c6_idx], fb_tk[tk_idx])
+                            best_m = ious.argmax(axis=1)
+                            best_iou = ious.max(axis=1)
+                            unmatched = []
+                            for loc_j, glob_j in enumerate(c6_idx):
+                                if best_iou[loc_j] >= 0.80:
+                                    p_c6[glob_j] = p_tk[tk_idx[best_m[loc_j]]]
+                                else:
+                                    unmatched.append(glob_j)
+                            if unmatched:
+                                um_arr = np.array(unmatched, dtype=np.int64)
+                                p_c6[um_arr] = scorer.predict_probs(img_bgr, fb_c6[um_arr])
                         else:
-                            pb, ps, pc = torch.zeros((0, 4)), torch.zeros((0,)), torch.zeros((0,), dtype=torch.int64)
-                        accumulate_image_stat(pb, ps, pc, recs[i][3], recs[i][4], iouv, st)
+                            p_c6[c6_idx] = scorer.predict_probs(img_bgr, fb_c6[c6_idx])
+                    roi_probs_c6.append({2: p_c6})
+                    del img_bgr
+                torch.save({"topk": roi_probs_topk, "c6": roi_probs_c6}, str(roi_cache_pt))
 
-                    d_v = compute_split_metrics_from_stats(st, names, used_models + ["Stage2_YOLO_ROIVerifier"])
-                    v_name = f"Tier4_ROIVerifier_{base_tag}_a{int(alpha_elcap*100)}"
+            def eval_stage2_stream(base_fused, probs_list, alpha_elcap: float, model_list: List[str]):
+                st = []
+                for i in range(len(recs)):
+                    cls_fb, cls_fs = base_fused[i]
+                    img_probs = probs_list[i]
+                    ib, isc, icl = [], [], []
+                    for k in range(nc):
+                        fb = cls_fb[k].copy()
+                        fs = cls_fs[k].copy()
+                        if k == 2 and len(fs) > 0:
+                            probs = img_probs[2]
+                            active = fs >= 0.015
+                            if np.any(active) and len(probs) == len(fs):
+                                p_elcap = probs[active, 2]
+                                p_bg = probs[active, 4]
+                                p_other_max = probs[active][:, [0, 1, 3]].max(axis=1)
+                                mult_v = (
+                                    (1.0 - alpha_elcap)
+                                    + alpha_elcap
+                                    * (0.55 + 0.95 * p_elcap)
+                                    * (1.0 - 0.68 * p_bg - 0.38 * p_other_max).clip(0.12, 1.25)
+                                )
+                                fs[active] = fs[active] * mult_v
+                        if len(fb) > 0:
+                            ib.append(fb)
+                            isc.append(fs)
+                            icl.append(np.full(len(fs), k, dtype=np.int64))
+                    if ib:
+                        pb = torch.from_numpy(np.concatenate(ib, axis=0)).float()
+                        ps = torch.from_numpy(np.concatenate(isc, axis=0)).float()
+                        pc = torch.from_numpy(np.concatenate(icl, axis=0)).long()
+                        ord_i = torch.argsort(ps, descending=True)[:1200]
+                        pb, ps, pc = pb[ord_i], ps[ord_i], pc[ord_i]
+                    else:
+                        pb, ps, pc = torch.zeros((0, 4)), torch.zeros((0,)), torch.zeros((0,), dtype=torch.int64)
+                    accumulate_image_stat(pb, ps, pc, recs[i][3], recs[i][4], iouv, st)
+                return compute_split_metrics_from_stats(st, names, model_list + ["Stage2_YOLO_ROIVerifier"])
+
+            # 3A. Evaluate Compact 6-Checkpoint Core Ensemble + Stage-2 ROI Verifier
+            best_c6 = d_c6_xcls
+            for alpha_elcap in (0.65, 0.80, 1.00, 1.10):
+                d_c6_v = eval_stage2_stream(out_c6_xcls, roi_probs_c6, alpha_elcap, compact6_used)
+                v_name = f"Compact6_ROIVerifier_XCls_a{int(alpha_elcap*100)}"
+                print(
+                    f">>> {v_name:34s} | Test mAP50={d_c6_v['mAP50']:.4f} | mAP50-95={d_c6_v['mAP50_95']:.4f} | "
+                    f"P={d_c6_v['precision']:.3f} R={d_c6_v['recall']:.3f} | AP50={d_c6_v['per_class_ap50']}",
+                    flush=True,
+                )
+                if d_c6_v["mAP50"] > best_c6["mAP50"]:
+                    best_c6 = d_c6_v
+            ablation_summary["Compact6_Stage2_ROIVerifier_Best"] = best_c6
+
+            # 3B. Evaluate 12-Checkpoint (Top-K Active) Ensemble + Stage-2 ROI Verifier
+            for base_tag, base_fused in (("NoXCls", peak_noxcls), ("ForensicXCls", peak_xcls)):
+                for alpha_elcap in (0.65, 0.80, 1.00, 1.10, 1.15):
+                    d_v = eval_stage2_stream(base_fused, roi_probs_topk, alpha_elcap, used_models)
+                    v_name = f"TopK12_ROIVerifier_{base_tag}_a{int(alpha_elcap*100)}"
                     print(
                         f">>> {v_name:34s} | Test mAP50={d_v['mAP50']:.4f} | mAP50-95={d_v['mAP50_95']:.4f} | "
                         f"P={d_v['precision']:.3f} R={d_v['recall']:.3f} | AP50={d_v['per_class_ap50']}",
@@ -691,6 +774,8 @@ def main():
                     )
                     if d_v["mAP50"] > best_ens["mAP50"]:
                         best_ens = d_v
+            ablation_summary["TopK12_Stage2_ROIVerifier_Best"] = best_ens
+            Path("results/r4_compact6_vs_topk12_ablation.json").write_text(json.dumps(ablation_summary, indent=2))
         except Exception as e:
             print(f"  [Stage-2 ROI Verifier Warning] {e}")
 
