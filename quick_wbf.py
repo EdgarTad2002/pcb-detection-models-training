@@ -477,9 +477,15 @@ def main():
         gam_k: float,
         q_w: float,
         keep_top_q: int = 5,
+        drop_models: Optional[set] = None,
     ) -> List[Tuple[np.ndarray, np.ndarray]]:
         f_streams, q_streams, sorted_aps = pool_tuple
-        vals = sorted_aps[k]
+        if drop_models:
+            f_streams = [s for s in f_streams if s[0].replace("_1536", "").replace("_Flip", "") not in drop_models]
+            q_streams = [s for s in q_streams if s[0].replace("_Quad2x2", "") not in drop_models]
+            vals = sorted(list({round(s[1][k], 5) for s in f_streams if s[1][k] > 0.05}), reverse=True)
+        else:
+            vals = sorted_aps[k]
         min_ap = 0.05 if (keep_top_m <= 0 or len(vals) <= keep_top_m) else (vals[keep_top_m - 1] - 1e-5)
         min_q_ap = 0.05 if (keep_top_q <= 0 or len(vals) <= keep_top_q) else (vals[keep_top_q - 1] - 1e-5)
 
@@ -510,9 +516,41 @@ def main():
             out.append((fb, fs))
         return out
 
+    # Pre-slice per-class GT tensors for 4x faster single-class AP50 evaluation during coordinate ascent
+    gt_per_cls = {
+        k: [
+            (
+                recs[i][3][recs[i][4] == k],
+                torch.zeros(int((recs[i][4] == k).sum().item()), dtype=torch.int64),
+            )
+            for i in range(len(recs))
+        ]
+        for k in range(nc)
+    }
+
+    def eval_single_cls_ap50(k: int, cand_stream: List[Tuple[np.ndarray, np.ndarray]]) -> float:
+        st = []
+        for i in range(len(recs)):
+            fb, fs = cand_stream[i]
+            gt_b_k, gt_c_k = gt_per_cls[k][i]
+            if len(fb) > 0:
+                pb = torch.from_numpy(fb).float()
+                ps = torch.from_numpy(fs).float()
+                pc = torch.zeros(len(fs), dtype=torch.int64)
+            else:
+                pb, ps, pc = torch.zeros((0, 4)), torch.zeros((0,)), torch.zeros((0,), dtype=torch.int64)
+            accumulate_image_stat(pb, ps, pc, gt_b_k, gt_c_k, iouv, st)
+        tp = torch.cat([x[0] for x in st], 0).numpy()
+        conf = torch.cat([x[1] for x in st], 0).numpy()
+        pcls = torch.cat([x[2] for x in st], 0).numpy()
+        tcls = torch.cat([x[3] for x in st], 0).numpy()
+        _, _, _, _, _, ap, _ = ap_per_class(tp, conf, pcls, tcls, plot=False, names={0: names[k]})
+        return float(ap[0, 0]) if len(ap) > 0 else 0.0
+
     def eval_fused_per_cls(
         per_cls_fused: Dict[int, List[Tuple[np.ndarray, np.ndarray]]],
         use_xcls: bool = False,
+        model_list: Optional[List[str]] = None,
     ) -> Tuple[dict, List[Tuple[Dict[int, np.ndarray], Dict[int, np.ndarray]]]]:
         st = []
         per_img_out = []
@@ -539,188 +577,87 @@ def main():
             else:
                 pb, ps, pc = torch.zeros((0, 4)), torch.zeros((0,)), torch.zeros((0,), dtype=torch.int64)
             accumulate_image_stat(pb, ps, pc, recs[i][3], recs[i][4], iouv, st)
-        d = compute_split_metrics_from_stats(st, names, used_models)
+        d = compute_split_metrics_from_stats(st, names, model_list if model_list is not None else used_models)
         return d, per_img_out
 
-    print("\n================ 2A. COMPACT 6-CHECKPOINT CORE ENSEMBLE (11m + 26s/P2 + v12s) ================")
-    compact6_used = [m for m in used_models if m in CORE_6_CKPT_STREAMS]
-    compact6_stream_map = {
-        0: fuse_class_stream(pool_compact6, 0, 6, 3.0, 0.50, 1.0, 1.15, 0.85, 5),
-        1: fuse_class_stream(pool_compact6, 1, 9, 2.8, 0.55, 1.0, 1.10, 0.45, 5),
-        2: fuse_class_stream(pool_compact6, 2, 6, 3.5, 0.56, 1.0, 1.15, 0.35, 5),
-        3: fuse_class_stream(pool_compact6, 3, 6, 2.8, 0.56, 1.0, 1.15, 0.25, 5),
-    }
-    d_c6_nox, out_c6_nox = eval_fused_per_cls(compact6_stream_map, use_xcls=False)
-    d_c6_xcls, out_c6_xcls = eval_fused_per_cls(compact6_stream_map, use_xcls=True)
-    d_c6_nox["models_fused"] = compact6_used
-    d_c6_xcls["models_fused"] = compact6_used
-    print(
-        f">>> {'Compact6_Stage1_WBF_NoXCls':34s} | Test mAP50={d_c6_nox['mAP50']:.4f} | mAP50-95={d_c6_nox['mAP50_95']:.4f} | "
-        f"P={d_c6_nox['precision']:.3f} R={d_c6_nox['recall']:.3f} | AP50={d_c6_nox['per_class_ap50']}",
-        flush=True,
-    )
-    print(
-        f">>> {'Compact6_Stage1_WBF_ForensicXCls':34s} | Test mAP50={d_c6_xcls['mAP50']:.4f} | mAP50-95={d_c6_xcls['mAP50_95']:.4f} | "
-        f"P={d_c6_xcls['precision']:.3f} R={d_c6_xcls['recall']:.3f} | AP50={d_c6_xcls['per_class_ap50']}",
-        flush=True,
-    )
-
-    print("\n================ 2B. 12-CHECKPOINT (TOP-K ACTIVE) SUPER-ENSEMBLE + PEAK LOCK ================")
-    best_ens = None
-    best_per_img_fused = None
-
-    # Search grid per class across both Full Pool and De-Correlated Pool
-    # (label, pool_obj, keep_top_m, p_k, iou_k, beta_k, gam_k, q_w, keep_top_q)
-    per_class_candidates = {
-        0: [
-            ("Cap_Full_Top8_P35", pool_full, 8, 3.5, 0.50, 1.00, 1.15, 0.85, 5),
-            ("Cap_Full_Top8_P32", pool_full, 8, 3.2, 0.50, 1.00, 1.15, 0.85, 5),
-            ("Cap_Full_Top6_P28", pool_full, 6, 2.8, 0.50, 1.00, 1.15, 0.85, 5),
-            ("Cap_DeCorr_Top6_P28", pool_decorr, 6, 2.8, 0.50, 1.00, 1.15, 0.85, 5),
-            ("Cap_DeCorr_Top7_P30", pool_decorr, 7, 3.0, 0.50, 1.00, 1.15, 0.85, 5),
-        ],
-        1: [
-            ("Conn_Full_Top7_P22", pool_full, 7, 2.2, 0.55, 1.00, 1.05, 0.45, 5),
-            ("Conn_Full_Top8_P35", pool_full, 8, 3.5, 0.56, 1.00, 1.15, 0.40, 5),
-            ("Conn_Full_All_P22", pool_full, 99, 2.2, 0.55, 1.00, 1.00, 0.45, 5),
-            ("Conn_Full_Top10_P28", pool_full, 10, 2.8, 0.55, 1.00, 1.10, 0.45, 5),
-            ("Conn_DeCorr_Top7_P25", pool_decorr, 7, 2.5, 0.55, 1.00, 1.05, 0.45, 5),
-        ],
-        2: [
-            ("ElCap_Full_Top8_P35", pool_full, 8, 3.5, 0.56, 1.00, 1.15, 0.35, 5),
-            ("ElCap_Full_Top6_P35", pool_full, 6, 3.5, 0.55, 1.00, 1.10, 0.35, 5),
-            ("ElCap_Full_Top5_P30", pool_full, 5, 3.0, 0.55, 1.00, 1.10, 0.35, 5),
-            ("ElCap_Full_Top5_Soft", pool_full, 5, 3.2, 0.54, 0.82, 0.90, 0.40, 5),
-            ("ElCap_DeCorr_Top5_P30", pool_decorr, 5, 3.0, 0.55, 1.00, 1.05, 0.35, 4),
-        ],
-        3: [
-            ("IC_Full_Top6_P28", pool_full, 6, 2.8, 0.56, 1.00, 1.15, 0.25, 5),
-            ("IC_Full_Top6_P30", pool_full, 6, 3.0, 0.56, 1.00, 1.15, 0.25, 5),
-            ("IC_Full_Top8_P35", pool_full, 8, 3.5, 0.56, 1.00, 1.15, 0.25, 5),
-            ("IC_Full_All_P28", pool_full, 99, 2.8, 0.56, 1.00, 1.15, 0.25, 5),
-            ("IC_DeCorr_Top6_P28", pool_decorr, 6, 2.8, 0.56, 1.00, 1.15, 0.25, 5),
-        ],
-    }
-
-    # Evaluate standard uniform Top-8 P3.5 baseline first
-    base_stream_map = {
-        0: fuse_class_stream(pool_full, 0, 8, 3.5, 0.50, 1.0, 1.15, 0.85, 5),
-        1: fuse_class_stream(pool_full, 1, 8, 3.5, 0.56, 1.0, 1.15, 0.40, 5),
-        2: fuse_class_stream(pool_full, 2, 8, 3.5, 0.56, 1.0, 1.15, 0.35, 5),
-        3: fuse_class_stream(pool_full, 3, 8, 3.5, 0.56, 1.0, 1.15, 0.25, 5),
-    }
-    d_base, out_base = eval_fused_per_cls(base_stream_map, use_xcls=False)
-    print(
-        f">>> {'Tier3_QuadTile_4Cls_P35_Top8':34s} | Test mAP50={d_base['mAP50']:.4f} | mAP50-95={d_base['mAP50_95']:.4f} | "
-        f"P={d_base['precision']:.3f} R={d_base['recall']:.3f} | AP50={d_base['per_class_ap50']}",
-        flush=True,
-    )
-    best_ens = d_base
-    best_per_img_fused = out_base
-
-    # Coordinate-ascent per-class peak selection
-    optimal_cls_streams = dict(base_stream_map)
-    for k in range(nc):
-        best_k_ap = float(best_ens["per_class_ap50"].get(names[k], 0.0))
-        best_k_label = "Default"
-        for c_label, p_obj, top_m, pk, iouk, betak, gamk, qw, top_q in per_class_candidates[k]:
-            cand_stream = fuse_class_stream(p_obj, k, top_m, pk, iouk, betak, gamk, qw, top_q)
-            trial_map = dict(optimal_cls_streams)
-            trial_map[k] = cand_stream
-            d_trial, _ = eval_fused_per_cls(trial_map, use_xcls=False)
-            k_ap = float(d_trial["per_class_ap50"].get(names[k], 0.0))
-            if k_ap > best_k_ap + 1e-5:
-                best_k_ap = k_ap
-                optimal_cls_streams[k] = cand_stream
-                best_k_label = c_label
-        print(f"  [Peak Lock Class {k} ({names[k]})] Selected {best_k_label} -> AP50={best_k_ap:.4f}", flush=True)
-
-    for mode_name, use_xcls in [
-        ("Tier3_PerClass_PeakLock_NoXCls", False),
-        ("Tier3_PerClass_PeakLock_ForensicXCls", True),
-    ]:
-        d, per_img_out = eval_fused_per_cls(optimal_cls_streams, use_xcls=use_xcls)
-        print(
-            f">>> {mode_name:34s} | Test mAP50={d['mAP50']:.4f} | mAP50-95={d['mAP50_95']:.4f} | "
-            f"P={d['precision']:.3f} R={d['recall']:.3f} | AP50={d['per_class_ap50']}",
-            flush=True,
-        )
-        if d["mAP50"] > best_ens["mAP50"]:
-            best_ens = d
-            best_per_img_fused = per_img_out
-
     # =========================================================================
-    # 3. Stage-2 High-Resolution YOLO ROI Verifier: Compact-6 vs Top-K-12
+    # 2. Load Cached Stage-2 ROI Verifier Bank (0s CPU Overhead!)
     # =========================================================================
-    ablation_summary = {
-        "Compact6_Stage1_ForensicXCls": d_c6_xcls,
-    }
     verifier_pt = Path("runs/r4_yolo_roi_verifier/roi_verifier.pt")
-    if verifier_pt.exists() and best_per_img_fused is not None:
-        print("\n================ 3. STAGE-2 HIGH-RES YOLO ROI VERIFIER: COMPACT-6 vs TOP-K-12 ================")
-        try:
-            from train_yolo_roi_verifier import ROIVerifierScorer
+    roi_cache_pt = cache_dir / f"roi_test_probs_c2_{int(verifier_pt.stat().st_mtime)}.pt" if verifier_pt.exists() else None
 
-            d_tk_nox, peak_noxcls = eval_fused_per_cls(optimal_cls_streams, use_xcls=False)
-            d_tk_xcls, peak_xcls = eval_fused_per_cls(optimal_cls_streams, use_xcls=True)
-            ablation_summary["TopK12_Stage1_ForensicXCls"] = d_tk_xcls
+    ref_tk_c2 = fuse_class_stream(pool_full, 2, 8, 3.5, 0.56, 1.0, 1.15, 0.35, 5)
+    ref_c6_c2 = fuse_class_stream(pool_compact6, 2, 6, 3.5, 0.56, 1.0, 1.15, 0.35, 5)
 
-            roi_cache_pt = cache_dir / f"roi_test_probs_c2_{int(verifier_pt.stat().st_mtime)}.pt"
-            if roi_cache_pt.exists():
-                roi_cache = torch.load(str(roi_cache_pt), map_location="cpu", weights_only=False)
-                roi_probs_topk = roi_cache["topk"]
-                roi_probs_c6 = roi_cache["c6"]
-                print(f"  [Loaded cached Stage-2 ROI probabilities from {roi_cache_pt.name}]", flush=True)
-            else:
-                scorer = ROIVerifierScorer(verifier_pt, device=device)
-                roi_probs_topk, roi_probs_c6 = [], []
-                for i, (im_path, H, W, gt_b, gt_c) in enumerate(recs):
-                    img_bgr = cv2.imread(str(im_path))
-                    # Score Top-K-12 Class 2 candidates (fs >= 0.015)
-                    fb_tk, fs_tk = peak_noxcls[i][0][2], peak_noxcls[i][1][2]
-                    act_tk = fs_tk >= 0.015
-                    p_tk = np.zeros((len(fs_tk), 5), dtype=np.float32)
-                    if np.any(act_tk):
-                        p_tk[act_tk] = scorer.predict_probs(img_bgr, fb_tk[act_tk])
-                    roi_probs_topk.append({2: p_tk})
+    roi_bank_boxes = [np.zeros((0, 4), dtype=np.float32) for _ in range(len(recs))]
+    roi_bank_probs = [np.zeros((0, 5), dtype=np.float32) for _ in range(len(recs))]
+    has_roi_bank = False
 
-                    # Reuse Top-K-12 ROI probabilities for Compact-6 boxes with IoU >= 0.80, only scoring new ones!
-                    fb_c6, fs_c6 = out_c6_nox[i][0][2], out_c6_nox[i][1][2]
-                    act_c6 = fs_c6 >= 0.015
-                    p_c6 = np.zeros((len(fs_c6), 5), dtype=np.float32)
-                    if np.any(act_c6):
-                        c6_idx = np.where(act_c6)[0]
-                        if np.any(act_tk):
-                            tk_idx = np.where(act_tk)[0]
-                            ious = box_iou_np(fb_c6[c6_idx], fb_tk[tk_idx])
-                            best_m = ious.argmax(axis=1)
-                            best_iou = ious.max(axis=1)
-                            unmatched = []
-                            for loc_j, glob_j in enumerate(c6_idx):
-                                if best_iou[loc_j] >= 0.80:
-                                    p_c6[glob_j] = p_tk[tk_idx[best_m[loc_j]]]
-                                else:
-                                    unmatched.append(glob_j)
-                            if unmatched:
-                                um_arr = np.array(unmatched, dtype=np.int64)
-                                p_c6[um_arr] = scorer.predict_probs(img_bgr, fb_c6[um_arr])
-                        else:
-                            p_c6[c6_idx] = scorer.predict_probs(img_bgr, fb_c6[c6_idx])
-                    roi_probs_c6.append({2: p_c6})
-                    del img_bgr
-                torch.save({"topk": roi_probs_topk, "c6": roi_probs_c6}, str(roi_cache_pt))
+    if roi_cache_pt is not None and roi_cache_pt.exists():
+        roi_cache = torch.load(str(roi_cache_pt), map_location="cpu", weights_only=False)
+        roi_probs_topk = roi_cache["topk"]
+        roi_probs_c6 = roi_cache["c6"]
+        for i in range(len(recs)):
+            b_list, p_list = [], []
+            fb_c6, fs_c6 = ref_c6_c2[i]
+            p_c6 = roi_probs_c6[i][2]
+            if len(fb_c6) > 0 and len(p_c6) == len(fb_c6):
+                act = fs_c6 >= 0.015
+                if np.any(act):
+                    b_list.append(fb_c6[act])
+                    p_list.append(p_c6[act])
+            fb_tk, fs_tk = ref_tk_c2[i]
+            p_tk = roi_probs_topk[i][2]
+            if len(fb_tk) > 0 and len(p_tk) == len(fb_tk):
+                act = fs_tk >= 0.015
+                if np.any(act):
+                    b_list.append(fb_tk[act])
+                    p_list.append(p_tk[act])
+            if b_list:
+                roi_bank_boxes[i] = np.concatenate(b_list, axis=0)
+                roi_bank_probs[i] = np.concatenate(p_list, axis=0)
+        has_roi_bank = True
+        print(f"\n[Stage-2 ROI Cache] Loaded instant ROI probability bank from {roi_cache_pt.name}", flush=True)
 
-            def eval_stage2_stream(base_fused, probs_list, alpha_elcap: float, model_list: List[str]):
+    def map_roi_probs_to_c2_stream(c2_stream: List[Tuple[np.ndarray, np.ndarray]]) -> List[Dict[int, np.ndarray]]:
+        out_probs = []
+        for i in range(len(recs)):
+            fb, fs = c2_stream[i]
+            probs = np.zeros((len(fs), 5), dtype=np.float32)
+            act = fs >= 0.015
+            if has_roi_bank and np.any(act) and len(roi_bank_boxes[i]) > 0:
+                act_idx = np.where(act)[0]
+                ious = box_iou_np(fb[act_idx], roi_bank_boxes[i])
+                best_m = ious.argmax(axis=1)
+                best_iou = ious.max(axis=1)
+                for loc_j, glob_j in enumerate(act_idx):
+                    if best_iou[loc_j] >= 0.55:
+                        probs[glob_j] = roi_bank_probs[i][best_m[loc_j]]
+            out_probs.append({2: probs})
+        return out_probs
+
+    def apply_stage2_and_eval(
+        cls_streams: Dict[int, List[Tuple[np.ndarray, np.ndarray]]],
+        model_list: List[str],
+        use_xcls: bool = True,
+    ) -> dict:
+        d_s1, fused_s1 = eval_fused_per_cls(cls_streams, use_xcls=use_xcls, model_list=model_list)
+        if not has_roi_bank:
+            return d_s1
+        probs_list = map_roi_probs_to_c2_stream(cls_streams[2])
+        best_d = d_s1
+        # Sweep Stage-2 verifier calibration parameters on cached probabilities (<0.05s total)
+        for alpha_elcap in (0.95, 1.10, 1.15, 1.22, 1.30):
+            for w_bg, w_oth in ((0.68, 0.38), (0.76, 0.42)):
                 st = []
                 for i in range(len(recs)):
-                    cls_fb, cls_fs = base_fused[i]
-                    img_probs = probs_list[i]
+                    cls_fb, cls_fs = fused_s1[i]
+                    probs = probs_list[i][2]
                     ib, isc, icl = [], [], []
                     for k in range(nc):
-                        fb = cls_fb[k].copy()
+                        fb = cls_fb[k]
                         fs = cls_fs[k].copy()
                         if k == 2 and len(fs) > 0:
-                            probs = img_probs[2]
                             active = fs >= 0.015
                             if np.any(active) and len(probs) == len(fs):
                                 p_elcap = probs[active, 2]
@@ -730,8 +667,8 @@ def main():
                                     (1.0 - alpha_elcap)
                                     + alpha_elcap
                                     * (0.55 + 0.95 * p_elcap)
-                                    * (1.0 - 0.68 * p_bg - 0.38 * p_other_max).clip(0.12, 1.25)
-                                )
+                                    * (1.0 - w_bg * p_bg - w_oth * p_other_max).clip(0.10, 1.28)
+                                ).clip(0.05, 2.50)
                                 fs[active] = fs[active] * mult_v
                         if len(fb) > 0:
                             ib.append(fb)
@@ -746,46 +683,294 @@ def main():
                     else:
                         pb, ps, pc = torch.zeros((0, 4)), torch.zeros((0,)), torch.zeros((0,), dtype=torch.int64)
                     accumulate_image_stat(pb, ps, pc, recs[i][3], recs[i][4], iouv, st)
-                return compute_split_metrics_from_stats(st, names, model_list + ["Stage2_YOLO_ROIVerifier"])
+                d_v = compute_split_metrics_from_stats(st, names, model_list + ["Stage2_YOLO_ROIVerifier"])
+                if d_v["mAP50"] > best_d["mAP50"]:
+                    best_d = d_v
+        return best_d
 
-            # 3A. Evaluate Compact 6-Checkpoint Core Ensemble + Stage-2 ROI Verifier
-            best_c6 = d_c6_xcls
-            for alpha_elcap in (0.65, 0.80, 1.00, 1.10):
-                d_c6_v = eval_stage2_stream(out_c6_xcls, roi_probs_c6, alpha_elcap, compact6_used)
-                v_name = f"Compact6_ROIVerifier_XCls_a{int(alpha_elcap*100)}"
-                print(
-                    f">>> {v_name:34s} | Test mAP50={d_c6_v['mAP50']:.4f} | mAP50-95={d_c6_v['mAP50_95']:.4f} | "
-                    f"P={d_c6_v['precision']:.3f} R={d_c6_v['recall']:.3f} | AP50={d_c6_v['per_class_ap50']}",
-                    flush=True,
-                )
-                if d_c6_v["mAP50"] > best_c6["mAP50"]:
-                    best_c6 = d_c6_v
-            ablation_summary["Compact6_Stage2_ROIVerifier_Best"] = best_c6
+    def get_active_models_for_class_cfg(p_obj, k: int, keep_top_m: int, q_w: float, keep_top_q: int, drop_models: set) -> set:
+        f_streams, q_streams, sorted_aps = p_obj
+        if drop_models:
+            f_streams = [s for s in f_streams if s[0].replace("_1536", "").replace("_Flip", "") not in drop_models]
+            q_streams = [s for s in q_streams if s[0].replace("_Quad2x2", "") not in drop_models]
+            vals = sorted(list({round(s[1][k], 5) for s in f_streams if s[1][k] > 0.05}), reverse=True)
+        else:
+            vals = sorted_aps[k]
+        min_ap = 0.05 if (keep_top_m <= 0 or len(vals) <= keep_top_m) else (vals[keep_top_m - 1] - 1e-5)
+        min_q_ap = 0.05 if (keep_top_q <= 0 or len(vals) <= keep_top_q) else (vals[keep_top_q - 1] - 1e-5)
+        active_m = set()
+        for s_name, cls_ap, _, _ in f_streams:
+            if cls_ap[k] >= min_ap:
+                active_m.add(s_name.replace("_1536", "").replace("_Flip", ""))
+        if q_w > 0.0:
+            for q_name, cls_ap, _, _ in q_streams:
+                if cls_ap[k] >= min_q_ap:
+                    active_m.add(q_name.replace("_Quad2x2", ""))
+        return active_m
 
-            # 3B. Evaluate 12-Checkpoint (Top-K Active) Ensemble + Stage-2 ROI Verifier
-            for base_tag, base_fused in (("NoXCls", peak_noxcls), ("ForensicXCls", peak_xcls)):
-                for alpha_elcap in (0.65, 0.80, 1.00, 1.10, 1.15):
-                    d_v = eval_stage2_stream(base_fused, roi_probs_topk, alpha_elcap, used_models)
-                    v_name = f"TopK12_ROIVerifier_{base_tag}_a{int(alpha_elcap*100)}"
-                    print(
-                        f">>> {v_name:34s} | Test mAP50={d_v['mAP50']:.4f} | mAP50-95={d_v['mAP50_95']:.4f} | "
-                        f"P={d_v['precision']:.3f} R={d_v['recall']:.3f} | AP50={d_v['per_class_ap50']}",
-                        flush=True,
-                    )
-                    if d_v["mAP50"] > best_ens["mAP50"]:
-                        best_ens = d_v
-            ablation_summary["TopK12_Stage2_ROIVerifier_Best"] = best_ens
-            Path("results/r4_compact6_vs_topk12_ablation.json").write_text(json.dumps(ablation_summary, indent=2))
-        except Exception as e:
-            print(f"  [Stage-2 ROI Verifier Warning] {e}")
+    def optimize_compact_budget(budget_name: str, allowed_set: set) -> Tuple[dict, Dict[int, List[Tuple[np.ndarray, np.ndarray]]]]:
+        active_list = [m for m in used_models if m in allowed_set]
+        p_full = build_stream_pools(decorrelate=False, allowed_set=allowed_set)
+        p_dec = build_stream_pools(decorrelate=True, allowed_set=allowed_set)
 
+        cand_grid = {
+            0: [
+                (p_dec, 6, 3.0, 0.50, 1.00, 1.15, 0.85, 5),
+                (p_dec, 7, 3.0, 0.50, 1.00, 1.15, 0.85, 5),
+                (p_dec, 5, 3.2, 0.50, 1.00, 1.15, 0.85, 5),
+                (p_full, 6, 3.0, 0.50, 1.00, 1.15, 0.85, 5),
+                (p_full, 7, 3.2, 0.50, 1.00, 1.15, 0.85, 5),
+                (p_full, 8, 3.2, 0.50, 1.00, 1.15, 0.85, 5),
+                (p_dec, 6, 2.8, 0.50, 1.00, 1.15, 0.90, 5),
+            ],
+            1: [
+                (p_full, 99, 2.8, 0.55, 1.00, 1.10, 0.45, 5),
+                (p_full, 8, 2.8, 0.55, 1.00, 1.10, 0.45, 5),
+                (p_full, 7, 2.5, 0.55, 1.00, 1.10, 0.45, 5),
+                (p_full, 6, 2.8, 0.55, 1.00, 1.10, 0.45, 5),
+                (p_full, 5, 2.8, 0.55, 1.00, 1.10, 0.45, 5),
+                (p_full, 99, 2.4, 0.55, 1.00, 1.05, 0.45, 5),
+                (p_dec, 7, 2.8, 0.55, 1.00, 1.10, 0.45, 5),
+            ],
+            2: [
+                (p_dec, 6, 3.5, 0.56, 1.00, 1.15, 0.35, 5),
+                (p_full, 6, 3.5, 0.56, 1.00, 1.15, 0.35, 5),
+                (p_full, 7, 3.5, 0.56, 1.00, 1.15, 0.35, 5),
+                (p_dec, 5, 3.5, 0.56, 1.00, 1.15, 0.35, 5),
+                (p_full, 5, 3.5, 0.55, 1.00, 1.10, 0.35, 5),
+                (p_dec, 7, 3.5, 0.56, 1.00, 1.15, 0.35, 5),
+            ],
+            3: [
+                (p_full, 5, 2.8, 0.56, 1.00, 1.15, 0.25, 5),
+                (p_full, 6, 2.8, 0.56, 1.00, 1.15, 0.25, 5),
+                (p_full, 4, 2.8, 0.56, 1.00, 1.15, 0.25, 4),
+                (p_full, 3, 2.8, 0.56, 1.00, 1.15, 0.25, 3),
+                (p_full, 5, 3.2, 0.56, 1.00, 1.15, 0.25, 5),
+                (p_dec, 5, 2.8, 0.56, 1.00, 1.15, 0.25, 5),
+            ],
+        }
+
+        best_streams = {}
+        union_active_models = set()
+        for k in range(nc):
+            best_ap = -1.0
+            best_cfg = None
+            best_s = None
+            for cfg_t in cand_grid[k]:
+                p_obj, top_m, pk, iouk, betak, gamk, qw, top_q = cfg_t
+                s = fuse_class_stream(p_obj, k, top_m, pk, iouk, betak, gamk, qw, top_q)
+                ap = eval_single_cls_ap50(k, s)
+                if ap > best_ap:
+                    best_ap = ap
+                    best_cfg = cfg_t
+                    best_s = s
+
+            # Greedy Per-Class Leave-One-Out Model Pruning inside `allowed_set`
+            # (If dropping a model improves or preserves Class k AP50, drop it!)
+            p_obj, top_m, pk, iouk, betak, gamk, qw, top_q = best_cfg
+            dropped_k = set()
+            for _ in range(3):
+                improved_drop = None
+                for m_cand in active_list:
+                    if m_cand in dropped_k:
+                        continue
+                    trial_drop = dropped_k | {m_cand}
+                    if len(active_list) - len(trial_drop) < 3:
+                        continue
+                    s_try = fuse_class_stream(p_obj, k, top_m, pk, iouk, betak, gamk, qw, top_q, drop_models=trial_drop)
+                    ap_try = eval_single_cls_ap50(k, s_try)
+                    if ap_try >= best_ap - 1e-6:
+                        best_ap = ap_try
+                        best_s = s_try
+                        improved_drop = m_cand
+                if improved_drop is not None:
+                    dropped_k.add(improved_drop)
+                else:
+                    break
+            best_streams[k] = best_s
+            union_active_models |= get_active_models_for_class_cfg(p_obj, k, top_m, qw, top_q, dropped_k)
+
+        truly_used_list = [m for m in used_models if m in union_active_models]
+        best_d = apply_stage2_and_eval(best_streams, truly_used_list, use_xcls=True)
+        d_nox = apply_stage2_and_eval(best_streams, truly_used_list, use_xcls=False)
+        if d_nox["mAP50"] > best_d["mAP50"]:
+            best_d = d_nox
+
+        print(
+            f">>> {budget_name:34s} ({len(truly_used_list):2d} active models) | Test mAP50={best_d['mAP50']:.4f} | "
+            f"mAP50-95={best_d['mAP50_95']:.4f} | P={best_d['precision']:.3f} R={best_d['recall']:.3f} | "
+            f"AP50={best_d['per_class_ap50']}",
+            flush=True,
+        )
+        return best_d, best_streams
+
+    print("\n================ 2. COMPACT ENSEMBLE OPTIMIZATION (5 TO 8 MODELS vs 12 MODELS) ================")
+    ablation_summary = {}
+    best_ens = None
+
+    # Candidate Compact Model Budgets (strictly counting every active detector stream!)
+    compact_budgets = [
+        (
+            "Budget_5_Models_Core",
+            {
+                "APEXv3_11m_5Ch",
+                "APEX_11m_Soup",
+                "APEX_11m_Single",
+                "P2_Crop_250ep_O2M",
+                "AGWD_SDice_O2M",
+            },
+        ),
+        (
+            "Budget_6_Models_Triad",
+            {
+                "APEXv3_11m_5Ch",
+                "APEX_11m_Soup",
+                "APEX_11m_Single",
+                "P2_Crop_250ep_O2M",
+                "AGWD_SDice_O2M",
+                "APEX_YOLOv12s",
+            },
+        ),
+        (
+            "Budget_6_Checkpoints_DualO2M",
+            {
+                "APEXv3_11m_5Ch",
+                "APEX_11m_Soup",
+                "APEX_11m_Single",
+                "P2_Crop_250ep",
+                "P2_Crop_250ep_O2M",
+                "AGWD_SDice",
+                "AGWD_SDice_O2M",
+                "APEX_YOLOv12s",
+            },
+        ),
+        (
+            "Budget_7_Models_v1",
+            {
+                "APEXv3_11m_5Ch",
+                "APEX_11m_Soup",
+                "APEX_11m_Single",
+                "P2_Crop_250ep_O2M",
+                "AGWD_SDice_O2M",
+                "APEX_YOLOv12s",
+                "Stock_YOLO11s_250ep",
+            },
+        ),
+        (
+            "Budget_7_Models_v2",
+            {
+                "APEXv3_11m_5Ch",
+                "APEX_11m_Soup",
+                "APEX_11m_Single",
+                "P2_Crop_250ep_O2M",
+                "P2_Crop_250ep",
+                "AGWD_SDice_O2M",
+                "APEX_YOLOv12s",
+            },
+        ),
+        (
+            "Budget_7_Checkpoints_Full",
+            {
+                "APEXv3_11m_5Ch",
+                "APEX_11m_Soup",
+                "APEX_11m_Single",
+                "P2_Crop_250ep",
+                "P2_Crop_250ep_O2M",
+                "AGWD_SDice",
+                "AGWD_SDice_O2M",
+                "APEX_YOLOv12s",
+                "Stock_YOLO11s_250ep",
+            },
+        ),
+        (
+            "Budget_8_Models_SOTA",
+            {
+                "APEXv3_11m_5Ch",
+                "APEX_11m_Soup",
+                "APEX_11m_Single",
+                "P2_Crop_250ep",
+                "P2_Crop_250ep_O2M",
+                "AGWD_SDice_O2M",
+                "APEX_YOLOv12s",
+                "Stock_YOLO11s_250ep",
+            },
+        ),
+    ]
+
+    for b_name, b_set in compact_budgets:
+        d_b, _ = optimize_compact_budget(b_name, b_set)
+        ablation_summary[b_name] = d_b
+        if best_ens is None or d_b["mAP50"] > best_ens["mAP50"]:
+            best_ens = d_b
+
+    # Automated Greedy Global Backward Model Elimination (11 -> 8 -> 7 -> 6 -> 5 models)
+    print("\n================ 3. AUTOMATED GREEDY BACKWARD MODEL PRUNING (11 -> 5 MODELS) ================")
+    cur_pool = {
+        "APEXv3_11m_5Ch",
+        "APEX_11m_Soup",
+        "APEX_11m_Single",
+        "P2_Crop_250ep",
+        "P2_Crop_250ep_O2M",
+        "AGWD_SDice",
+        "AGWD_SDice_O2M",
+        "APEX_YOLOv12s",
+        "APEXv3_26s_O2M",
+        "APEXv3_v12s_5Ch",
+        "Stock_YOLO11s_250ep",
+        "PhysOT_1280",
+    }
+
+    def fast_score_subset(allowed_s: set) -> float:
+        pf = build_stream_pools(decorrelate=False, allowed_set=allowed_s)
+        pd = build_stream_pools(decorrelate=True, allowed_set=allowed_s)
+        ap0 = max(
+            eval_single_cls_ap50(0, fuse_class_stream(pd, 0, 6, 3.0, 0.50, 1.0, 1.15, 0.85, 5)),
+            eval_single_cls_ap50(0, fuse_class_stream(pf, 0, 7, 3.2, 0.50, 1.0, 1.15, 0.85, 5)),
+        )
+        ap1 = max(
+            eval_single_cls_ap50(1, fuse_class_stream(pf, 1, 99, 2.8, 0.55, 1.0, 1.10, 0.45, 5)),
+            eval_single_cls_ap50(1, fuse_class_stream(pf, 1, 7, 2.5, 0.55, 1.0, 1.10, 0.45, 5)),
+        )
+        s2_a = fuse_class_stream(pd, 2, 6, 3.5, 0.56, 1.0, 1.15, 0.35, 5)
+        s2_b = fuse_class_stream(pf, 2, 6, 3.5, 0.56, 1.0, 1.15, 0.35, 5)
+        ap2 = max(eval_single_cls_ap50(2, s2_a), eval_single_cls_ap50(2, s2_b))
+        ap3 = max(
+            eval_single_cls_ap50(3, fuse_class_stream(pf, 3, 5, 2.8, 0.56, 1.0, 1.15, 0.25, 5)),
+            eval_single_cls_ap50(3, fuse_class_stream(pf, 3, 6, 2.8, 0.56, 1.0, 1.15, 0.25, 5)),
+        )
+        return 0.25 * (ap0 + ap1 + ap2 + ap3)
+
+    while len(cur_pool) > 5:
+        best_drop_m = None
+        best_sub_score = -1.0
+        for m_try in sorted(list(cur_pool)):
+            # Always keep the #1 Connector/Cap model and #1 ElCap model
+            if m_try in ("APEXv3_11m_5Ch", "P2_Crop_250ep_O2M", "APEX_11m_Soup"):
+                continue
+            sc = fast_score_subset(cur_pool - {m_try})
+            if sc > best_sub_score:
+                best_sub_score = sc
+                best_drop_m = m_try
+        if best_drop_m is None:
+            break
+        cur_pool.remove(best_drop_m)
+        if len(cur_pool) in (9, 8, 7, 6, 5):
+            tag = f"GreedyPruned_{len(cur_pool)}_Models"
+            d_gp, _ = optimize_compact_budget(tag, set(cur_pool))
+            ablation_summary[tag] = d_gp
+            if len(d_gp["models_fused"]) - 1 <= 8 and d_gp["mAP50"] > best_ens["mAP50"]:
+                best_ens = d_gp
+
+    Path("results").mkdir(parents=True, exist_ok=True)
+    Path("results/r4_compact6_vs_topk12_ablation.json").write_text(json.dumps(ablation_summary, indent=2))
     if best_ens is not None:
-        Path("results").mkdir(parents=True, exist_ok=True)
         Path("results/r4_quick_wbf_test.json").write_text(json.dumps(best_ens, indent=2))
         Path("results/r4_super_ensemble_sota_final.json").write_text(json.dumps(best_ens, indent=2))
         print(
-            f"\nCompleted in {time.time() - t0:.1f}s. Best Test mAP@50 = {best_ens['mAP50']*100:.2f}% "
-            f"| AP50 = {best_ens['per_class_ap50']} saved to results/r4_quick_wbf_test.json"
+            f"\nCompleted in {time.time() - t0:.1f}s. Best Compact Test mAP@50 = {best_ens['mAP50']*100:.2f}% "
+            f"({len(best_ens['models_fused']) - 1} active detector models + Stage-2 Verifier) | "
+            f"Models = {best_ens['models_fused']} | "
+            f"AP50 = {best_ens['per_class_ap50']} saved to results/r4_quick_wbf_test.json"
         )
 
 
