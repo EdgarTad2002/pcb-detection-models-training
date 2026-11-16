@@ -540,12 +540,8 @@ def main():
             else:
                 pb, ps, pc = torch.zeros((0, 4)), torch.zeros((0,)), torch.zeros((0,), dtype=torch.int64)
             accumulate_image_stat(pb, ps, pc, gt_b_k, gt_c_k, iouv, st)
-        tp = torch.cat([x[0] for x in st], 0).numpy()
-        conf = torch.cat([x[1] for x in st], 0).numpy()
-        pcls = torch.cat([x[2] for x in st], 0).numpy()
-        tcls = torch.cat([x[3] for x in st], 0).numpy()
-        _, _, _, _, _, ap, _ = ap_per_class(tp, conf, pcls, tcls, plot=False, names={0: names[k]})
-        return float(ap[0, 0]) if len(ap) > 0 else 0.0
+        d_k = compute_split_metrics_from_stats(st, {0: names[k]}, ["tmp"])
+        return float(d_k["mAP50"])
 
     def eval_fused_per_cls(
         per_cls_fused: Dict[int, List[Tuple[np.ndarray, np.ndarray]]],
