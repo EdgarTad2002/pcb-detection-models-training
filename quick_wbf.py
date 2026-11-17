@@ -704,6 +704,9 @@ def main():
                     active_m.add(q_name.replace("_Quad2x2", ""))
         return active_m
 
+    # Cache Class 0 (Capacitor, ~6000 boxes/board) by its active model tuple so it only runs ONCE (~30s total)
+    cap_stream_cache: Dict[Tuple[str, ...], Tuple[float, List[Tuple[np.ndarray, np.ndarray]], set]] = {}
+
     def optimize_compact_budget(budget_name: str, allowed_set: set) -> Tuple[dict, Dict[int, List[Tuple[np.ndarray, np.ndarray]]]]:
         active_list = [m for m in used_models if m in allowed_set]
         p_full = build_stream_pools(decorrelate=False, allowed_set=allowed_set)
@@ -712,29 +715,19 @@ def main():
         cand_grid = {
             0: [
                 (p_dec, 6, 3.0, 0.50, 1.00, 1.15, 0.85, 5),
-                (p_dec, 7, 3.0, 0.50, 1.00, 1.15, 0.85, 5),
-                (p_dec, 5, 3.2, 0.50, 1.00, 1.15, 0.85, 5),
-                (p_full, 6, 3.0, 0.50, 1.00, 1.15, 0.85, 5),
-                (p_full, 7, 3.2, 0.50, 1.00, 1.15, 0.85, 5),
-                (p_full, 8, 3.2, 0.50, 1.00, 1.15, 0.85, 5),
-                (p_dec, 6, 2.8, 0.50, 1.00, 1.15, 0.90, 5),
             ],
             1: [
                 (p_full, 99, 2.8, 0.55, 1.00, 1.10, 0.45, 5),
-                (p_full, 8, 2.8, 0.55, 1.00, 1.10, 0.45, 5),
                 (p_full, 7, 2.5, 0.55, 1.00, 1.10, 0.45, 5),
                 (p_full, 6, 2.8, 0.55, 1.00, 1.10, 0.45, 5),
                 (p_full, 5, 2.8, 0.55, 1.00, 1.10, 0.45, 5),
                 (p_full, 99, 2.4, 0.55, 1.00, 1.05, 0.45, 5),
-                (p_dec, 7, 2.8, 0.55, 1.00, 1.10, 0.45, 5),
             ],
             2: [
                 (p_dec, 6, 3.5, 0.56, 1.00, 1.15, 0.35, 5),
                 (p_full, 6, 3.5, 0.56, 1.00, 1.15, 0.35, 5),
-                (p_full, 7, 3.5, 0.56, 1.00, 1.15, 0.35, 5),
                 (p_dec, 5, 3.5, 0.56, 1.00, 1.15, 0.35, 5),
                 (p_full, 5, 3.5, 0.55, 1.00, 1.10, 0.35, 5),
-                (p_dec, 7, 3.5, 0.56, 1.00, 1.15, 0.35, 5),
             ],
             3: [
                 (p_full, 5, 2.8, 0.56, 1.00, 1.15, 0.25, 5),
@@ -742,13 +735,25 @@ def main():
                 (p_full, 4, 2.8, 0.56, 1.00, 1.15, 0.25, 4),
                 (p_full, 3, 2.8, 0.56, 1.00, 1.15, 0.25, 3),
                 (p_full, 5, 3.2, 0.56, 1.00, 1.15, 0.25, 5),
-                (p_dec, 5, 2.8, 0.56, 1.00, 1.15, 0.25, 5),
             ],
         }
 
         best_streams = {}
         union_active_models = set()
         for k in range(nc):
+            if k == 0:
+                c0_models = get_active_models_for_class_cfg(p_dec, 0, 6, 0.85, 5, set())
+                c0_key = tuple(sorted(list(c0_models)))
+                if c0_key in cap_stream_cache:
+                    best_ap, best_s, c0_models = cap_stream_cache[c0_key]
+                else:
+                    best_s = fuse_class_stream(p_dec, 0, 6, 3.0, 0.50, 1.00, 1.15, 0.85, 5)
+                    best_ap = eval_single_cls_ap50(0, best_s)
+                    cap_stream_cache[c0_key] = (best_ap, best_s, c0_models)
+                best_streams[0] = best_s
+                union_active_models |= c0_models
+                continue
+
             best_ap = -1.0
             best_cfg = None
             best_s = None
@@ -761,11 +766,10 @@ def main():
                     best_cfg = cfg_t
                     best_s = s
 
-            # Greedy Per-Class Leave-One-Out Model Pruning inside `allowed_set`
-            # (If dropping a model improves or preserves Class k AP50, drop it!)
+            # Greedy Per-Class Leave-One-Out Model Pruning inside `allowed_set` for Classes 1, 2, 3
             p_obj, top_m, pk, iouk, betak, gamk, qw, top_q = best_cfg
             dropped_k = set()
-            for _ in range(3):
+            for _ in range(2):
                 improved_drop = None
                 for m_cand in active_list:
                     if m_cand in dropped_k:
@@ -919,21 +923,17 @@ def main():
     def fast_score_subset(allowed_s: set) -> float:
         pf = build_stream_pools(decorrelate=False, allowed_set=allowed_s)
         pd = build_stream_pools(decorrelate=True, allowed_set=allowed_s)
-        ap0 = max(
-            eval_single_cls_ap50(0, fuse_class_stream(pd, 0, 6, 3.0, 0.50, 1.0, 1.15, 0.85, 5)),
-            eval_single_cls_ap50(0, fuse_class_stream(pf, 0, 7, 3.2, 0.50, 1.0, 1.15, 0.85, 5)),
-        )
-        ap1 = max(
-            eval_single_cls_ap50(1, fuse_class_stream(pf, 1, 99, 2.8, 0.55, 1.0, 1.10, 0.45, 5)),
-            eval_single_cls_ap50(1, fuse_class_stream(pf, 1, 7, 2.5, 0.55, 1.0, 1.10, 0.45, 5)),
-        )
-        s2_a = fuse_class_stream(pd, 2, 6, 3.5, 0.56, 1.0, 1.15, 0.35, 5)
-        s2_b = fuse_class_stream(pf, 2, 6, 3.5, 0.56, 1.0, 1.15, 0.35, 5)
-        ap2 = max(eval_single_cls_ap50(2, s2_a), eval_single_cls_ap50(2, s2_b))
-        ap3 = max(
-            eval_single_cls_ap50(3, fuse_class_stream(pf, 3, 5, 2.8, 0.56, 1.0, 1.15, 0.25, 5)),
-            eval_single_cls_ap50(3, fuse_class_stream(pf, 3, 6, 2.8, 0.56, 1.0, 1.15, 0.25, 5)),
-        )
+        c0_m = get_active_models_for_class_cfg(pd, 0, 6, 0.85, 5, set())
+        c0_k = tuple(sorted(list(c0_m)))
+        if c0_k in cap_stream_cache:
+            ap0 = cap_stream_cache[c0_k][0]
+        else:
+            s0 = fuse_class_stream(pd, 0, 6, 3.0, 0.50, 1.0, 1.15, 0.85, 5)
+            ap0 = eval_single_cls_ap50(0, s0)
+            cap_stream_cache[c0_k] = (ap0, s0, c0_m)
+        ap1 = eval_single_cls_ap50(1, fuse_class_stream(pf, 1, 99, 2.8, 0.55, 1.0, 1.10, 0.45, 5))
+        ap2 = eval_single_cls_ap50(2, fuse_class_stream(pd, 2, 6, 3.5, 0.56, 1.0, 1.15, 0.35, 5))
+        ap3 = eval_single_cls_ap50(3, fuse_class_stream(pf, 3, 5, 2.8, 0.56, 1.0, 1.15, 0.25, 5))
         return 0.25 * (ap0 + ap1 + ap2 + ap3)
 
     while len(cur_pool) > 5:
