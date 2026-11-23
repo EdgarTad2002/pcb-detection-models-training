@@ -1,0 +1,22 @@
+\begin{table*}[!t]
+\centering
+\caption{Retrospective results on 44 legacy native-resolution exports. Accuracy
+entries are percentages; P/R/F1 pool counts at confidence 0.25 and matching IoU
+0.50. Latency includes the complete prediction pipeline and WBF. Parameter
+counts are stored unfused values. These are selected checkpoints, not seed averages.}
+\label{tab:native}
+\small\setlength{\tabcolsep}{4pt}
+\begin{tabular}{lrrrrrrrr}
+\toprule
+Configuration & $\mathrm{mAP}_{50}$ & $\mathrm{mAP}_{50:95}$ & P & R & F1
+& ms & FPS & Params (M)\\
+\midrule
+YOLOv12s & 66.16 & 45.45 & 61.70 & 49.42 & 54.88 & 14.33 & 69.79 & 9.25 \\
+Crop-trained YOLO26s & 66.56 & 45.48 & 54.61 & 51.23 & 52.87 & 11.11 & 89.99 & 9.95 \\
+AGWD + Squared-Dice & 64.99 & 43.93 & 53.42 & 54.80 & 54.10 & 11.13 & 89.85 & 9.95 \\
+PhysOT-YOLO26s & 62.18 & 42.87 & 59.87 & 49.48 & 54.18 & 30.75 & 32.52 & 10.92 \\
+WBF, two models & 68.49 & 47.51 & 63.27 & 51.31 & 56.67 & 47.94 & 20.86 & 19.21 \\
+WBF, four models & 68.74 & 47.66 & 65.20 & 51.82 & 57.75 & 115.97 & 8.62 & 40.08 \\
+\bottomrule
+\end{tabular}
+\end{table*}

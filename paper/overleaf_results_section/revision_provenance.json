@@ -1,0 +1,697 @@
+{
+  "sources": {
+    "results/champion_audit_v1_20261030/summary.json": "febb655d34649c42be51b01bb494b0cefd9d278f83692643709cdde143269a27",
+    "results/clean_main_test_v1/summary.json": "5d19249280a52f5aafaf1419f5d1c557ef07c75aa597d71c42d5880e1568e45c",
+    "results/info17_protocol_v1_20261031/metrics.json": "df1ae20facdea28625d72ef91d8199c4f6770c58000a6a247444708bf238db94",
+    "tools/rectify_dataset.py": "4415769b35a0f6b5bf0454400b7eb717171f6f7053cf41ecae5dacfdaeee26b1",
+    "results/champion_audit_v1_20261030/predictions/crop.json": "4aff20c5267beb86ce08095c9787bd9259731af75b059b37b6d4eca555879e49",
+    "results/champion_audit_v1_20261030/predictions/ensemble2.json": "3e737552f0667812341f97f620f76144b321c5f36bf080ae7eb8abe439e89f16",
+    "results/champion_audit_v1_20261030/predictions/ensemble4.json": "4db61c7b570b3c7fc1780d7404923b3e6a244e2eee2d1fed2b0ad2a90ed70fd5",
+    "paper/sources/revision_20261106/sweep_launch_metadata.json": "85a115663ed179e49d295d5c172798821779e8bd3e4321ffef5d3d9984c4a050",
+    "results/yolo26s_agwd_sdice_smooth0.01_uniform.json": "c9c54e4d391e01f67772e174bf18bd2ac1b4ec47ef71c289544ea16e5309762f",
+    "results/yolo26s_agwd_sdice_smooth0.1_uniform.json": "96f9ef060b7b153936af7154e0c7cbaa3c4e71cb6a9d40fb131ce11b2532b0cf",
+    "results/yolo26s_agwd_sdice_l1.0_s0.01.json": "79ec6ca9442b11a5ba1427bce45cd8ee4736f7ad13979b3e9636064021f1699e",
+    "results/yolo26s_agwd_sdice_smooth1.0_stageweights.json": "4869a57ab0d46829b84761c92f8b06f8d397bb8c11c52b80a755c62d60239a99",
+    "results/yolo26s_agwd_sdice_stage_s0.01.json": "c86b4dfca4ded91603a3b57aa9465a9ebea9c209b3fd6049a45c98758653641f",
+    "results/yolo26s_agwd_sdice_l0.20_s0.01.json": "ff335625b6bdab1e5482c354081579a949785e03b613bf0958b470f987fe416e",
+    "results/yolo26s_agwd_sdice_l0.35_s0.01.json": "800a468e6114ae81f0fc65c9ca36ddc404a55389f53b8c4111a480fbf68ca1aa",
+    "runs/yolo26s_agwd_sdice_l0.20_s0.01/pcb-filtered/results.csv": "737f653844c0916685d19eac9190bb72b6b2d82b7e269f7febe768c3bc40131f",
+    "runs/yolo26s_agwd_sdice_l0.35_s0.01/pcb-filtered/results.csv": "f980fa2b26a3be1f2a7a376a2e4437e6e57ff7240216564f04f0ef9fd9771046",
+    "runs/yolo26s_agwd_sdice_smooth0.01_uniform/pcb-filtered/results.csv": "c50f93310335453381e8f0cb36301f0690a460f696806f09a4b7170a1b11ac15",
+    "paper/sources/revision_20261106/evidence_index.json": "80c3bbc58acd036ccef9b59299d331da09f1c9639c026ab9115f1f3688f0d44f",
+    "paper/sources/revision_20261106/datasets/pcb-filtered-yolov8/train/images/RPI3B_Top_jpg.rf.b469ecabd7c6437561dfa04589be88d6.jpg": "be031eeb6afeb08e36849e66410b5f827199257cccdfca65708d9dceae55551a",
+    "paper/sources/revision_20261106/datasets/pcb-filtered-yolov8/train/labels/RPI3B_Top_jpg.rf.b469ecabd7c6437561dfa04589be88d6.txt": "0bbc71e18e87e9fbdc404bed38ed0055de168be38b0d238a14dc9e84c465b21e",
+    "paper/sources/revision_20261106/datasets/pcb-filtered-yolov8/test/images/Arty_Top_jpg.rf.8a2361ff2b0de21f7c25814079fecb18.jpg": "1efee29f302299ad25d7b92e471fc3f0f5f746bfb9a962893a7dd794900e6920",
+    "paper/sources/revision_20261106/datasets/pcb-filtered-yolov8/test/labels/Arty_Top_jpg.rf.8a2361ff2b0de21f7c25814079fecb18.txt": "532c589d9ff76a246d39346995432bee39fdfebac574cc77b6c97ceebead6889",
+    "data_review/native1280_v2_20261106/audit/inventory.json": "d9a7032eaefdd735eed510e639b35cdbfb7e4323f2faf8003cbab792ed6df535",
+    "data_review/native1280_v2_20261106/patches_final_r3.json": "8eda9476c6b7517008db7c12d28fdf85a7807fce5d1350cf5aadb7d176e64dce"
+  },
+  "figures": {
+    "native_detections": {
+      "cases": [
+        {
+          "image_index": 2,
+          "roi": [
+            493,
+            942,
+            813,
+            1262
+          ],
+          "targets": 16,
+          "matched": {
+            "crop": 2,
+            "ensemble2": 10,
+            "ensemble4": 10
+          },
+          "gain": 8,
+          "name": "Arty_Bottom_jpg.rf.16f36245a0765afee4ea9dd43ae09f68.jpg",
+          "counts": {
+            "crop": {
+              "tp": 2,
+              "fn": 14,
+              "fp": 0
+            },
+            "ensemble2": {
+              "tp": 10,
+              "fn": 6,
+              "fp": 0
+            },
+            "ensemble4": {
+              "tp": 10,
+              "fn": 6,
+              "fp": 0
+            }
+          }
+        },
+        {
+          "image_index": 35,
+          "roi": [
+            521,
+            309,
+            741,
+            529
+          ],
+          "targets": 9,
+          "matched": {
+            "crop": 8,
+            "ensemble2": 6,
+            "ensemble4": 3
+          },
+          "gain": -5,
+          "name": "pcb44rec1_jpg.rf.ccf99b1275d7fecb1be44bc28f2ee4d2.jpg",
+          "counts": {
+            "crop": {
+              "tp": 8,
+              "fn": 1,
+              "fp": 0
+            },
+            "ensemble2": {
+              "tp": 6,
+              "fn": 3,
+              "fp": 0
+            },
+            "ensemble4": {
+              "tp": 3,
+              "fn": 6,
+              "fp": 0
+            }
+          }
+        }
+      ],
+      "confidence": 0.25,
+      "matching_iou": 0.5,
+      "selection": "Maximum and minimum local matched-reference gain of WBF-4 versus crop, over a deterministic grid; outcome selected.",
+      "scoring": "Local class-aware one-to-one matching; boxes enter by center inside the displayed ROI. Existing labels may contain errors."
+    },
+    "paper_comparison": {
+      "our_protocol": "41 test exports; three-seed mean and sample SD",
+      "published": {
+        "best_single": 54.04,
+        "best_ensemble": 59.63,
+        "source": "Zhou and Agaian, Tables 4 and 9"
+      },
+      "direct_superiority_claim": false
+    },
+    "paper_pr_curves": {
+      "seed": 0,
+      "classes": [
+        "Capacitor",
+        "IC"
+      ],
+      "AP50_independently_checked": true,
+      "scope": "Illustrative seed only; mean results use all three seeds."
+    },
+    "hyperparameter_sensitivity": {
+      "configurations": [
+        {
+          "name": "yolo26s_agwd_sdice_l0.20_s0.01",
+          "lam": 0.2,
+          "smooth": 0.01,
+          "stage_weights": null,
+          "ap50": 64.92731934971813,
+          "ap95": 44.94800392519573,
+          "capacitor": 42.95479060467922
+        },
+        {
+          "name": "yolo26s_agwd_sdice_l0.35_s0.01",
+          "lam": 0.35,
+          "smooth": 0.01,
+          "stage_weights": null,
+          "ap50": 64.80492076004877,
+          "ap95": 45.764538824914055,
+          "capacitor": 41.37041549372146
+        },
+        {
+          "name": "yolo26s_agwd_sdice_smooth0.01_uniform",
+          "lam": 0.5,
+          "smooth": 0.01,
+          "stage_weights": null,
+          "ap50": 65.77669677677042,
+          "ap95": 44.37407414362623,
+          "capacitor": 43.58777438200022
+        },
+        {
+          "name": "yolo26s_agwd_sdice_smooth0.1_uniform",
+          "lam": 0.5,
+          "smooth": 0.1,
+          "stage_weights": null,
+          "ap50": 61.88455642450166,
+          "ap95": 41.8677517764418,
+          "capacitor": 39.92513268264661
+        },
+        {
+          "name": "yolo26s_agwd_sdice_stage_s0.01",
+          "lam": 0.5,
+          "smooth": 0.01,
+          "stage_weights": [
+            0.5,
+            0.3,
+            0.2
+          ],
+          "ap50": 62.46649546832819,
+          "ap95": 43.10459112969708,
+          "capacitor": 37.909889297692395
+        },
+        {
+          "name": "yolo26s_agwd_sdice_l1.0_s0.01",
+          "lam": 1.0,
+          "smooth": 0.01,
+          "stage_weights": [
+            0.5,
+            0.3,
+            0.2
+          ],
+          "ap50": 61.540896949962985,
+          "ap95": 41.34969950985566,
+          "capacitor": 38.464714889686036
+        },
+        {
+          "name": "yolo26s_agwd_sdice_smooth1.0_stageweights",
+          "lam": 0.5,
+          "smooth": 1.0,
+          "stage_weights": [
+            0.5,
+            0.3,
+            0.2
+          ],
+          "ap50": 64.86616997410913,
+          "ap95": 43.97390168520246,
+          "capacitor": 39.14800357260643
+        }
+      ],
+      "seed": 0,
+      "limits": "Historical test-guided development; no interpolation to untested values; lambda=1 is staged, excluded from uniform-lambda curve."
+    },
+    "controlled_loss_table": [
+      {
+        "model": "yolo26s",
+        "metrics": {
+          "mAP50": {
+            "mean": 59.47018537512354,
+            "sample_sd": 2.4506155046421103,
+            "values": [
+              56.66455076609409,
+              60.55389896287141,
+              61.19210639640512
+            ]
+          },
+          "mAP50_95": {
+            "mean": 40.751619628839,
+            "sample_sd": 2.1867260574895018,
+            "values": [
+              41.19182204051496,
+              42.68475719937246,
+              38.37827964662958
+            ]
+          },
+          "per_class_ap50/Capacitor": {
+            "mean": 33.341642615879294,
+            "sample_sd": 3.0231912516202226,
+            "values": [
+              31.089422164281324,
+              32.15792327612027,
+              36.777582407236295
+            ]
+          },
+          "per_class_ap50_95/Capacitor": {
+            "mean": 13.534446356183615,
+            "sample_sd": 1.1093133174180558,
+            "values": [
+              12.630921269732662,
+              13.199883362613802,
+              14.772534436204381
+            ]
+          },
+          "per_class_ap50/Connector": {
+            "mean": 68.45816927509006,
+            "sample_sd": 1.320795348959559,
+            "values": [
+              67.37683234271556,
+              69.93025235510156,
+              68.06742312745304
+            ]
+          },
+          "per_class_ap50_95/Connector": {
+            "mean": 48.803779940176966,
+            "sample_sd": 1.784260385671914,
+            "values": [
+              50.552171638882214,
+              48.87347496100056,
+              46.98569322064812
+            ]
+          },
+          "per_class_ap50/Electrolytic Capacitor": {
+            "mean": 69.56220840114703,
+            "sample_sd": 6.10143162595171,
+            "values": [
+              64.06162520344108,
+              76.125,
+              68.5
+            ]
+          },
+          "per_class_ap50_95/Electrolytic Capacitor": {
+            "mean": 59.47404272564702,
+            "sample_sd": 11.015510048662023,
+            "values": [
+              61.46929667519183,
+              69.35555555555555,
+              47.59727594619366
+            ]
+          },
+          "per_class_ap50/IC": {
+            "mean": 66.51872120837778,
+            "sample_sd": 4.248075194133127,
+            "values": [
+              64.1303233539384,
+              64.00242022026382,
+              71.42342005093116
+            ]
+          },
+          "per_class_ap50_95/IC": {
+            "mean": 41.19420949334839,
+            "sample_sd": 2.5977390667646896,
+            "values": [
+              40.11489857825312,
+              39.310114918319925,
+              44.15761498347212
+            ]
+          }
+        }
+      },
+      {
+        "model": "yolo26s_sdice",
+        "metrics": {
+          "mAP50": {
+            "mean": 58.00274276579854,
+            "sample_sd": 2.4054035733736674,
+            "values": [
+              60.31897115574403,
+              58.17213784951527,
+              55.5171192921363
+            ]
+          },
+          "mAP50_95": {
+            "mean": 42.491419525303534,
+            "sample_sd": 2.479898388064329,
+            "values": [
+              44.0129821852657,
+              43.83147881730707,
+              39.62979757333784
+            ]
+          },
+          "per_class_ap50/Capacitor": {
+            "mean": 29.300118864941865,
+            "sample_sd": 2.149783952730887,
+            "values": [
+              30.951573188880932,
+              26.869369894592005,
+              30.07941351135266
+            ]
+          },
+          "per_class_ap50_95/Capacitor": {
+            "mean": 12.06313978972142,
+            "sample_sd": 1.1058534884263216,
+            "values": [
+              13.15111705173707,
+              10.940237481325195,
+              12.098064836101996
+            ]
+          },
+          "per_class_ap50/Connector": {
+            "mean": 65.48159548892183,
+            "sample_sd": 3.8571603437140514,
+            "values": [
+              69.47348667951555,
+              65.19628996651156,
+              61.77500982073836
+            ]
+          },
+          "per_class_ap50_95/Connector": {
+            "mean": 49.57686135169944,
+            "sample_sd": 2.558103218005276,
+            "values": [
+              51.722731983908,
+              50.261857062779555,
+              46.745995008410766
+            ]
+          },
+          "per_class_ap50/Electrolytic Capacitor": {
+            "mean": 75.3962962962963,
+            "sample_sd": 3.6437216988856416,
+            "values": [
+              77.5,
+              77.5,
+              71.18888888888888
+            ]
+          },
+          "per_class_ap50_95/Electrolytic Capacitor": {
+            "mean": 69.01920634920634,
+            "sample_sd": 6.214272606870574,
+            "values": [
+              71.675,
+              73.46428571428572,
+              61.91833333333332
+            ]
+          },
+          "per_class_ap50/IC": {
+            "mean": 61.832960413034144,
+            "sample_sd": 2.4342914615662847,
+            "values": [
+              63.35082475457963,
+              63.12289153695752,
+              59.02516494756528
+            ]
+          },
+          "per_class_ap50_95/IC": {
+            "mean": 39.30647061058692,
+            "sample_sd": 1.4613224060341754,
+            "values": [
+              39.5030797054177,
+              40.6595350108378,
+              37.75679711550527
+            ]
+          }
+        }
+      },
+      {
+        "model": "yolo26s_agwd_sdice_l035",
+        "metrics": {
+          "mAP50": {
+            "mean": 59.56241661472026,
+            "sample_sd": 2.6059814371494756,
+            "values": [
+              62.2338673434347,
+              59.42612966220667,
+              57.027252838519416
+            ]
+          },
+          "mAP50_95": {
+            "mean": 38.912543133406,
+            "sample_sd": 0.4293908277685916,
+            "values": [
+              38.69907674255616,
+              39.40683349616879,
+              38.631719161493045
+            ]
+          },
+          "per_class_ap50/Capacitor": {
+            "mean": 32.41023480514893,
+            "sample_sd": 2.208934301234907,
+            "values": [
+              34.67333826097856,
+              32.29758582447309,
+              30.259780329995138
+            ]
+          },
+          "per_class_ap50_95/Capacitor": {
+            "mean": 12.516023061431488,
+            "sample_sd": 0.7509964367420736,
+            "values": [
+              13.115072490671462,
+              11.673496980335562,
+              12.759499713287441
+            ]
+          },
+          "per_class_ap50/Connector": {
+            "mean": 63.781215917815345,
+            "sample_sd": 4.7293385226259295,
+            "values": [
+              67.74811998375031,
+              65.04805571179895,
+              58.54747205789677
+            ]
+          },
+          "per_class_ap50_95/Connector": {
+            "mean": 43.44849230694663,
+            "sample_sd": 0.36405008149022605,
+            "values": [
+              43.10994394484727,
+              43.83357014116956,
+              43.401962834823074
+            ]
+          },
+          "per_class_ap50/Electrolytic Capacitor": {
+            "mean": 77.04166666666667,
+            "sample_sd": 0.7938566201357354,
+            "values": [
+              77.5,
+              77.5,
+              76.125
+            ]
+          },
+          "per_class_ap50_95/Electrolytic Capacitor": {
+            "mean": 61.178180615680624,
+            "sample_sd": 2.452880581619071,
+            "values": [
+              59.26904761904763,
+              63.944660894660885,
+              60.32083333333335
+            ]
+          },
+          "per_class_ap50/IC": {
+            "mean": 65.0165490692501,
+            "sample_sd": 3.465550375861146,
+            "values": [
+              69.01401112900992,
+              62.85887711255464,
+              63.17675896618577
+            ]
+          },
+          "per_class_ap50_95/IC": {
+            "mean": 38.50747654956524,
+            "sample_sd": 0.6913986429868922,
+            "values": [
+              39.30224291565829,
+              38.17560596850911,
+              38.04458076452832
+            ]
+          }
+        }
+      },
+      {
+        "model": "yolo26s_agwd_sdice",
+        "metrics": {
+          "mAP50": {
+            "mean": 58.02146639109235,
+            "sample_sd": 1.4637131542147392,
+            "values": [
+              59.252262726587276,
+              56.40291744543538,
+              58.40921900125441
+            ]
+          },
+          "mAP50_95": {
+            "mean": 40.699151203002316,
+            "sample_sd": 1.0483919723675008,
+            "values": [
+              40.889324748460965,
+              41.639439359793876,
+              39.5686895007521
+            ]
+          },
+          "per_class_ap50/Capacitor": {
+            "mean": 30.096480466866,
+            "sample_sd": 2.6109208937899044,
+            "values": [
+              32.648583913736324,
+              27.43047050269728,
+              30.2103869841644
+            ]
+          },
+          "per_class_ap50_95/Capacitor": {
+            "mean": 12.211440738686095,
+            "sample_sd": 1.2174455153614214,
+            "values": [
+              13.534498154287766,
+              11.138435556296848,
+              11.961388505473671
+            ]
+          },
+          "per_class_ap50/Connector": {
+            "mean": 63.033781586738655,
+            "sample_sd": 0.5268842565735882,
+            "values": [
+              62.56922516027591,
+              63.60627666433631,
+              62.92584293560375
+            ]
+          },
+          "per_class_ap50_95/Connector": {
+            "mean": 46.3681185690706,
+            "sample_sd": 1.9554713256752658,
+            "values": [
+              46.37228471376894,
+              48.32150349389422,
+              44.41056749954865
+            ]
+          },
+          "per_class_ap50/Electrolytic Capacitor": {
+            "mean": 75.76045033397975,
+            "sample_sd": 0.9656628947220973,
+            "values": [
+              76.875,
+              75.17420814479637,
+              75.23214285714288
+            ]
+          },
+          "per_class_ap50_95/Electrolytic Capacitor": {
+            "mean": 65.93708525951173,
+            "sample_sd": 4.127660866232171,
+            "values": [
+              65.63317307692309,
+              70.20830248183188,
+              61.969780219780226
+            ]
+          },
+          "per_class_ap50/IC": {
+            "mean": 63.19515317678502,
+            "sample_sd": 3.290797144751134,
+            "values": [
+              64.91624183233691,
+              59.400714469911534,
+              65.26850322810662
+            ]
+          },
+          "per_class_ap50_95/IC": {
+            "mean": 38.27996024474083,
+            "sample_sd": 1.5386545552727386,
+            "values": [
+              38.01734304886407,
+              36.88951590715258,
+              39.93302177820584
+            ]
+          }
+        }
+      }
+    ],
+    "taxonomy_consolidation": {
+      "examples": [
+        {
+          "image": "paper/sources/revision_20261106/datasets/pcb-filtered-yolov8/train/images/RPI3B_Top_jpg.rf.b469ecabd7c6437561dfa04589be88d6.jpg",
+          "label": "paper/sources/revision_20261106/datasets/pcb-filtered-yolov8/train/labels/RPI3B_Top_jpg.rf.b469ecabd7c6437561dfa04589be88d6.txt",
+          "line": 1,
+          "raw": "1 0.134375 0.66171875 0.05390625 0.046875",
+          "canonical_class": 0
+        },
+        {
+          "image": "paper/sources/revision_20261106/datasets/pcb-filtered-yolov8/test/images/Arty_Top_jpg.rf.8a2361ff2b0de21f7c25814079fecb18.jpg",
+          "label": "paper/sources/revision_20261106/datasets/pcb-filtered-yolov8/test/labels/Arty_Top_jpg.rf.8a2361ff2b0de21f7c25814079fecb18.txt",
+          "line": 41,
+          "raw": "2 0.34296875 0.45703125 0.0203125 0.015625",
+          "canonical_class": 0
+        }
+      ],
+      "raw_class_counts": {
+        "4": 4558,
+        "17": 4627,
+        "1": 19034,
+        "6": 162,
+        "13": 1176,
+        "16": 37329,
+        "14": 1212,
+        "2": 32564,
+        "15": 16030,
+        "19": 1289,
+        "12": 784,
+        "9": 7604,
+        "3": 146,
+        "18": 189,
+        "5": 284,
+        "11": 324,
+        "10": 235,
+        "0": 277,
+        "21": 982,
+        "7": 856,
+        "20": 4273,
+        "8": 108
+      },
+      "note": "Examples illustrate canonical label mapping, not an exhaustive claim that both source categories are error-free. Class 22 iC has no instances in the scanned source export."
+    },
+    "annotation_review": {
+      "examples": [
+        {
+          "id": "test/pcb141rec1_jpg.rf.bd40367e744525fd9a5d6463480f8542.jpg",
+          "roi": [
+            1598.1486894,
+            909.7530534000001,
+            2180.2807026,
+            1491.8850665999998
+          ],
+          "action": "replace"
+        },
+        {
+          "id": "train/pcb149rec1_jpg.rf.326922824f63217a6e1021689887440a.jpg",
+          "roi": [
+            735,
+            0,
+            1150,
+            460
+          ],
+          "action": "add"
+        },
+        {
+          "id": "train/pcb155rec1_jpg.rf.073f76c8c91723d1ce6b0d56b2b67730.jpg",
+          "roi": [
+            2120.0804768,
+            958.4440208000002,
+            2299.8621151999996,
+            1138.2256591999999
+          ],
+          "action": "delete"
+        }
+      ],
+      "scope": "Recorded annotation edits, not predictions or measured accuracy improvements."
+    }
+  },
+  "limits": {
+    "published_protocol_equivalence_verified": false,
+    "corrected_dataset_accuracy_claimed": false,
+    "qualitative_examples_selected_after_inspecting_predictions": true
+  },
+  "visual_reference_templates": {
+    "paper_images/Screenshot from 2026-11-05 22-39-54.png": "0fddf3b51389df722f2f5dc1e319448ec2fe37321adc958843b6d5ee8f0001af",
+    "paper_images/Screenshot from 2026-11-05 22-41-02.png": "d0dd275791e10b6e928933a64d031f69ed5c9cb59bf95249d5a208b1b9286c0f",
+    "paper_images/Screenshot from 2026-11-05 22-43-58.png": "cbfd885d93fa2150846623ceb53da45199d1f0574449d89a43b59a0df6e6d305",
+    "paper_images/Screenshot from 2026-11-05 22-57-33.png": "d7cf7f8fad7e0b714ef770057a669351638595222c5d41be6c830ad8d1415f74",
+    "paper_images/Screenshot from 2026-11-05 22-59-20.png": "85dbc3c2c3630d7adad033021cdc11510cdbeb4130d83970d500b41635dbef43",
+    "paper_images/Screenshot from 2026-11-05 23-03-10.png": "bff6c395a03beebd6513b453539ee72a54d6b15d11f85a02e76e148ee8c17ad6",
+    "paper_images/Screenshot from 2026-11-05 23-05-38.png": "420f8d16740f7cc02683b92ab1a7e79fb3dc8730dfd0098e5d3fa5410af41ef9",
+    "paper_images/Screenshot from 2026-11-05 23-06-18.png": "dc65b150f0b52b661d176e890bb508fbaf4222001ae73f0bda2219f26395bd82",
+    "paper_images/Screenshot from 2026-11-05 23-07-13.png": "39a4e133bedc0710e59574c71135718648739789abb34576f6c4fdc840cb82a0",
+    "paper_images/Screenshot from 2026-11-05 23-11-41.png": "ef84865d4d1d99cbc4100bcd913fffa94943edba9543bd257a27f365aaeec8ad",
+    "paper_images/Screenshot from 2026-11-05 23-14-24.png": "081a6eeff40edb21edd7168f9652db6e41e828cb12319df93e3fb603008d2058",
+    "paper_images/Screenshot from 2026-11-05 23-14-49.png": "c0e78e2396c38cde1265166825f26462beaa6a01353a4fcdafb4d37a065b7221",
+    "paper_images/Screenshot from 2026-11-05 23-30-02.png": "1d3463e83833fe8b1714d8b54612d78b8df969019fe7ba4f4e3f7d4a5c7205d2",
+    "paper_images/Screenshot from 2026-11-05 23-32-45.png": "e05966180426f482faa7dc72f43b95f9918f8265b4db29938298ad544f6e9e14",
+    "paper_images/Screenshot from 2026-11-05 23-32-51.png": "f992f9a2c83974709c7cf9aa99aa8c04b8361c19834d03c4ea4a7a929637b8dc",
+    "paper_images/Screenshot from 2026-11-05 23-33-00.png": "2917c2797c832812047e640f256c85cd2b9d55d0a15188842cbd74063301eb7e",
+    "paper_images/Screenshot from 2026-11-05 23-33-07.png": "22049f401add6034f0548911d55255317aa25c2e405ee43fe01e3b6e4e62377c",
+    "paper_images/Screenshot from 2026-11-05 23-33-22.png": "32eae086f4dad1654fac89c43fc5ced814cae7040232595cbd7468685b587de6",
+    "paper_images/Screenshot from 2026-11-05 23-33-36.png": "6c5a42777e4ed66b340b694d9d372ee7119e469d17f773a798ac7182b8c9d428",
+    "paper_images/Screenshot from 2026-11-05 23-33-49.png": "5c9ba9daa391a40c24bf0ef2c1bb205464af572566b1c9538f211ad2d45852eb",
+    "paper_images/Screenshot from 2026-11-05 23-33-59.png": "1be667c190156b35dba640c47897fe47f987bc825942fdd97d746044ba004217",
+    "paper_images/Screenshot from 2026-11-06 09-05-21.png": "3cb33f15e43216b2a2e7f87693e1aa8d875647320fac21f61fa512f49b1dce77",
+    "paper_images/data errors correcting.png": "267d79ae48b50736565cfc9c733c4f9f3c13ae601aaa7943f91588d41a7d2f7a"
+  },
+  "template_use": "Layout inspiration only: enlarged comparisons, parameter/metric plots, configuration tables, and paired annotation examples. No published result images are reused as our outputs."
+}

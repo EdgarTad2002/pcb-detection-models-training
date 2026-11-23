@@ -1,0 +1,12 @@
+{
+  "scope": "Experimental section only",
+  "source_hashes": {
+    "paper/figures/meeting_20261106/figure_manifest.json": "1b944d9f8f6e498f5c29e7b45d6f878ba9fa426909e7a8a46a68a2a70bdcb3c6",
+    "results/champion_audit_v1_20261030/summary.json": "febb655d34649c42be51b01bb494b0cefd9d278f83692643709cdde143269a27",
+    "results/info17_protocol_v1_20261031/summary.json": "a9cca59925e4121833facd8d31c267159cd38db1ce0503f360d07faf683f1479",
+    "data_review/native1280_v2_20261106/patches_final_r3.json": "8eda9476c6b7517008db7c12d28fdf85a7807fce5d1350cf5aadb7d176e64dce"
+  },
+  "publication_comparison_certified": false,
+  "independent_generalization_certified": false,
+  "r3_accuracy_claimed": false
+}

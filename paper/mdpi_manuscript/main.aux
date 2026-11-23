@@ -1,0 +1,246 @@
+\relax 
+\providecommand*\new@tpo@label[2]{}
+\providecommand\hyper@newdestlabel[2]{}
+\providecommand\HyField@AuxAddToFields[1]{}
+\providecommand\HyField@AuxAddToCoFields[2]{}
+\bibstyle{Definitions/mdpi}
+\citation{balde2024ewaste}
+\citation{mohsin2025ai,lu2022sorting}
+\citation{pramerdorfer2015pcbdslr,kuo2019wacv}
+\citation{ren2015fasterrcnn}
+\citation{lin2017fpn}
+\citation{liu2016ssd}
+\citation{lin2017focalloss}
+\citation{woo2018cbam}
+\citation{liu2021swin}
+\citation{carion2020detr}
+\citation{zhao2024rtdetr}
+\citation{gu2023mamba,zhu2024vim}
+\citation{redmon2016yolo,redmon2018yolov3,bochkovskiy2020yolov4,jocher2020yolov5,ge2021yolox,wang2023yolov7,jocher2023ultralytics,wang2024yolov9,wang2024yolov10,khanam2024yolo11,tian2025yolov12,sapkota2025yolo26}
+\citation{zhou2026review,zhou2026ensemble,zhou2026multispectral}
+\citation{land1971retinex,fu2016variational}
+\citation{solovyev2021wbf}
+\def\@LN@column{1}
+\newmarginnote{note.1.1}{{1}{10945661sp}}
+\@writefile{toc}{\contentsline {section}{\numberline {1}Introduction}{1}{section.1}\protected@file@percent }
+\newlabel{sec:introduction}{{1}{1}{Introduction}{section.1}{}}
+\newlabel{sec:introduction@cref}{{[section][1][]1}{[1][1][]1}{}{}{}}
+\citation{sapkota2025yolo26}
+\citation{tian2025yolov12}
+\citation{solovyev2021wbf}
+\citation{tian2025yolov12}
+\def\@LN@column{1}
+\@writefile{toc}{\contentsline {section}{\numberline {2}Methodology}{2}{section.2}\protected@file@percent }
+\newlabel{sec:methodology}{{2}{2}{Methodology}{section.2}{}}
+\newlabel{sec:methodology@cref}{{[section][2][]2}{[1][2][]2}{}{}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.1}Overall Heterogeneous Detection and Fusion Pipeline}{2}{subsection.2.1}\protected@file@percent }
+\newlabel{subsec:architecture}{{2.1}{2}{Overall Heterogeneous Detection and Fusion Pipeline}{subsection.2.1}{}}
+\newlabel{subsec:architecture@cref}{{[subsection][1][2]2.1}{[1][2][]2}{}{}{}}
+\citation{arbash2024pcbvision}
+\citation{sunkara2022spd}
+\citation{zheng2020diou}
+\citation{zheng2020diou}
+\def\@LN@column{1}
+\@writefile{lof}{\contentsline {figure}{\numberline {1}{\ignorespaces End-to-end block diagram of our detection and Weighted Boxes Fusion (WBF) pipeline. Cleaned, copy-paste, and mixed-crop tracks ($\mathcal  {D}_{\mathrm  {clean}}$, $\mathcal  {D}_{\mathrm  {CP}}$, $\mathcal  {D}_{\mathrm  {mix}}$) feed four specialist detectors ($\mathrm  {M}_1$--$\mathrm  {M}_4$), whose predictions are combined by Two-Model WBF ($18.70\text  {M}$ active parameters) or Four-Model WBF ($38.60\text  {M}$ active parameters; optionally extended by cached stream $\mathrm  {M}_5$).}}{3}{figure.caption.1}\protected@file@percent }
+\providecommand*\caption@xref[2]{\@setref\relax\@undefined{#1}}
+\newlabel{fig:pipeline}{{1}{3}{End-to-end block diagram of our detection and Weighted Boxes Fusion (WBF) pipeline. Cleaned, copy-paste, and mixed-crop tracks ($\mathcal {D}_{\mathrm {clean}}$, $\mathcal {D}_{\mathrm {CP}}$, $\mathcal {D}_{\mathrm {mix}}$) feed four specialist detectors ($\mathrm {M}_1$--$\mathrm {M}_4$), whose predictions are combined by Two-Model WBF ($18.70\text {M}$ active parameters) or Four-Model WBF ($38.60\text {M}$ active parameters; optionally extended by cached stream $\mathrm {M}_5$)}{figure.caption.1}{}}
+\newlabel{fig:pipeline@cref}{{[figure][1][]1}{[1][2][]3}{}{}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {1}{\ignorespaces Architectural, dataset, and training specifications of the four core specialist checkpoints ($\mathrm  {M}_1$--$\mathrm  {M}_4$) evaluated in the NVIDIA H100 $1280$-pixel audit (all trained with SGD, $\mathrm  {lr}_0=0.01$, batch size $8$, input size $1280\times 1280$). Active fused inference graph parameter counts are reported first, with unfused checkpoint totals (including training-only auxiliary heads) in parentheses.}}{3}{table.caption.2}\protected@file@percent }
+\newlabel{tab:champions_spec}{{1}{3}{Architectural, dataset, and training specifications of the four core specialist checkpoints ($\mathrm {M}_1$--$\mathrm {M}_4$) evaluated in the NVIDIA H100 $1280$-pixel audit (all trained with SGD, $\mathrm {lr}_0=0.01$, batch size $8$, input size $1280\times 1280$). Active fused inference graph parameter counts are reported first, with unfused checkpoint totals (including training-only auxiliary heads) in parentheses}{table.caption.2}{}}
+\newlabel{tab:champions_spec@cref}{{[table][1][]1}{[1][2][]3}{}{}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.2}Scale-Adaptive Loss Functions and Label Assignment}{3}{subsection.2.2}\protected@file@percent }
+\newlabel{subsec:loss_justification}{{2.2}{3}{Scale-Adaptive Loss Functions and Label Assignment}{subsection.2.2}{}}
+\newlabel{subsec:loss_justification@cref}{{[subsection][2][2]2.2}{[1][3][]3}{}{}{}}
+\citation{milletari2016vnet}
+\citation{wang2021nwd}
+\def\@LN@column{1}
+\newlabel{eq:total_loss}{{1}{4}{Scale-Adaptive Loss Functions and Label Assignment}{equation.1}{}}
+\newlabel{eq:total_loss@cref}{{[equation][1][]1}{[1][4][]4}{}{}{}}
+\newlabel{eq:sdice}{{2}{4}{Scale-Adaptive Loss Functions and Label Assignment}{equation.2}{}}
+\newlabel{eq:sdice@cref}{{[equation][2][]2}{[1][4][]4}{}{}{}}
+\newlabel{eq:nwd_def}{{3}{4}{Scale-Adaptive Loss Functions and Label Assignment}{equation.3}{}}
+\newlabel{eq:nwd_def@cref}{{[equation][3][]3}{[1][4][]4}{}{}{}}
+\newlabel{eq:ceff_def}{{4}{4}{Scale-Adaptive Loss Functions and Label Assignment}{equation.4}{}}
+\newlabel{eq:ceff_def@cref}{{[equation][4][]4}{[1][4][]4}{}{}{}}
+\newlabel{eq:sagwd}{{5}{4}{Scale-Adaptive Loss Functions and Label Assignment}{equation.5}{}}
+\newlabel{eq:sagwd@cref}{{[equation][5][]5}{[1][4][]4}{}{}{}}
+\newlabel{eq:dj_def}{{6}{4}{Scale-Adaptive Loss Functions and Label Assignment}{equation.6}{}}
+\newlabel{eq:dj_def@cref}{{[equation][6][]6}{[1][4][]4}{}{}{}}
+\citation{ge2021yolox,jocher2023ultralytics}
+\citation{fu2016variational}
+\citation{solovyev2021wbf}
+\def\@LN@column{1}
+\newlabel{eq:boxloss}{{7}{5}{Scale-Adaptive Loss Functions and Label Assignment}{equation.7}{}}
+\newlabel{eq:boxloss@cref}{{[equation][7][]7}{[1][4][]5}{}{}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.3}Analysis of Image Enhancement and Denoising Trade-Offs}{5}{subsection.2.3}\protected@file@percent }
+\newlabel{subsec:enhancement}{{2.3}{5}{Analysis of Image Enhancement and Denoising Trade-Offs}{subsection.2.3}{}}
+\newlabel{subsec:enhancement@cref}{{[subsection][3][2]2.3}{[1][5][]5}{}{}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.4}Weighted Boxes Fusion (WBF) and Standardized Evaluation Protocol}{5}{subsection.2.4}\protected@file@percent }
+\newlabel{subsec:wbf}{{2.4}{5}{Weighted Boxes Fusion (WBF) and Standardized Evaluation Protocol}{subsection.2.4}{}}
+\newlabel{subsec:wbf@cref}{{[subsection][4][2]2.4}{[1][5][]5}{}{}{}}
+\newlabel{eq:wbf}{{8}{5}{Weighted Boxes Fusion (WBF) and Standardized Evaluation Protocol}{equation.8}{}}
+\newlabel{eq:wbf@cref}{{[equation][8][]8}{[1][5][]5}{}{}{}}
+\citation{rf100pcb}
+\citation{zhou2026ensemble,zhou2026multispectral}
+\citation{zhou2026ensemble}
+\def\@LN@column{1}
+\@writefile{lot}{\contentsline {table}{\numberline {2}{\ignorespaces Canonical class consolidation from the raw 23-class RF100 PCB export in the native-resolution pipeline. Source box counts span the full raw exported splits and represent exported annotations (including augmented/transformed exports) rather than distinct physical boards.}}{6}{table.caption.3}\protected@file@percent }
+\newlabel{tab:taxonomy}{{2}{6}{Canonical class consolidation from the raw 23-class RF100 PCB export in the native-resolution pipeline. Source box counts span the full raw exported splits and represent exported annotations (including augmented/transformed exports) rather than distinct physical boards}{table.caption.3}{}}
+\newlabel{tab:taxonomy@cref}{{[table][2][]2}{[1][6][]6}{}{}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {2}{\ignorespaces Examples from the raw source export illustrating canonical capacitor unification: raw class~$1$ (\emph  {Capacitor Jumper}) and raw class~$2$ (\emph  {Capacitor}) both map to canonical class~$0$ (\emph  {Capacitor}) without altering bounding-box coordinates.}}{6}{figure.caption.4}\protected@file@percent }
+\newlabel{fig:taxonomy}{{2}{6}{Examples from the raw source export illustrating canonical capacitor unification: raw class~$1$ (\emph {Capacitor Jumper}) and raw class~$2$ (\emph {Capacitor}) both map to canonical class~$0$ (\emph {Capacitor}) without altering bounding-box coordinates}{figure.caption.4}{}}
+\newlabel{fig:taxonomy@cref}{{[figure][2][]2}{[1][6][]6}{}{}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {3}Dataset Description, Rectification, and Annotation Audit}{6}{section.3}\protected@file@percent }
+\newlabel{sec:dataset}{{3}{6}{Dataset Description, Rectification, and Annotation Audit}{section.3}{}}
+\newlabel{sec:dataset@cref}{{[section][3][]3}{[1][5][]6}{}{}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.1}Taxonomy Consolidation from Raw RF100 Exports}{6}{subsection.3.1}\protected@file@percent }
+\newlabel{subsec:taxonomy}{{3.1}{6}{Taxonomy Consolidation from Raw RF100 Exports}{subsection.3.1}{}}
+\newlabel{subsec:taxonomy@cref}{{[subsection][1][3]3.1}{[1][6][]6}{}{}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.2}Native-Resolution Dataset Variants Used by the Ensemble}{6}{subsection.3.2}\protected@file@percent }
+\newlabel{subsec:datasets_used}{{3.2}{6}{Native-Resolution Dataset Variants Used by the Ensemble}{subsection.3.2}{}}
+\newlabel{subsec:datasets_used@cref}{{[subsection][2][3]3.2}{[1][6][]6}{}{}{}}
+\citation{ghiasi2021copypaste}
+\def\@LN@column{1}
+\@writefile{lof}{\contentsline {figure}{\numberline {3}{\ignorespaces Representative native-resolution PCB assemblies from the 44-export test split arranged in a $2\times 4$ grid: (\textbf  {a},\textbf  {b})~top and bottom planes of an FPGA development board ($2048\times 1365$ and $2048\times 1640\text  { px}$), (\textbf  {c})~3D-printer controller board ($2048\times 1498\text  { px}$), (\textbf  {d})~IoT carrier board ($2048\times 1246\text  { px}$), and (\textbf  {e}--\textbf  {h})~embedded controller and compute boards up to $2562\times 1926\text  { px}$, highlighting wide diversity in solder-mask color and SMD component density.}}{7}{figure.caption.5}\protected@file@percent }
+\newlabel{fig:sample_grid}{{3}{7}{Representative native-resolution PCB assemblies from the 44-export test split arranged in a $2\times 4$ grid: (\textbf {a},\textbf {b})~top and bottom planes of an FPGA development board ($2048\times 1365$ and $2048\times 1640\text { px}$), (\textbf {c})~3D-printer controller board ($2048\times 1498\text { px}$), (\textbf {d})~IoT carrier board ($2048\times 1246\text { px}$), and (\textbf {e}--\textbf {h})~embedded controller and compute boards up to $2562\times 1926\text { px}$, highlighting wide diversity in solder-mask color and SMD component density}{figure.caption.5}{}}
+\newlabel{fig:sample_grid@cref}{{[figure][3][]3}{[1][7][]7}{}{}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.3}Comprehensive Visual Audit, Cross-Split Leakage Isolation, and $\mathcal  {D}_{\mathrm  {V4}}$ Repairs}{7}{subsection.3.3}\protected@file@percent }
+\newlabel{subsec:audit_v4}{{3.3}{7}{Comprehensive Visual Audit, Cross-Split Leakage Isolation, and \texorpdfstring {$\mathcal {D}_{\mathrm {V4}}$}{D\_V4} Repairs}{subsection.3.3}{}}
+\newlabel{subsec:audit_v4@cref}{{[subsection][3][3]3.3}{[1][7][]7}{}{}{}}
+\def\@LN@column{1}
+\@writefile{lot}{\contentsline {table}{\numberline {3}{\ignorespaces Summary of dataset tracks and split compositions used across specialist training, controlled multi-seed ablations, literature comparisons, and the leak-isolated $\mathcal  {D}_{\mathrm  {V4}}$ audit.}}{8}{table.caption.6}\protected@file@percent }
+\newlabel{tab:dataset_tracks}{{3}{8}{Summary of dataset tracks and split compositions used across specialist training, controlled multi-seed ablations, literature comparisons, and the leak-isolated $\mathcal {D}_{\mathrm {V4}}$ audit}{table.caption.6}{}}
+\newlabel{tab:dataset_tracks@cref}{{[table][3][]3}{[1][7][]8}{}{}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {4}{\ignorespaces Verified annotation repairs and board-family quarantine counts in the leak-isolated $\mathcal  {D}_{\mathrm  {V4}}$ audit. Box counts include registered views matching each split's active exports.}}{8}{table.caption.8}\protected@file@percent }
+\newlabel{tab:review_repairs}{{4}{8}{Verified annotation repairs and board-family quarantine counts in the leak-isolated $\mathcal {D}_{\mathrm {V4}}$ audit. Box counts include registered views matching each split's active exports}{table.caption.8}{}}
+\newlabel{tab:review_repairs@cref}{{[table][4][]4}{[1][8][]8}{}{}{}}
+\def\@LN@column{1}
+\@writefile{lof}{\contentsline {figure}{\numberline {4}{\ignorespaces Geometric SIFT+RANSAC verification of exact cross-split photograph duplicates in legacy $\mathcal  {D}_{\mathrm  {clean}}$: (\textbf  {a})~Board Family $\mathrm  {F}_2$ shared between train and validation ($872$ inliers, $\rho = 0.926$); (\textbf  {b})~Board Family $\mathrm  {F}_3$ shared between train and validation ($878$ inliers, $\rho = 0.907$); and (\textbf  {c})~Board Family $\mathrm  {F}_1$ shared identically between train and test ($1,739$ inliers, $\rho = 1.000$), whose two test exports account for $16/18$ ($88.9\%$) of legacy test Electrolytic Capacitor boxes.}}{9}{figure.caption.7}\protected@file@percent }
+\newlabel{fig:leakage_evidence}{{4}{9}{Geometric SIFT+RANSAC verification of exact cross-split photograph duplicates in legacy $\mathcal {D}_{\mathrm {clean}}$: (\textbf {a})~Board Family $\mathrm {F}_2$ shared between train and validation ($872$ inliers, $\rho = 0.926$); (\textbf {b})~Board Family $\mathrm {F}_3$ shared between train and validation ($878$ inliers, $\rho = 0.907$); and (\textbf {c})~Board Family $\mathrm {F}_1$ shared identically between train and test ($1,739$ inliers, $\rho = 1.000$), whose two test exports account for $16/18$ ($88.9\%$) of legacy test Electrolytic Capacitor boxes}{figure.caption.7}{}}
+\newlabel{fig:leakage_evidence@cref}{{[figure][4][]4}{[1][8][]9}{}{}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {5}{\ignorespaces Exact active export and per-class box counts of the leak-isolated $\mathcal  {D}_{\mathrm  {V4}}$ benchmark ($614$ active exports) compared with the $44$-export legacy $\mathcal  {D}_{\mathrm  {clean}}$ test baseline.}}{9}{table.caption.9}\protected@file@percent }
+\newlabel{tab:v4_splits}{{5}{9}{Exact active export and per-class box counts of the leak-isolated $\mathcal {D}_{\mathrm {V4}}$ benchmark ($614$ active exports) compared with the $44$-export legacy $\mathcal {D}_{\mathrm {clean}}$ test baseline}{table.caption.9}{}}
+\newlabel{tab:v4_splits@cref}{{[table][5][]5}{[1][8][]9}{}{}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {4}Experimental Results and Discussion}{9}{section.4}\protected@file@percent }
+\newlabel{sec:results}{{4}{9}{Experimental Results and Discussion}{section.4}{}}
+\newlabel{sec:results@cref}{{[section][4][]4}{[1][8][]9}{}{}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.1}Unified Native-1280 Audit: Single Specialists vs.\ WBF Ensembles}{9}{subsection.4.1}\protected@file@percent }
+\newlabel{subsec:native_audit}{{4.1}{9}{Unified Native-1280 Audit: Single Specialists vs.\ WBF Ensembles}{subsection.4.1}{}}
+\newlabel{subsec:native_audit@cref}{{[subsection][1][4]4.1}{[1][8][]9}{}{}{}}
+\def\@LN@column{1}
+\@writefile{lof}{\contentsline {figure}{\numberline {5}{\ignorespaces Visual examples of annotation repairs applied across $\mathcal  {D}_{\mathrm  {V4}}$ ($2$ distinct verified crop examples per category, before vs.\ after): \textbf  {Row~1} ($0 \rightarrow 2$ relabeling of radial and SMD electrolytic cans from generic \emph  {Capacitor} to \emph  {Electrolytic Capacitor}); \textbf  {Row~2} (restored bounding boxes for omitted IC and capacitor components); and \textbf  {Row~3} (removal of spurious boxes anchored over unpopulated silkscreen component footprints). Orange/red boxes highlight legacy defects; green boxes show $\mathcal  {D}_{\mathrm  {V4}}$ annotations.}}{10}{figure.caption.10}\protected@file@percent }
+\newlabel{fig:annotation_review}{{5}{10}{Visual examples of annotation repairs applied across $\mathcal {D}_{\mathrm {V4}}$ ($2$ distinct verified crop examples per category, before vs.\ after): \textbf {Row~1} ($0 \rightarrow 2$ relabeling of radial and SMD electrolytic cans from generic \emph {Capacitor} to \emph {Electrolytic Capacitor}); \textbf {Row~2} (restored bounding boxes for omitted IC and capacitor components); and \textbf {Row~3} (removal of spurious boxes anchored over unpopulated silkscreen component footprints). Orange/red boxes highlight legacy defects; green boxes show $\mathcal {D}_{\mathrm {V4}}$ annotations}{figure.caption.10}{}}
+\newlabel{fig:annotation_review@cref}{{[figure][5][]5}{[1][8][]10}{}{}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {6}{\ignorespaces Unified $1280\times 1280$ benchmark results on the $44$-export legacy test split of $\mathcal  {D}_{\mathrm  {clean}}$ ($4,905$ boxes across $22$ view groups; NVIDIA H100 $80\text  { GB}$, FP32, batch size $1$). Precision ($P$), Recall ($R$), and $\mathrm  {F1}$ use pooled micro-averaged counts at $\mathrm  {conf}\ge 0.25$ and $\mathrm  {IoU}=0.50$. Active fused inference parameters are reported (with unfused checkpoint totals in parentheses). Best value per column is highlighted in bold blue; second-best in light blue.}}{10}{table.caption.11}\protected@file@percent }
+\newlabel{tab:native_results}{{6}{10}{Unified $1280\times 1280$ benchmark results on the $44$-export legacy test split of $\mathcal {D}_{\mathrm {clean}}$ ($4,905$ boxes across $22$ view groups; NVIDIA H100 $80\text { GB}$, FP32, batch size $1$). Precision ($P$), Recall ($R$), and $\mathrm {F1}$ use pooled micro-averaged counts at $\mathrm {conf}\ge 0.25$ and $\mathrm {IoU}=0.50$. Active fused inference parameters are reported (with unfused checkpoint totals in parentheses). Best value per column is highlighted in bold blue; second-best in light blue}{table.caption.11}{}}
+\newlabel{tab:native_results@cref}{{[table][6][]6}{[1][10][]10}{}{}{}}
+\citation{zhou2026multispectral,zhou2026ensemble}
+\def\@LN@column{1}
+\@writefile{lof}{\contentsline {figure}{\numberline {6}{\ignorespaces Per-class $\mathrm  {AP}_{50}$ (\%) across the four specialist detectors ($\mathrm  {M}_1$--$\mathrm  {M}_4$) and the Two-Model, Four-Model, and Five-Model WBF ensembles on the $44$-export legacy test split of $\mathcal  {D}_{\mathrm  {clean}}$ ($4,905$ annotations; class test instance counts shown along the horizontal axis).}}{11}{figure.caption.12}\protected@file@percent }
+\newlabel{fig:native_class_ap}{{6}{11}{Per-class $\mathrm {AP}_{50}$ (\%) across the four specialist detectors ($\mathrm {M}_1$--$\mathrm {M}_4$) and the Two-Model, Four-Model, and Five-Model WBF ensembles on the $44$-export legacy test split of $\mathcal {D}_{\mathrm {clean}}$ ($4,905$ annotations; class test instance counts shown along the horizontal axis)}{figure.caption.12}{}}
+\newlabel{fig:native_class_ap@cref}{{[figure][6][]6}{[1][10][]11}{}{}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.2}Qualitative Detection Analysis and Failure Modes}{11}{subsection.4.2}\protected@file@percent }
+\newlabel{subsec:qualitative}{{4.2}{11}{Qualitative Detection Analysis and Failure Modes}{subsection.4.2}{}}
+\newlabel{subsec:qualitative@cref}{{[subsection][2][4]4.2}{[1][11][]11}{}{}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.3}Controlled 640-Pixel Original-Label Study and Literature Context}{11}{subsection.4.3}\protected@file@percent }
+\newlabel{subsec:full_benchmark}{{4.3}{11}{Controlled 640-Pixel Original-Label Study and Literature Context}{subsection.4.3}{}}
+\newlabel{subsec:full_benchmark@cref}{{[subsection][3][4]4.3}{[1][11][]11}{}{}{}}
+\citation{zhou2026multispectral,zhou2026ensemble}
+\citation{zhou2026ensemble}
+\citation{zhou2026multispectral}
+\citation{zhou2026ensemble}
+\citation{zhou2026ensemble}
+\def\@LN@column{1}
+\@writefile{lof}{\contentsline {figure}{\numberline {7}{\ignorespaces Qualitative matching-status comparison ($\mathrm  {IoU}=0.50$, $\mathrm  {conf}\ge 0.25$) across reference ground truth, Crop YOLO26s ($\mathrm  {M}_2$), Two-Model WBF ($\mathrm  {M}_1+\mathrm  {M}_2$), and Four-Model WBF ($\mathrm  {M}_1$--$\mathrm  {M}_4$) on two outcome-selected test regions: (\textbf  {a, Top row})~dense BGA decoupling-capacitor region where both WBF configurations increase matched detections from $2/16$ to $10/16$; (\textbf  {b, Bottom row})~compact cluster where WBF score rescaling at threshold $0.25$ reduces matched predictions from $8/9$ ($\mathrm  {M}_2$) to $6/9$ (Two-Model WBF) and $3/9$ (Four-Model WBF).}}{12}{figure.caption.13}\protected@file@percent }
+\newlabel{fig:native_detections}{{7}{12}{Qualitative matching-status comparison ($\mathrm {IoU}=0.50$, $\mathrm {conf}\ge 0.25$) across reference ground truth, Crop YOLO26s ($\mathrm {M}_2$), Two-Model WBF ($\mathrm {M}_1+\mathrm {M}_2$), and Four-Model WBF ($\mathrm {M}_1$--$\mathrm {M}_4$) on two outcome-selected test regions: (\textbf {a, Top row})~dense BGA decoupling-capacitor region where both WBF configurations increase matched detections from $2/16$ to $10/16$; (\textbf {b, Bottom row})~compact cluster where WBF score rescaling at threshold $0.25$ reduces matched predictions from $8/9$ ($\mathrm {M}_2$) to $6/9$ (Two-Model WBF) and $3/9$ (Four-Model WBF)}{figure.caption.13}{}}
+\newlabel{fig:native_detections@cref}{{[figure][7][]7}{[1][11][]12}{}{}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {7}{\ignorespaces Controlled three-seed evaluation on the $640\times 640$ original-label dataset $\mathcal  {D}_{\mathrm  {orig}}$ ($543$ train / $77$ val / $41$ test exports; $2,886$ test boxes; raw IDs $\{2,4,7,9\}$, excluding \emph  {Capacitor Jumper}). All rows report mean $\pm $ sample SD across seeds $\{0, 1, 2\}$ under identical evaluator settings ($P, R, \mathrm  {F1}$ pooled at $\mathrm  {conf}\ge 0.25$, $\mathrm  {IoU}=0.50$).}}{12}{table.caption.14}\protected@file@percent }
+\newlabel{tab:paper_protocol_ours}{{7}{12}{Controlled three-seed evaluation on the $640\times 640$ original-label dataset $\mathcal {D}_{\mathrm {orig}}$ ($543$ train / $77$ val / $41$ test exports; $2,886$ test boxes; raw IDs $\{2,4,7,9\}$, excluding \emph {Capacitor Jumper}). All rows report mean $\pm $ sample SD across seeds $\{0, 1, 2\}$ under identical evaluator settings ($P, R, \mathrm {F1}$ pooled at $\mathrm {conf}\ge 0.25$, $\mathrm {IoU}=0.50$)}{table.caption.14}{}}
+\newlabel{tab:paper_protocol_ours@cref}{{[table][7][]7}{[1][12][]12}{}{}{}}
+\def\@LN@column{1}
+\@writefile{lot}{\contentsline {table}{\numberline {8}{\ignorespaces Contextual summary of published $640\times 640$ RF100 PCB benchmark results reported by Zhou and Agaian~\cite  {zhou2026multispectral,zhou2026ensemble}. Because those studies used their own split and evaluator, rows below provide literature context rather than a paired comparison. In~\cite  {zhou2026ensemble}, per-class best $\mathrm  {AP}_{50}$ entries in Table~10 came from distinct voting rules rather than one unified ensemble.}}{13}{table.caption.15}\protected@file@percent }
+\newlabel{tab:paper_protocol_context}{{8}{13}{Contextual summary of published $640\times 640$ RF100 PCB benchmark results reported by Zhou and Agaian~\cite {zhou2026multispectral,zhou2026ensemble}. Because those studies used their own split and evaluator, rows below provide literature context rather than a paired comparison. In~\cite {zhou2026ensemble}, per-class best $\mathrm {AP}_{50}$ entries in Table~10 came from distinct voting rules rather than one unified ensemble}{table.caption.15}{}}
+\newlabel{tab:paper_protocol_context@cref}{{[table][8][]8}{[1][12][]13}{}{}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {8}{\ignorespaces (\textbf  {Top})~Controlled three-seed $640\times 640$ results on $\mathcal  {D}_{\mathrm  {orig}}$ (mean $\pm $ sample SD across seeds $\{0,1,2\}$) plotted alongside contextual published single-model ($54.04\%$) and Consensus Top-4 ($59.63\%$) lines~\cite  {zhou2026ensemble}; (\textbf  {Bottom})~Seed-0 Precision--Recall envelopes for \emph  {Capacitor} versus \emph  {IC} at $640\text  { px}$, illustrating the extreme small-capacitor recall collapse under low-resolution downsampling.}}{13}{figure.caption.16}\protected@file@percent }
+\newlabel{fig:paper_comp}{{8}{13}{(\textbf {Top})~Controlled three-seed $640\times 640$ results on $\mathcal {D}_{\mathrm {orig}}$ (mean $\pm $ sample SD across seeds $\{0,1,2\}$) plotted alongside contextual published single-model ($54.04\%$) and Consensus Top-4 ($59.63\%$) lines~\cite {zhou2026ensemble}; (\textbf {Bottom})~Seed-0 Precision--Recall envelopes for \emph {Capacitor} versus \emph {IC} at $640\text { px}$, illustrating the extreme small-capacitor recall collapse under low-resolution downsampling}{figure.caption.16}{}}
+\newlabel{fig:paper_comp@cref}{{[figure][8][]8}{[1][12][]13}{}{}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.4}Controlled Ablations and Leak-Isolated $\mathcal  {D}_{\mathrm  {V4}}$ Benchmark}{13}{subsection.4.4}\protected@file@percent }
+\newlabel{subsec:ablations}{{4.4}{13}{Controlled Ablations and Leak-Isolated \texorpdfstring {$\mathcal {D}_{\mathrm {V4}}$}{D\_V4} Benchmark}{subsection.4.4}{}}
+\newlabel{subsec:ablations@cref}{{[subsection][4][4]4.4}{[1][12][]13}{}{}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {4.4.1}Controlled Three-Seed No-Augmentation Study and Seed-0 Parameter Sweeps}{13}{subsubsection.4.4.1}\protected@file@percent }
+\citation{wang2024yolov10}
+\citation{tian2025yolov12}
+\citation{sapkota2025yolo26}
+\def\@LN@column{1}
+\@writefile{lot}{\contentsline {table}{\numberline {9}{\ignorespaces Controlled three-seed architecture and loss comparison on $\mathcal  {D}_{\mathrm  {clean}}$ at $1280\times 1280$ resolution with online and offline augmentations disabled (mean $\pm $ sample SD across seeds $\{0, 1, 2\}$, $44$-export test split, rectangular batch $8$).}}{14}{table.caption.17}\protected@file@percent }
+\newlabel{tab:loss_control_3seed}{{9}{14}{Controlled three-seed architecture and loss comparison on $\mathcal {D}_{\mathrm {clean}}$ at $1280\times 1280$ resolution with online and offline augmentations disabled (mean $\pm $ sample SD across seeds $\{0, 1, 2\}$, $44$-export test split, rectangular batch $8$)}{table.caption.17}{}}
+\newlabel{tab:loss_control_3seed@cref}{{[table][9][]9}{[1][14][]14}{}{}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {10}{\ignorespaces Historical seed-0 hyperparameter sweeps, YOLO26x $74$-box restoration check, and Retinex preprocessing evaluations on $\mathcal  {D}_{\mathrm  {clean}}$ (rectangular batch-8 test evaluation).}}{14}{table.caption.18}\protected@file@percent }
+\newlabel{tab:seed0_sweeps}{{10}{14}{Historical seed-0 hyperparameter sweeps, YOLO26x $74$-box restoration check, and Retinex preprocessing evaluations on $\mathcal {D}_{\mathrm {clean}}$ (rectangular batch-8 test evaluation)}{table.caption.18}{}}
+\newlabel{tab:seed0_sweeps@cref}{{[table][10][]10}{[1][14][]14}{}{}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {4.4.2}Leak-Isolated $\mathcal  {D}_{\mathrm  {V4}}$ Re-Scoring and Retraining Evaluation}{14}{subsubsection.4.4.2}\protected@file@percent }
+\newlabel{subsec:v4_eval}{{4.4.2}{14}{Leak-Isolated \texorpdfstring {$\mathcal {D}_{\mathrm {V4}}$}{D\_V4} Re-Scoring and Retraining Evaluation}{subsubsection.4.4.2}{}}
+\newlabel{subsec:v4_eval@cref}{{[subsubsection][2][4,4]4.4.2}{[1][14][]14}{}{}{}}
+\def\@LN@column{1}
+\@writefile{lof}{\contentsline {figure}{\numberline {9}{\ignorespaces Seed-0 hyperparameter sensitivity of YOLO26s \texttt  {AGWD + Squared-Dice} on $\mathcal  {D}_{\mathrm  {clean}}$: (\textbf  {a})~$\lambda _{\mathrm  {dice}}$ sweep; (\textbf  {b})~grouped comparison of smoothing $\varepsilon $ and stage-weighting configurations at $\lambda _{\mathrm  {dice}}=0.50$; (\textbf  {c})~uniform $[1,1,1]$ versus weighted $[0.5,0.3,0.2]$ stage policy; and (\textbf  {d})~validation $\mathrm  {mAP}_{50}$ trajectories across the $80$ validation exports.}}{15}{figure.caption.19}\protected@file@percent }
+\newlabel{fig:hyper_sens}{{9}{15}{Seed-0 hyperparameter sensitivity of YOLO26s \texttt {AGWD + Squared-Dice} on $\mathcal {D}_{\mathrm {clean}}$: (\textbf {a})~$\lambda _{\mathrm {dice}}$ sweep; (\textbf {b})~grouped comparison of smoothing $\varepsilon $ and stage-weighting configurations at $\lambda _{\mathrm {dice}}=0.50$; (\textbf {c})~uniform $[1,1,1]$ versus weighted $[0.5,0.3,0.2]$ stage policy; and (\textbf {d})~validation $\mathrm {mAP}_{50}$ trajectories across the $80$ validation exports}{figure.caption.19}{}}
+\newlabel{fig:hyper_sens@cref}{{[figure][9][]9}{[1][14][]15}{}{}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {5}Conclusions}{15}{section.5}\protected@file@percent }
+\newlabel{sec:conclusions}{{5}{15}{Conclusions}{section.5}{}}
+\newlabel{sec:conclusions@cref}{{[section][5][]5}{[1][15][]15}{}{}{}}
+\def\@LN@column{1}
+\@writefile{lot}{\contentsline {table}{\numberline {11}{\ignorespaces Evaluation on the leak-isolated $\mathcal  {D}_{\mathrm  {V4}}$ test split ($44$ exports, $4,909$ targets: $3,645$ Cap, $374$ Conn, $222$ ElCap, $668$ IC), comparing frozen legacy $\mathcal  {D}_{\mathrm  {clean}}$ predictions re-scored on $\mathcal  {D}_{\mathrm  {V4}}$ labels against detectors retrained directly on leak-isolated $\mathcal  {D}_{\mathrm  {V4}}$ ($492$ train / $78$ val). Best value among $\mathcal  {D}_{\mathrm  {V4}}$-retrained rows is highlighted in bold blue; second-best in light blue. Single-pass H100 latency was not benchmarked for the retrained $\mathcal  {D}_{\mathrm  {V4}}$ runs.}}{16}{table.caption.20}\protected@file@percent }
+\newlabel{tab:v4_eval}{{11}{16}{Evaluation on the leak-isolated $\mathcal {D}_{\mathrm {V4}}$ test split ($44$ exports, $4,909$ targets: $3,645$ Cap, $374$ Conn, $222$ ElCap, $668$ IC), comparing frozen legacy $\mathcal {D}_{\mathrm {clean}}$ predictions re-scored on $\mathcal {D}_{\mathrm {V4}}$ labels against detectors retrained directly on leak-isolated $\mathcal {D}_{\mathrm {V4}}$ ($492$ train / $78$ val). Best value among $\mathcal {D}_{\mathrm {V4}}$-retrained rows is highlighted in bold blue; second-best in light blue. Single-pass H100 latency was not benchmarked for the retrained $\mathcal {D}_{\mathrm {V4}}$ runs}{table.caption.20}{}}
+\newlabel{tab:v4_eval@cref}{{[table][11][]11}{[1][15][]16}{}{}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {10}{\ignorespaces Quantitative impact of board-family quarantine and $\mathcal  {D}_{\mathrm  {V4}}$ label repairs: (\textbf  {a})~overall test $\mathrm  {mAP}_{50}$ and $\mathrm  {mAP}_{50:95}$ comparing legacy $\mathcal  {D}_{\mathrm  {clean}}$ Four-Model WBF ($68.74\%$) against frozen re-scoring on $\mathcal  {D}_{\mathrm  {V4}}$ ($51.56\%$) and retrained $\mathcal  {D}_{\mathrm  {V4}}$ models ($45.67\%$ at $1280\text  { px}$, $52.07\%$ at $1536\text  { px}$, and $54.06\%$ validation-calibrated WBF); (\textbf  {b})~per-class $\mathrm  {AP}_{50}$ showing the $18 \rightarrow 222$ Electrolytic Capacitor shift collapsing frozen legacy performance ($73.3\% \rightarrow 7.2\%$) and recovering under leak-isolated $\mathcal  {D}_{\mathrm  {V4}}$ ensembling ($41.8\%$, with IC reaching $78.1\%$).}}{16}{figure.caption.21}\protected@file@percent }
+\newlabel{fig:v4_comparison}{{10}{16}{Quantitative impact of board-family quarantine and $\mathcal {D}_{\mathrm {V4}}$ label repairs: (\textbf {a})~overall test $\mathrm {mAP}_{50}$ and $\mathrm {mAP}_{50:95}$ comparing legacy $\mathcal {D}_{\mathrm {clean}}$ Four-Model WBF ($68.74\%$) against frozen re-scoring on $\mathcal {D}_{\mathrm {V4}}$ ($51.56\%$) and retrained $\mathcal {D}_{\mathrm {V4}}$ models ($45.67\%$ at $1280\text { px}$, $52.07\%$ at $1536\text { px}$, and $54.06\%$ validation-calibrated WBF); (\textbf {b})~per-class $\mathrm {AP}_{50}$ showing the $18 \rightarrow 222$ Electrolytic Capacitor shift collapsing frozen legacy performance ($73.3\% \rightarrow 7.2\%$) and recovering under leak-isolated $\mathcal {D}_{\mathrm {V4}}$ ensembling ($41.8\%$, with IC reaching $78.1\%$)}{figure.caption.21}{}}
+\newlabel{fig:v4_comparison@cref}{{[figure][10][]10}{[1][15][]16}{}{}{}}
+\citation{rf100pcb}
+\bibdata{references}
+\bibcite{balde2024ewaste}{{1}{2024}{{Bald{\'e} et~al.}}{{Bald{\'e}, Kuehr, Yamamoto, McDonald, D'Angelo, Althaf, Bel, Deubzer, Fernandez-Cubillo, Forti, Gray, Herat, Honda, Iattoni, Khetriwal, {Luda di Cortemiglia}, Lobuntsova, Nnorom, Pralat, and Wagner}}}
+\bibcite{mohsin2025ai}{{2}{2025}{{Mohsin et~al.}}{{Mohsin, Rovetta, Masulli, and Cabri}}}
+\bibcite{lu2022sorting}{{3}{2022}{{Lu et~al.}}{{Lu, Yang, Gao, and Xu}}}
+\bibcite{pramerdorfer2015pcbdslr}{{4}{2015}{{Pramerdorfer and Kampel}}{{}}}
+\bibcite{kuo2019wacv}{{5}{2019}{{Kuo et~al.}}{{Kuo, Ashmore, Huggins, and Kira}}}
+\bibcite{ren2015fasterrcnn}{{6}{2015}{{Ren et~al.}}{{Ren, He, Girshick, and Sun}}}
+\bibcite{lin2017fpn}{{7}{2017}{{Lin et~al.}}{{Lin, Doll{\'a}r, Girshick, He, Hariharan, and Belongie}}}
+\bibcite{liu2016ssd}{{8}{2016}{{Liu et~al.}}{{Liu, Anguelov, Erhan, Szegedy, Reed, Fu, and Berg}}}
+\bibcite{lin2017focalloss}{{9}{2017}{{Lin et~al.}}{{Lin, Goyal, Girshick, He, and Doll{\'a}r}}}
+\bibcite{woo2018cbam}{{10}{2018}{{Woo et~al.}}{{Woo, Park, Lee, and Kweon}}}
+\bibcite{liu2021swin}{{11}{2021}{{Liu et~al.}}{{Liu, Lin, Cao, Hu, Wei, Zhang, Lin, and Guo}}}
+\bibcite{carion2020detr}{{12}{2020}{{Carion et~al.}}{{Carion, Massa, Synnaeve, Usunier, Kirillov, and Zagoruyko}}}
+\def\@LN@column{1}
+\@writefile{toc}{\contentsline {section}{References}{17}{section*.22}\protected@file@percent }
+\bibcite{zhao2024rtdetr}{{13}{2024}{{Zhao et~al.}}{{Zhao, Lv, Xu, Wei, Wang, Dang, Liu, and Chen}}}
+\bibcite{gu2023mamba}{{14}{2023}{{Gu and Dao}}{{}}}
+\bibcite{zhu2024vim}{{15}{2024}{{Zhu et~al.}}{{Zhu, Liao, Zhang, Wang, Liu, and Wang}}}
+\bibcite{redmon2016yolo}{{16}{2016}{{Redmon et~al.}}{{Redmon, Divvala, Girshick, and Farhadi}}}
+\bibcite{redmon2018yolov3}{{17}{2018}{{Redmon and Farhadi}}{{}}}
+\bibcite{bochkovskiy2020yolov4}{{18}{2020}{{Bochkovskiy et~al.}}{{Bochkovskiy, Wang, and Liao}}}
+\bibcite{jocher2020yolov5}{{19}{2020}{{Jocher}}{{}}}
+\bibcite{ge2021yolox}{{20}{2021}{{Ge et~al.}}{{Ge, Liu, Wang, Li, and Sun}}}
+\bibcite{wang2023yolov7}{{21}{2023}{{Wang et~al.}}{{Wang, Bochkovskiy, and Liao}}}
+\bibcite{jocher2023ultralytics}{{22}{2023}{{Jocher et~al.}}{{Jocher, Chaurasia, and Qiu}}}
+\bibcite{wang2024yolov9}{{23}{2024{}}{{Wang et~al.}}{{Wang, Yeh, and Liao}}}
+\bibcite{wang2024yolov10}{{24}{2024{}}{{Wang et~al.}}{{Wang, Chen, Liu, Chen, Lin, Han, and Ding}}}
+\bibcite{khanam2024yolo11}{{25}{2024}{{Khanam and Hussain}}{{}}}
+\bibcite{tian2025yolov12}{{26}{2025}{{Tian et~al.}}{{Tian, Ye, and Doermann}}}
+\bibcite{sapkota2025yolo26}{{27}{2025}{{Sapkota and Karkee}}{{}}}
+\bibcite{zhou2026review}{{28}{2026{}}{{Zhou and Agaian}}{{}}}
+\bibcite{zhou2026ensemble}{{29}{2026{}}{{Zhou and Agaian}}{{}}}
+\bibcite{zhou2026multispectral}{{30}{2026{}}{{Zhou and Agaian}}{{}}}
+\bibcite{land1971retinex}{{31}{1971}{{Land and McCann}}{{}}}
+\bibcite{fu2016variational}{{32}{2016}{{Fu et~al.}}{{Fu, Zeng, Huang, Zhang, and Ding}}}
+\bibcite{solovyev2021wbf}{{33}{2021}{{Solovyev et~al.}}{{Solovyev, Wang, and Gabruseva}}}
+\bibcite{arbash2024pcbvision}{{34}{2024}{{Arbash et~al.}}{{Arbash, Fuchs, Rasti, Lorenz, Ghamisi, and Gloaguen}}}
+\bibcite{sunkara2022spd}{{35}{2022}{{Sunkara and Luo}}{{}}}
+\bibcite{zheng2020diou}{{36}{2020}{{Zheng et~al.}}{{Zheng, Wang, Liu, Li, Ye, and Ren}}}
+\bibcite{milletari2016vnet}{{37}{2016}{{Milletari et~al.}}{{Milletari, Navab, and Ahmadi}}}
+\bibcite{wang2021nwd}{{38}{2021}{{Wang et~al.}}{{Wang, Xu, Yang, and Yu}}}
+\bibcite{rf100pcb}{{39}{2024}{{Roboflow 100}}{{}}}
+\bibcite{ghiasi2021copypaste}{{40}{2021}{{Ghiasi et~al.}}{{Ghiasi, Cui, Srinivas, Qian, Lin, Cubuk, Le, and Zoph}}}
+\def\@LN@column{1}
+\newlabel{LastPage}{{5}{18}{Conclusions}{page.18}{}}
+\gdef\lastpage@lastpage{18}
+\gdef\lastpage@lastpageHy{18}
+\gdef \@abspage@last{18}

@@ -1,0 +1,31 @@
+{
+  "source_files": [
+    {
+      "path": "models/as_pgms_yolo.py",
+      "sha256": "01b7fd2b768c3d13fe96485aef511f6d68de2d7ac86ff7c153ba1c377c7d6955",
+      "source": "/mnt/weka/etadevosyan/pcb-yolo/pcb-yolo26n-gurgen/models/as_pgms_yolo.py",
+      "current_sha256": "01b7fd2b768c3d13fe96485aef511f6d68de2d7ac86ff7c153ba1c377c7d6955"
+    },
+    {
+      "path": "tools/scale_adaptive_nwd_loss.py",
+      "sha256": "4d9b389f2303388cad7e35d40a3ab63118e65cd3fe21d2f488a65089b2dadff5",
+      "source": "/mnt/weka/etadevosyan/pcb-yolo/pcb-yolo26n-gurgen/tools/scale_adaptive_nwd_loss.py",
+      "current_sha256": "6c5d171033d407b6b608ea2c00b6403d0f968ed852093158b5894c575a965172"
+    },
+    {
+      "path": "tools/group_multistage_loss.py",
+      "sha256": "8bd11f25237c4cb6d09b451bcbd20136fe8ea8cee2edbd3345a5972e435ada52",
+      "source": "/mnt/weka/etadevosyan/pcb-yolo/pcb-yolo26n-gurgen/tools/group_multistage_loss.py",
+      "current_sha256": "8bd11f25237c4cb6d09b451bcbd20136fe8ea8cee2edbd3345a5972e435ada52"
+    }
+  ],
+  "checkpoint_identity_evidence": "Exp7 best.pt pickle GLOBAL classes: models.as_pgms_yolo ASPGMSStemBlock, FractionalAMSRSoftAGCSargisWeberEdge, P2ToP3MicroBridgeBlock, SPDConvBypassBlock",
+  "guide_corrections": [
+    "Guide names the wrong exp7 script and unsupported smooth/stage flags.",
+    "Use AS-PGMS implementation defaults: lambda_sr=.1, lambda_group=.2, auxiliary smooth=1e-4 and stage weights [.40,.30,.15,.10]. Historical stripped checkpoint does not retain auxiliary hyperparameters.",
+    "NWD is stride-normalized; preserve its 2.5 and area_scale=4 constants at 640. AGWD pixel constants scale to kappa6.4/tau144."
+  ],
+  "local_amendments": [
+    "NWD denominator accepts scalar tensors and Python integers; NWD errors raise rather than silently disabling the loss."
+  ]
+}

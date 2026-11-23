@@ -209,14 +209,14 @@ def export_cleaned_dataset(
             if (dst_path / split / "labels.cache").exists():
                 (dst_path / split / "labels.cache").unlink()
 
-        # Inject only into train split
+        # Inject verified missing annotations across all splits (train, valid, test)
         for c in filtered_cands:
             stem = c["stem"]
             class_id = c["class_id"]
             xc, yc, w, h = c["yolo_bbox"]
             new_line = f"{class_id} {xc:.6f} {yc:.6f} {w:.6f} {h:.6f}\n"
 
-            for split in ["train"]:
+            for split in ["train", "valid", "test"]:
                 lbl_file = dst_path / split / "labels" / f"{stem}.txt"
                 if lbl_file.exists():
                     with open(lbl_file, "a") as f:

@@ -1,0 +1,11 @@
+,Scope,Method,mAP50 (%),Reported evaluation,Comparison status
+0,"Published
+context",Zhou & Agaian: YOLOv8s,54.04,Table 4,Image/annotation and evaluator identity unverified
+1,"Published
+context",Zhou & Agaian: Consensus Top-4,59.63,Table 9,Ensemble; published protocol differs
+2,"Our shared
+protocol",Retrained YOLOv8s,52.34 ± 1.38,41 test exports,Three seeds; common evaluator
+3,"Our shared
+protocol",Retrained YOLO26s,49.94 ± 1.85,41 test exports,Three seeds; common evaluator
+4,"Our shared
+protocol",Crop-trained AGWD + Dice,55.08 ± 0.89,41 test exports,Three seeds; common evaluator

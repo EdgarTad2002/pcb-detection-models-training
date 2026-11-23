@@ -1,0 +1,133 @@
+{
+  "version": "reviewed_native_r3_pilot_v1",
+  "ultralytics_version": "8.4.126",
+  "seeds": [
+    0
+  ],
+  "datasets": {
+    "clean": "datasets/pcb-native-res-reviewed-v2-candidate-20261106-r3/data.yaml",
+    "mixed": "datasets/pcb-native-reviewed-r3-mixed-crops-20261106/data.yaml"
+  },
+  "evaluation_dataset": "clean",
+  "reference_epochs": 100,
+  "reference_dataset": "clean",
+  "common": {
+    "imgsz": 1280,
+    "batch": 8,
+    "nbs": 8,
+    "workers": 8,
+    "optimizer": "SGD",
+    "lr0": 0.01,
+    "lrf": 0.01,
+    "momentum": 0.937,
+    "weight_decay": 0.0005,
+    "warmup_epochs": 3.0,
+    "patience": 0,
+    "no_cache": true,
+    "box": 7.5,
+    "cls": 0.5,
+    "dfl": 1.5,
+    "copy_paste": 0.0,
+    "mixup": 0.0,
+    "mosaic": 0.0,
+    "close_mosaic": 0,
+    "degrees": 0.0,
+    "translate": 0.0,
+    "scale": 0.0,
+    "shear": 0.0,
+    "perspective": 0.0,
+    "hsv_h": 0.0,
+    "hsv_s": 0.0,
+    "hsv_v": 0.0,
+    "fliplr": 0.0,
+    "flipud": 0.0,
+    "max_det": 1000,
+    "eval_conf": 0.001,
+    "eval_iou": 0.5
+  },
+  "models": {
+    "yolov12s": {
+      "weights": "yolo12s.pt"
+    },
+    "yolo26s": {
+      "weights": "yolo26s.pt"
+    },
+    "yolo26s_agwd_sdice": {
+      "weights": "yolo26s.pt",
+      "agwd_ota": true,
+      "squared_dice": true,
+      "lambda_dice": 0.5,
+      "smooth_dice": 0.01,
+      "agwd_kappa": 12.8,
+      "agwd_tau": 576.0,
+      "agwd_alpha_kld": 0.25,
+      "tal_beta": 3.0,
+      "stage_weights": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "physot_yolo26s": {
+      "weights": "yolo26s.pt",
+      "agwd_ota": true,
+      "use_igr_stem": true,
+      "use_fg_csfa": true,
+      "use_aca_supcon": true,
+      "agwd_kappa": 12.8,
+      "agwd_tau": 576.0,
+      "agwd_alpha_kld": 0.25,
+      "tal_beta": 3.0
+    },
+    "yolo26s_crop_specialist": {
+      "weights": "yolo26s.pt",
+      "agwd_ota": true,
+      "squared_dice": true,
+      "lambda_dice": 0.5,
+      "smooth_dice": 0.01,
+      "agwd_kappa": 12.8,
+      "agwd_tau": 576.0,
+      "agwd_alpha_kld": 0.25,
+      "tal_beta": 3.0,
+      "stage_weights": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    }
+  },
+  "studies": {
+    "main": {
+      "dataset": "clean",
+      "epochs": 100,
+      "models": [
+        "yolov12s",
+        "yolo26s",
+        "yolo26s_agwd_sdice",
+        "physot_yolo26s"
+      ]
+    },
+    "crop": {
+      "datasets": [
+        "mixed"
+      ],
+      "models": [
+        "yolo26s_crop_specialist"
+      ],
+      "match_budget": true
+    }
+  },
+  "dataset_review_status": "First-pass AI-assisted review; component-level review incomplete. Preliminary training, not a final paper benchmark.",
+  "review_patches_sha256": "8eda9476c6b7517008db7c12d28fdf85a7807fce5d1350cf5aadb7d176e64dce",
+  "initialization_policy": "Fresh runs from existing general pretrained yolo26s.pt or yolo12s.pt; never resume or initialize from prior PCB champions.",
+  "crop_build": {
+    "crop_sizes": [
+      640,
+      960
+    ],
+    "sampling_ratio": 0.5,
+    "seed": 42,
+    "min_visibility": 0.3,
+    "min_box_dim": 3
+  }
+}

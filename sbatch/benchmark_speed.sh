@@ -4,7 +4,10 @@
 #SBATCH --mem=32G
 #SBATCH --cpus-per-task=8
 #SBATCH --gres=gpu:1
+#SBATCH --time=02:00:00
 #SBATCH --output=slurm_bench_%j.out
+
+set -euo pipefail
 
 export CONDA_PKGS_DIRS=/mnt/weka/etadevosyan/.conda/pkgs
 export CONDA_ENVS_PATH=/mnt/weka/etadevosyan/.conda/envs
@@ -16,19 +19,12 @@ conda activate /mnt/weka/etadevosyan/.conda/envs/pcb-yolo
 
 cd /mnt/weka/etadevosyan/pcb-yolo/pcb-detection-models-training
 
-echo "======================================================================"
-echo "🚀 Starting Controlled GPU Speed Benchmark on $(hostname)"
-echo "======================================================================"
-nvidia-smi --query-gpu=name,memory.total,driver_version --format=csv
-
+# Default: the 21 completed clean-main checkpoints, using clean validation boards.
+# Pass --weights or --plan explicitly to select other runs. No accuracy evaluation
+# or historical result updates occur unless the separate accuracy flag is given.
 python tools/benchmark_speed.py \
     --project-root /mnt/weka/etadevosyan/pcb-yolo/pcb-detection-models-training \
-    --results-dir /mnt/weka/etadevosyan/pcb-yolo/results \
     --device 0 \
-    --warmup 25 \
-    --num-iters 100 \
-    --update-results
-
-echo "======================================================================"
-echo "✅ Speed Benchmarking Complete!"
-echo "======================================================================"
+    --max-det 1000 \
+    --warmup 30 \
+    --num-iters 100 "$@"

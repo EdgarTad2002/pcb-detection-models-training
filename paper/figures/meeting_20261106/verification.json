@@ -1,0 +1,22 @@
+{
+  "status": "verified",
+  "date": "2026-11-06",
+  "png_svg_pairs": 16,
+  "source_hashes_rechecked": 139,
+  "executed_code_cells": 15,
+  "independent_class_AP50_checks": 36,
+  "independent_operating_TP_FP_checks": 36,
+  "helper_regression_tests_passed": 5,
+  "pdf_pages": 21,
+  "all_pdf_pages_visually_inspected": true,
+  "published_comparison_certified": false,
+  "independent_board_disjoint_generalization_certified": false,
+  "r3_accuracy_included": false,
+  "assets_sha256": {
+    "paper/notebooks/experiments_and_results.ipynb": "6cf9fcacdd1fbdd032d368e24559382c99f51fd60c4f9689d17330101e0ef543",
+    "paper/notebooks/experiments_and_results.html": "587bb565b2e379318e48e819190ac254dd8d68a46186b26de80e38511d0a6afe",
+    "paper/manuscript/experimental_results_draft.md": "8c2b9483e097da472f9175260360c574a873ebb251cfd5e97b7af00844297311",
+    "paper/manuscript/experimental_results_draft.tex": "54c70e7fb9ec54204f7a74a671f522718617069b0c37208aebf4586f7632399a",
+    "paper/reports/experimental_results_meeting_20261106.pdf": "2f5a5c44921001c8e82c4a5cd7c8436938ea72f87bd5e0c5eb6ba7fa1b6bc9cf"
+  }
+}

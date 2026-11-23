@@ -1,0 +1,206 @@
+\begin{thebibliography}{999}
+
+\bibitem[Bald{\'e} et~al.(2024)Bald{\'e}, Kuehr, Yamamoto, McDonald, D'Angelo, Althaf, Bel, Deubzer, Fernandez-Cubillo, Forti, Gray, Herat, Honda, Iattoni, Khetriwal, {Luda di Cortemiglia}, Lobuntsova, Nnorom, Pralat, and Wagner]{balde2024ewaste}
+Bald{\'e}, C.P.; Kuehr, R.; Yamamoto, T.; McDonald, R.; D'Angelo, E.; Althaf, S.; Bel, G.; Deubzer, O.; Fernandez-Cubillo, E.; Forti, V.;  et~al.
+\newblock {\em The Global E-waste Monitor 2024}; International Telecommunication Union (ITU) and United Nations Institute for Training and Research (UNITAR): Geneva, Switzerland; Bonn, Germany,  2024.
+
+\bibitem[Mohsin et~al.(2025)Mohsin, Rovetta, Masulli, and Cabri]{mohsin2025ai}
+Mohsin, M.; Rovetta, S.; Masulli, F.; Cabri, A.
+\newblock Artificial Intelligence Approach for Waste-Printed Circuit Board Recycling: A Systematic Review.
+\newblock {\em Computers} {\bf 2025}, {\em 14},~304.
+
+\bibitem[Lu et~al.(2022)Lu, Yang, Gao, and Xu]{lu2022sorting}
+Lu, Y.; Yang, B.; Gao, Y.; Xu, Z.
+\newblock An automatic sorting system for electronic components detached from waste printed circuit boards.
+\newblock {\em Waste Management} {\bf 2022}, {\em 137},~1--8.
+
+\bibitem[Pramerdorfer and Kampel(2015)]{pramerdorfer2015pcbdslr}
+Pramerdorfer, C.; Kampel, M.
+\newblock A dataset for computer-vision-based {PCB} analysis.
+\newblock In Proceedings of the 14th IAPR International Conference on Machine Vision Applications (MVA),  2015, pp. 378--381.
+
+\bibitem[Kuo et~al.(2019)Kuo, Ashmore, Huggins, and Kira]{kuo2019wacv}
+Kuo, C.W.; Ashmore, J.D.; Huggins, D.; Kira, Z.
+\newblock Data-efficient graph embedding learning for {PCB} component detection.
+\newblock In Proceedings of the IEEE Winter Conference on Applications of Computer Vision (WACV),  2019, pp. 551--560.
+
+\bibitem[Ren et~al.(2015)Ren, He, Girshick, and Sun]{ren2015fasterrcnn}
+Ren, S.; He, K.; Girshick, R.; Sun, J.
+\newblock Faster {R-CNN}: Towards real-time object detection with region proposal networks.
+\newblock {\em Advances in Neural Information Processing Systems} {\bf 2015}, {\em 28},~1--9.
+
+\bibitem[Lin et~al.(2017)Lin, Doll{\'a}r, Girshick, He, Hariharan, and Belongie]{lin2017fpn}
+Lin, T.Y.; Doll{\'a}r, P.; Girshick, R.; He, K.; Hariharan, B.; Belongie, S.
+\newblock Feature Pyramid Networks for Object Detection.
+\newblock In Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition (CVPR),  2017, pp. 2117--2125.
+
+\bibitem[Liu et~al.(2016)Liu, Anguelov, Erhan, Szegedy, Reed, Fu, and Berg]{liu2016ssd}
+Liu, W.; Anguelov, D.; Erhan, D.; Szegedy, C.; Reed, S.; Fu, C.Y.; Berg, A.C.
+\newblock {SSD}: Single Shot MultiBox Detector.
+\newblock In Proceedings of the European Conference on Computer Vision (ECCV),  2016, pp. 21--37.
+
+\bibitem[Lin et~al.(2017)Lin, Goyal, Girshick, He, and Doll{\'a}r]{lin2017focalloss}
+Lin, T.Y.; Goyal, P.; Girshick, R.; He, K.; Doll{\'a}r, P.
+\newblock Focal loss for dense object detection.
+\newblock In Proceedings of the IEEE International Conference on Computer Vision (ICCV),  2017, pp. 2980--2988.
+
+\bibitem[Woo et~al.(2018)Woo, Park, Lee, and Kweon]{woo2018cbam}
+Woo, S.; Park, J.; Lee, J.Y.; Kweon, I.S.
+\newblock {CBAM}: Convolutional Block Attention Module.
+\newblock In Proceedings of the European Conference on Computer Vision (ECCV),  2018, pp. 3--19.
+
+\bibitem[Liu et~al.(2021)Liu, Lin, Cao, Hu, Wei, Zhang, Lin, and Guo]{liu2021swin}
+Liu, Z.; Lin, Y.; Cao, Y.; Hu, H.; Wei, Y.; Zhang, Z.; Lin, S.; Guo, B.
+\newblock Swin Transformer: Hierarchical Vision Transformer Using Shifted Windows.
+\newblock In Proceedings of the IEEE/CVF International Conference on Computer Vision (ICCV),  2021, pp. 10012--10022.
+
+\bibitem[Carion et~al.(2020)Carion, Massa, Synnaeve, Usunier, Kirillov, and Zagoruyko]{carion2020detr}
+Carion, N.; Massa, F.; Synnaeve, G.; Usunier, N.; Kirillov, A.; Zagoruyko, S.
+\newblock End-to-End Object Detection with Transformers.
+\newblock In Proceedings of the European Conference on Computer Vision (ECCV),  2020, pp. 213--229.
+
+\bibitem[Zhao et~al.(2024)Zhao, Lv, Xu, Wei, Wang, Dang, Liu, and Chen]{zhao2024rtdetr}
+Zhao, Y.; Lv, W.; Xu, S.; Wei, J.; Wang, G.; Dang, Q.; Liu, Y.; Chen, J.
+\newblock {DETRs} beat {YOLOs} on real-time object detection.
+\newblock In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR),  2024, pp. 16965--16974.
+
+\bibitem[Gu and Dao(2023)]{gu2023mamba}
+Gu, A.; Dao, T.
+\newblock Mamba: Linear-Time Sequence Modeling with Selective State Spaces.
+\newblock {\em arXiv preprint arXiv:2312.00752} {\bf 2023}.
+
+\bibitem[Zhu et~al.(2024)Zhu, Liao, Zhang, Wang, Liu, and Wang]{zhu2024vim}
+Zhu, L.; Liao, B.; Zhang, Q.; Wang, X.; Liu, W.; Wang, X.
+\newblock Vision {Mamba}: Efficient Visual Representation Learning with Bidirectional State Space Model.
+\newblock In Proceedings of the International Conference on Machine Learning (ICML),  2024.
+
+\bibitem[Redmon et~al.(2016)Redmon, Divvala, Girshick, and Farhadi]{redmon2016yolo}
+Redmon, J.; Divvala, S.; Girshick, R.; Farhadi, A.
+\newblock You Only Look Once: Unified, Real-Time Object Detection.
+\newblock In Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition (CVPR),  2016, pp. 779--788.
+
+\bibitem[Redmon and Farhadi(2018)]{redmon2018yolov3}
+Redmon, J.; Farhadi, A.
+\newblock {YOLOv3}: An Incremental Improvement.
+\newblock {\em arXiv preprint arXiv:1804.02767} {\bf 2018}.
+
+\bibitem[Bochkovskiy et~al.(2020)Bochkovskiy, Wang, and Liao]{bochkovskiy2020yolov4}
+Bochkovskiy, A.; Wang, C.Y.; Liao, H.Y.M.
+\newblock {YOLOv4}: Optimal Speed and Accuracy of Object Detection.
+\newblock {\em arXiv preprint arXiv:2004.10934} {\bf 2020}.
+
+\bibitem[Jocher(2020)]{jocher2020yolov5}
+Jocher, G.
+\newblock Ultralytics {YOLOv5}.
+\newblock \url{https://github.com/ultralytics/yolov5},  2020.
+
+\bibitem[Ge et~al.(2021)Ge, Liu, Wang, Li, and Sun]{ge2021yolox}
+Ge, Z.; Liu, S.; Wang, F.; Li, Z.; Sun, J.
+\newblock {YOLOX}: Exceeding {YOLO} Series in 2021.
+\newblock {\em arXiv preprint arXiv:2107.08430} {\bf 2021}.
+
+\bibitem[Wang et~al.(2023)Wang, Bochkovskiy, and Liao]{wang2023yolov7}
+Wang, C.Y.; Bochkovskiy, A.; Liao, H.Y.M.
+\newblock {YOLOv7}: Trainable Bag-of-Freebies Sets New State-of-the-Art for Real-Time Object Detectors.
+\newblock In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR),  2023, pp. 7464--7475.
+
+\bibitem[Jocher et~al.(2023)Jocher, Chaurasia, and Qiu]{jocher2023ultralytics}
+Jocher, G.; Chaurasia, A.; Qiu, J.
+\newblock Ultralytics {YOLO} (Version 8).
+\newblock \url{https://github.com/ultralytics/ultralytics},  2023.
+
+\bibitem[Wang et~al.(2024{\natexlab{a}})Wang, Yeh, and Liao]{wang2024yolov9}
+Wang, C.Y.; Yeh, I.H.; Liao, H.Y.M.
+\newblock {YOLOv9}: Learning What You Want to Learn Using Programmable Gradient Information.
+\newblock In Proceedings of the European Conference on Computer Vision (ECCV),  2024, pp. 1--21.
+
+\bibitem[Wang et~al.(2024{\natexlab{b}})Wang, Chen, Liu, Chen, Lin, Han, and Ding]{wang2024yolov10}
+Wang, A.; Chen, H.; Liu, L.; Chen, K.; Lin, Z.; Han, J.; Ding, G.
+\newblock {YOLOv10}: Real-Time End-to-End Object Detection.
+\newblock In Proceedings of the Advances in Neural Information Processing Systems (NeurIPS),  2024, Vol.~37, pp. 107984--108011.
+
+\bibitem[Khanam and Hussain(2024)]{khanam2024yolo11}
+Khanam, R.; Hussain, M.
+\newblock {YOLOv11}: An overview of the key architectural enhancements.
+\newblock {\em arXiv preprint arXiv:2410.17725} {\bf 2024}.
+
+\bibitem[Tian et~al.(2025)Tian, Ye, and Doermann]{tian2025yolov12}
+Tian, Y.; Ye, Q.; Doermann, D.
+\newblock {YOLOv12}: Attention-Centric Real-Time Object Detectors.
+\newblock {\em arXiv preprint arXiv:2502.12524} {\bf 2025}.
+
+\bibitem[Sapkota and Karkee(2025)]{sapkota2025yolo26}
+Sapkota, R.; Karkee, M.
+\newblock From {YOLOv1} to {YOLO26}: A Comprehensive Review of Architectural Evolution and End-to-End Detection.
+\newblock {\em arXiv preprint arXiv:2509.25164} {\bf 2025}.
+
+\bibitem[Zhou and Agaian(2026{\natexlab{a}})]{zhou2026review}
+Zhou, X.; Agaian, S.
+\newblock A Review of {YOLO}-Based Object Detection for E-Waste Sorting and Recycling.
+\newblock In Proceedings of the Proceedings of SPIE, Multimodal Image Exploitation and Learning,  2026.
+
+\bibitem[Zhou and Agaian(2026{\natexlab{b}})]{zhou2026ensemble}
+Zhou, X.; Agaian, S.
+\newblock Ensemble Learning Using {YOLO} Models for Semiconductor E-Waste Recycling.
+\newblock {\em Information} {\bf 2026}, {\em 17},~322.
+\newblock {\url{https://doi.org/10.3390/info17040322}}.
+
+\bibitem[Zhou and Agaian(2026{\natexlab{c}})]{zhou2026multispectral}
+Zhou, X.; Agaian, S.
+\newblock Multispectral Sensor Fusion and {YOLO}-Family Benchmarking in {PCB} Component Detection: Challenges, State of the Art, and Future Directions.
+\newblock {\em Machines} {\bf 2026}, {\em 14},~730.
+\newblock {\url{https://doi.org/10.3390/machines14070730}}.
+
+\bibitem[Land and McCann(1971)]{land1971retinex}
+Land, E.H.; McCann, J.J.
+\newblock Lightness and {Retinex} Theory.
+\newblock {\em Journal of the Optical Society of America} {\bf 1971}, {\em 61},~1--11.
+
+\bibitem[Fu et~al.(2016)Fu, Zeng, Huang, Zhang, and Ding]{fu2016variational}
+Fu, X.; Zeng, D.; Huang, Y.; Zhang, X.P.; Ding, X.
+\newblock A weighted variational model for simultaneous reflectance and illumination estimation.
+\newblock In Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition (CVPR),  2016, pp. 2782--2790.
+
+\bibitem[Solovyev et~al.(2021)Solovyev, Wang, and Gabruseva]{solovyev2021wbf}
+Solovyev, R.; Wang, W.; Gabruseva, T.
+\newblock Weighted boxes fusion: Ensembling boxes from different object detection models.
+\newblock {\em Image and Vision Computing} {\bf 2021}, {\em 107},~104117.
+\newblock {\url{https://doi.org/10.1016/j.imavis.2021.104117}}.
+
+\bibitem[Arbash et~al.(2024)Arbash, Fuchs, Rasti, Lorenz, Ghamisi, and Gloaguen]{arbash2024pcbvision}
+Arbash, E.; Fuchs, M.; Rasti, B.; Lorenz, S.; Ghamisi, P.; Gloaguen, R.
+\newblock {PCB-Vision}: A multiscene {RGB}-hyperspectral benchmark dataset of printed circuit boards.
+\newblock {\em IEEE Sensors Journal} {\bf 2024}, {\em 24},~17140--17158.
+
+\bibitem[Sunkara and Luo(2022)]{sunkara2022spd}
+Sunkara, R.; Luo, T.
+\newblock No more strided convolutions or pooling: A new {CNN} building block for low-resolution images and small objects.
+\newblock {\em arXiv preprint arXiv:2208.03641} {\bf 2022}.
+
+\bibitem[Zheng et~al.(2020)Zheng, Wang, Liu, Li, Ye, and Ren]{zheng2020diou}
+Zheng, Z.; Wang, P.; Liu, W.; Li, J.; Ye, R.; Ren, D.
+\newblock Distance-{IoU} Loss: Faster and Better Learning for Bounding Box Regression.
+\newblock In Proceedings of the AAAI Conference on Artificial Intelligence (AAAI),  2020, Vol.~34, pp. 12993--13000.
+
+\bibitem[Milletari et~al.(2016)Milletari, Navab, and Ahmadi]{milletari2016vnet}
+Milletari, F.; Navab, N.; Ahmadi, S.A.
+\newblock {V-Net}: Fully Convolutional Neural Networks for Volumetric Medical Image Segmentation.
+\newblock In Proceedings of the Fourth International Conference on 3D Vision (3DV),  2016, pp. 565--571.
+
+\bibitem[Wang et~al.(2021)Wang, Xu, Yang, and Yu]{wang2021nwd}
+Wang, J.; Xu, C.; Yang, W.; Yu, L.
+\newblock A Normalized Gaussian {Wasserstein} Distance for Tiny Object Detection.
+\newblock {\em arXiv preprint arXiv:2110.13389} {\bf 2021}.
+
+\bibitem[{Roboflow 100}(2024)]{rf100pcb}
+{Roboflow 100}.
+\newblock Printed Circuit Board Dataset.
+\newblock \url{https://universe.roboflow.com/roboflow-100/printed-circuit-board},  2024.
+\newblock Dataset Version 3.
+
+\bibitem[Ghiasi et~al.(2021)Ghiasi, Cui, Srinivas, Qian, Lin, Cubuk, Le, and Zoph]{ghiasi2021copypaste}
+Ghiasi, G.; Cui, Y.; Srinivas, A.; Qian, R.; Lin, T.Y.; Cubuk, E.D.; Le, Q.V.; Zoph, B.
+\newblock Simple Copy-Paste is a Strong Data Augmentation Method for Instance Segmentation.
+\newblock In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR),  2021, pp. 2918--2928.
+
+\end{thebibliography}

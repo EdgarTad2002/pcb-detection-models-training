@@ -1,0 +1,10 @@
+\begin{table}[!t]\centering
+\caption{Separate repeated-seed native study: mean $\pm$ sample SD, three seeds, no extra online augmentation. Rectangular batch-8 evaluation differs from Table~\ref{tab:native}. Accuracy entries are percentages.}
+\label{tab:controlled}\footnotesize\setlength{\tabcolsep}{3pt}
+\begin{tabular}{lrrr}\toprule
+Recipe ($\lambda$) & AP50 & AP50:95 & Cap AP50\\\midrule
+YOLO26s control & $59.47\pm2.45$ & $40.75\pm2.19$ & $33.34\pm3.02$ \\
+Squared-Dice, 0.50 & $58.00\pm2.41$ & $42.49\pm2.48$ & $29.30\pm2.15$ \\
+AGWD + Dice, 0.35 & $59.56\pm2.61$ & $38.91\pm0.43$ & $32.41\pm2.21$ \\
+AGWD + Dice, 0.50 & $58.02\pm1.46$ & $40.70\pm1.05$ & $30.10\pm2.61$ \\
+\bottomrule\end{tabular}\end{table}

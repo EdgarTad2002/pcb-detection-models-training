@@ -1,0 +1,82 @@
+\relax 
+\providecommand\hyper@newdestlabel[2]{}
+\providecommand\HyperFirstAtBeginDocument{\AtBeginDocument}
+\HyperFirstAtBeginDocument{\ifx\hyper@anchor\@undefined
+\global\let\oldcontentsline\contentsline
+\gdef\contentsline#1#2#3#4{\oldcontentsline{#1}{#2}{#3}}
+\global\let\oldnewlabel\newlabel
+\gdef\newlabel#1#2{\newlabelxx{#1}#2}
+\gdef\newlabelxx#1#2#3#4#5#6{\oldnewlabel{#1}{{#2}{#3}}}
+\AtEndDocument{\ifx\hyper@anchor\@undefined
+\let\contentsline\oldcontentsline
+\let\newlabel\oldnewlabel
+\fi}
+\fi}
+\global\let\hyper@last\relax 
+\gdef\HyperFirstAtBeginDocument#1{#1}
+\providecommand*\HyPL@Entry[1]{}
+\citation{rf100pcb}
+\HyPL@Entry{0<</S/D>>}
+\@writefile{toc}{\contentsline {section}{\numberline {1}Experimental Results}{1}{section.1}\protected@file@percent }
+\newlabel{sec:experiments}{{1}{1}{Experimental Results}{section.1}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {1.1}Experimental design and evaluation protocol}{1}{subsection.1.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Native-resolution checkpoint audit.}{1}{section*.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Original-label paper-dataset study.}{1}{section*.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Accuracy metrics.}{1}{section*.4}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {1}{\ignorespaces Shared settings for the original-label 640-pixel study. Timing settings also apply to the native checkpoint audit.\relax }}{1}{table.caption.3}\protected@file@percent }
+\providecommand*\caption@xref[2]{\@setref\relax\@undefined{#1}}
+\newlabel{tab:settings}{{1}{1}{Shared settings for the original-label 640-pixel study. Timing settings also apply to the native checkpoint audit.\relax }{table.caption.3}{}}
+\@writefile{toc}{\contentsline {paragraph}{Inference and timing.}{1}{section*.5}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {1.2}Best single models and ensemble performance}{1}{subsection.1.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Complementarity across component classes.}{1}{section*.8}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Accuracy and deployment cost.}{1}{section*.10}\protected@file@percent }
+\citation{zhou2026ensemble}
+\citation{zhou2026ensemble}
+\citation{zhou2026ensemble}
+\@writefile{lot}{\contentsline {table}{\numberline {2}{\ignorespaces Retrospective results on 44 legacy native-resolution exports. Accuracy entries are percentages; P/R/F1 pool counts at confidence 0.25 and matching IoU 0.50. Latency includes the complete prediction pipeline and WBF. Parameter counts are stored unfused values. These are selected checkpoints, not seed averages.\relax }}{2}{table.caption.6}\protected@file@percent }
+\newlabel{tab:native}{{2}{2}{Retrospective results on 44 legacy native-resolution exports. Accuracy entries are percentages; P/R/F1 pool counts at confidence 0.25 and matching IoU 0.50. Latency includes the complete prediction pipeline and WBF. Parameter counts are stored unfused values. These are selected checkpoints, not seed averages.\relax }{table.caption.6}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {3}{\ignorespaces Per-class AP50 (\%) in the native checkpoint audit. Only 18 electrolytic-capacitor boxes occur in these legacy test labels.\relax }}{2}{table.caption.7}\protected@file@percent }
+\newlabel{tab:nativeclasses}{{3}{2}{Per-class AP50 (\%) in the native checkpoint audit. Only 18 electrolytic-capacitor boxes occur in these legacy test labels.\relax }{table.caption.7}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {1}{\ignorespaces Per-class AP50 for the crop-trained single model and the fixed WBF ensembles on the same legacy exports. Fusion helps several categories but lowers electrolytic-capacitor AP relative to the crop specialist.\relax }}{2}{figure.caption.9}\protected@file@percent }
+\newlabel{fig:classes}{{1}{2}{Per-class AP50 for the crop-trained single model and the fixed WBF ensembles on the same legacy exports. Fusion helps several categories but lowers electrolytic-capacitor AP relative to the crop specialist.\relax }{figure.caption.9}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {1.3}Qualitative comparison with visible detection differences}{2}{subsection.1.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Recovery case.}{2}{section*.12}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Failure and annotation dependence.}{2}{section*.13}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {1.4}Comparison on the available paper-dataset exports}{2}{subsection.1.4}\protected@file@percent }
+\newlabel{sec:papercomparison}{{1.4}{2}{Comparison on the available paper-dataset exports}{subsection.1.4}{}}
+\citation{zhou2026ensemble}
+\@writefile{lof}{\contentsline {figure}{\numberline {2}{\ignorespaces Enlarged regions showing a recovery case and a reference-score failure case. All columns show identical image pixels within each row. Blue boxes are existing reference annotations; green boxes are matched predictions; dashed red boxes are missed references; orange boxes are unmatched predictions. Counts use local class-aware, one-to-one matching at IoU 0.50 and confidence 0.25; boxes enter a region by their center. Examples were selected after inspecting saved outputs to maximize and minimize the local WBF-4 gain over the single model. They illustrate differences, not their average frequency. Existing annotation omissions can make a real component appear as an unmatched prediction.\relax }}{3}{figure.caption.11}\protected@file@percent }
+\newlabel{fig:qualitative}{{2}{3}{Enlarged regions showing a recovery case and a reference-score failure case. All columns show identical image pixels within each row. Blue boxes are existing reference annotations; green boxes are matched predictions; dashed red boxes are missed references; orange boxes are unmatched predictions. Counts use local class-aware, one-to-one matching at IoU 0.50 and confidence 0.25; boxes enter a region by their center. Examples were selected after inspecting saved outputs to maximize and minimize the local WBF-4 gain over the single model. They illustrate differences, not their average frequency. Existing annotation omissions can make a real component appear as an unmatched prediction.\relax }{figure.caption.11}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {4}{\ignorespaces Original-label RF100 exports at 640 pixels. Our methods share the same 41-image test split and evaluator (mean $\pm $ sample SD, seeds 0/1/2). P/R/F1 use pooled counts at confidence 0.25 and matching IoU 0.50. Published rows use the authors' protocol and are contextual; a direct improvement claim is unverified.\relax }}{3}{table.caption.14}\protected@file@percent }
+\newlabel{tab:paper}{{4}{3}{Original-label RF100 exports at 640 pixels. Our methods share the same 41-image test split and evaluator (mean $\pm $ sample SD, seeds 0/1/2). P/R/F1 use pooled counts at confidence 0.25 and matching IoU 0.50. Published rows use the authors' protocol and are contextual; a direct improvement claim is unverified.\relax }{table.caption.14}{}}
+\@writefile{toc}{\contentsline {paragraph}{Published best single model and ensemble.}{3}{section*.16}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {3}{\ignorespaces Original-label 640-pixel results and the published reference. Left: our common-protocol mean AP50 with sample SD across three seeds. Right: Zhou and Agaian's reported best individual and ensemble scores\nobreakspace  {}\cite  {zhou2026ensemble}. The separate panels indicate distinct evaluation protocols; they are not a certified common leaderboard.\relax }}{4}{figure.caption.15}\protected@file@percent }
+\newlabel{fig:papercomparison}{{3}{4}{Original-label 640-pixel results and the published reference. Left: our common-protocol mean AP50 with sample SD across three seeds. Right: Zhou and Agaian's reported best individual and ensemble scores~\cite {zhou2026ensemble}. The separate panels indicate distinct evaluation protocols; they are not a certified common leaderboard.\relax }{figure.caption.15}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {5}{\ignorespaces Historical AGWD--Squared-Dice configurations on legacy test labels. Seed 0 only; percentages. These are development observations, not independent parameter-selection evidence.\relax }}{4}{table.caption.18}\protected@file@percent }
+\newlabel{tab:sweep}{{5}{4}{Historical AGWD--Squared-Dice configurations on legacy test labels. Seed 0 only; percentages. These are development observations, not independent parameter-selection evidence.\relax }{table.caption.18}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {6}{\ignorespaces Separate repeated-seed native study: mean $\pm $ sample SD, three seeds, no extra online augmentation. Rectangular batch-8 evaluation differs from Table\nobreakspace  {}\ref  {tab:native}. Accuracy entries are percentages.\relax }}{4}{table.caption.19}\protected@file@percent }
+\newlabel{tab:controlled}{{6}{4}{Separate repeated-seed native study: mean $\pm $ sample SD, three seeds, no extra online augmentation. Rectangular batch-8 evaluation differs from Table~\ref {tab:native}. Accuracy entries are percentages.\relax }{table.caption.19}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {1.5}Hyperparameter sensitivity and supporting ablations}{4}{subsection.1.5}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Coefficient sweep.}{4}{section*.21}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Smoothing and stage weighting.}{4}{section*.22}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Repeated-seed loss controls.}{4}{section*.23}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {4}{\ignorespaces Confidence-ranked precision--recall envelopes for capacitor and IC detection on the original-label test exports. These are saved seed-0 predictions, independently checked against the recorded AP50, rather than averaged curves. All three seeds enter Table\nobreakspace  {}\ref  {tab:paper}. The large class difference also illustrates why overall mAP alone is insufficient.\relax }}{5}{figure.caption.17}\protected@file@percent }
+\newlabel{fig:pr}{{4}{5}{Confidence-ranked precision--recall envelopes for capacitor and IC detection on the original-label test exports. These are saved seed-0 predictions, independently checked against the recorded AP50, rather than averaged curves. All three seeds enter Table~\ref {tab:paper}. The large class difference also illustrates why overall mAP alone is insufficient.\relax }{figure.caption.17}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {5}{\ignorespaces Historical AGWD--Squared-Dice sensitivity. (a) Uniform-stage coefficient sweep at fixed smoothing 0.01. (b) Smoothing comparisons within each stage policy at fixed coefficient 0.5. (c) Stage weighting at fixed coefficient 0.5 and smoothing 0.01. (d) Unsmoothed saved validation histories for the three uniform-stage coefficient runs. Only recorded configurations are shown; connecting lines guide the eye. These are seed-0 development observations, with legacy split and annotation limitations.\relax }}{5}{figure.caption.20}\protected@file@percent }
+\newlabel{fig:sensitivity}{{5}{5}{Historical AGWD--Squared-Dice sensitivity. (a) Uniform-stage coefficient sweep at fixed smoothing 0.01. (b) Smoothing comparisons within each stage policy at fixed coefficient 0.5. (c) Stage weighting at fixed coefficient 0.5 and smoothing 0.01. (d) Unsmoothed saved validation histories for the three uniform-stage coefficient runs. Only recorded configurations are shown; connecting lines guide the eye. These are seed-0 development observations, with legacy split and annotation limitations.\relax }{figure.caption.20}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {1.6}Dataset taxonomy and annotation-quality analysis}{6}{subsection.1.6}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {1.6.1}Class-name consolidation}{6}{subsubsection.1.6.1}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {6}{\ignorespaces Original-label examples illustrating the main pipeline's capacitor-name consolidation. A source class-1 \emph  {Capacitor Jumper} example and a source class-2 \emph  {Capacitor} example map to canonical class 0. Each before/after pair uses the same image and coordinates. This is a task-level taxonomy decision, not proof that every source instance is correctly annotated. The original-label paper-comparison track deliberately excludes source class 1.\relax }}{6}{figure.6}\protected@file@percent }
+\newlabel{fig:taxonomy}{{6}{6}{Original-label examples illustrating the main pipeline's capacitor-name consolidation. A source class-1 \emph {Capacitor Jumper} example and a source class-2 \emph {Capacitor} example map to canonical class 0. Each before/after pair uses the same image and coordinates. This is a task-level taxonomy decision, not proof that every source instance is correctly annotated. The original-label paper-comparison track deliberately excludes source class 1.\relax }{figure.6}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {7}{\ignorespaces Canonical mapping in the main dataset builder. Counts refer to source annotations across exported splits, not independent physical parts.\relax }}{6}{table.caption.24}\protected@file@percent }
+\newlabel{tab:taxonomy}{{7}{6}{Canonical mapping in the main dataset builder. Counts refer to source annotations across exported splits, not independent physical parts.\relax }{table.caption.24}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {8}{\ignorespaces Recorded r3 edits and quarantined exports. Counts include resized or transformed views, rather than independent physical components.\relax }}{6}{table.caption.25}\protected@file@percent }
+\newlabel{tab:review}{{8}{6}{Recorded r3 edits and quarantined exports. Counts include resized or transformed views, rather than independent physical components.\relax }{table.caption.25}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {1.6.2}Reviewed corrections and split isolation}{6}{subsubsection.1.6.2}\protected@file@percent }
+\bibstyle{unsrtnat}
+\bibdata{references}
+\bibcite{rf100pcb}{{1}{n.d.}{{Roboflow}}{{}}}
+\bibcite{zhou2026ensemble}{{2}{2026}{{Zhou and Agaian}}{{}}}
+\@writefile{lof}{\contentsline {figure}{\numberline {7}{\ignorespaces Traced before/after annotation changes. (a) A clearly identifiable electrolytic capacitor receives the consistent class label. (b) Omitted component boxes are added. (c) A box on an unpopulated footprint is removed. Orange denotes the original edited box and green the reviewed box; these overlays are annotations, not detector predictions. Each edit is linked to its source image, label row and visual evidence. Original files are preserved.\relax }}{7}{figure.7}\protected@file@percent }
+\newlabel{fig:corrections}{{7}{7}{Traced before/after annotation changes. (a) A clearly identifiable electrolytic capacitor receives the consistent class label. (b) Omitted component boxes are added. (c) A box on an unpopulated footprint is removed. Orange denotes the original edited box and green the reviewed box; these overlays are annotations, not detector predictions. Each edit is linked to its source image, label row and visual evidence. Original files are preserved.\relax }{figure.7}{}}
+\gdef \@abspage@last{7}

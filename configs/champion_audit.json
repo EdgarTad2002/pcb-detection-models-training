@@ -1,0 +1,16 @@
+{
+  "version": "champion-audit-v1",
+  "data": "datasets/pcb-native-res-cleaned-1280/data.yaml",
+  "expected_test_images": 44,
+  "models": [
+    {"id": "yolo12", "name": "YOLOv12s", "path": "ensemble_champions/1_yolov12s_champion.pt", "sha256": "912819a56bce0ebc3d1ee6431af8c59e32ddcc4717b64f5cb4d866fa9a186c6e"},
+    {"id": "crop", "name": "YOLO26s crop specialist", "path": "ensemble_champions/2_yolo26s_crop_specialist.pt", "sha256": "64a2c9de97b21bb9d84a4ac68bd22cbfec9fdf7142b8e891a37a08f197890cd3"},
+    {"id": "agwd_sdice", "name": "YOLO26s AGWD + Squared-Dice", "path": "ensemble_champions/3_yolo26s_agwd_sdice.pt", "sha256": "a51d9285abd33fa0b304abd2b300740672c7e0ad2bbe9a367950e84b9a0540f6"},
+    {"id": "physot", "name": "PhysOT-YOLO26s", "path": "ensemble_champions/4_physot_yolo26s.pt", "sha256": "498a09cca2f0b754a1967b001a6fddc108b0fb9e28a9077b74ac1338d330a280"}
+  ],
+  "ensembles": [
+    {"id": "ensemble2", "name": "Two-model WBF", "members": ["yolo12", "crop"], "weights": [1.3, 1.2]},
+    {"id": "ensemble4", "name": "Four-model WBF", "members": ["yolo12", "crop", "agwd_sdice", "physot"], "weights": [1.3, 1.2, 1.1, 1.0]}
+  ],
+  "settings": {"imgsz": 1280, "conf": 0.001, "nms_iou": 0.45, "merge_iou": 0.5, "max_det": 1000, "recall_conf": 0.25, "warmup": 30, "iterations": 100, "cpu_threads": 8}
+}

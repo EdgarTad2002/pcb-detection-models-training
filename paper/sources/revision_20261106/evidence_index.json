@@ -1,0 +1,88 @@
+{
+  "raw_class_counts": {
+    "4": 4558,
+    "17": 4627,
+    "1": 19034,
+    "6": 162,
+    "13": 1176,
+    "16": 37329,
+    "14": 1212,
+    "2": 32564,
+    "15": 16030,
+    "19": 1289,
+    "12": 784,
+    "9": 7604,
+    "3": 146,
+    "18": 189,
+    "5": 284,
+    "11": 324,
+    "10": 235,
+    "0": 277,
+    "21": 982,
+    "7": 856,
+    "20": 4273,
+    "8": 108
+  },
+  "selected": [
+    {
+      "cls": 1,
+      "area": 0.057216796875,
+      "label": "datasets/pcb-filtered-yolov8/train/labels/RPI3B_Top_jpg.rf.b469ecabd7c6437561dfa04589be88d6.txt",
+      "line": 77,
+      "raw": "1 0.29765625 0.35078125 0.196875 0.290625",
+      "image": "datasets/pcb-filtered-yolov8/train/images/RPI3B_Top_jpg.rf.b469ecabd7c6437561dfa04589be88d6.jpg",
+      "image_sha256": "be031eeb6afeb08e36849e66410b5f827199257cccdfca65708d9dceae55551a",
+      "label_sha256": "0bbc71e18e87e9fbdc404bed38ed0055de168be38b0d238a14dc9e84c465b21e"
+    },
+    {
+      "cls": 1,
+      "area": 0.055400390625000004,
+      "label": "datasets/pcb-filtered-yolov8/train/labels/RPI3B_Top_jpg.rf.6dc4b751218b1a50e2789848da590eb9.txt",
+      "line": 79,
+      "raw": "1 0.32421875 0.359375 0.19375 0.2859375",
+      "image": "datasets/pcb-filtered-yolov8/train/images/RPI3B_Top_jpg.rf.6dc4b751218b1a50e2789848da590eb9.jpg",
+      "image_sha256": "d69ab09e4c3e0753c9f4a738ddc993ff194d2d4f511e4307c9acd5eb4989dd59",
+      "label_sha256": "15e76506110749bc976cc63c224869661dcfa9a40273380f5eeff09bb06c5e25"
+    },
+    {
+      "cls": 2,
+      "area": 0.0645166015625,
+      "label": "datasets/pcb-filtered-yolov8/train/labels/pcb36rec1_jpg.rf.a29815e312873a1a5cbc0133f5ddf93a.txt",
+      "line": 24,
+      "raw": "2 0.4265625 0.53203125 0.2828125 0.228125",
+      "image": "datasets/pcb-filtered-yolov8/train/images/pcb36rec1_jpg.rf.a29815e312873a1a5cbc0133f5ddf93a.jpg",
+      "image_sha256": "d7ecb53426e2e924487a5c37cf997b9f6b317976942a7993ece5c502a0060bde",
+      "label_sha256": "22c3f96bda6117ca40b7aaf2d2db05209a75a61a06c89434ce9173c013eeb379"
+    },
+    {
+      "cls": 2,
+      "area": 0.060660400390624994,
+      "label": "datasets/pcb-filtered-yolov8/train/labels/pcb40rec1_jpg.rf.ebc02e3eda98240130726d55b1a07ee3.txt",
+      "line": 20,
+      "raw": "2 0.23359375 0.534375 0.17890625 0.3390625",
+      "image": "datasets/pcb-filtered-yolov8/train/images/pcb40rec1_jpg.rf.ebc02e3eda98240130726d55b1a07ee3.jpg",
+      "image_sha256": "3da4471eb5581d48ebc38ad92ab4ca7785a777b15c2ec291ad9f44743ab26a7b",
+      "label_sha256": "1d6edc0fa5f4406347ec6f1dc36a2fc005ce2b07f319bcb65ca6f81383bca90c"
+    },
+    {
+      "cls": 9,
+      "area": 0.5328479003906249,
+      "label": "datasets/pcb-filtered-yolov8/train/labels/Spartan6_Top_jpg.rf.cc5a5e4c77e184a9e26d39f60362dfbd.txt",
+      "line": 3,
+      "raw": "9 0.5890625 0.35859375 0.74296875 0.7171875",
+      "image": "datasets/pcb-filtered-yolov8/train/images/Spartan6_Top_jpg.rf.cc5a5e4c77e184a9e26d39f60362dfbd.jpg",
+      "image_sha256": "97f00d007b871c270f77ac420b4dc14cb3cdd830fda44432199bbad749cafaa9",
+      "label_sha256": "8f2d31237d2e779fc469203ba871c221ecea663a6c1359e96c22715b74d6b81b"
+    },
+    {
+      "cls": 9,
+      "area": 0.43631835937499996,
+      "label": "datasets/pcb-filtered-yolov8/train/labels/Spartan6_Top_jpg.rf.d8a7eac9b45175690a7e72df5ee78c2f.txt",
+      "line": 3,
+      "raw": "9 0.6265625 0.403125 0.65859375 0.6625",
+      "image": "datasets/pcb-filtered-yolov8/train/images/Spartan6_Top_jpg.rf.d8a7eac9b45175690a7e72df5ee78c2f.jpg",
+      "image_sha256": "aff8fa776c991b2509c25615c936e08643b5eb7b8258e8ebf1fb69abb2edc8a6",
+      "label_sha256": "ab4caf420dbae38e90a9ece911efbb366bbad8a46c8073beb73d8e44ec10d3d4"
+    }
+  ]
+}

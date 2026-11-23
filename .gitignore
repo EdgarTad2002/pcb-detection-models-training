@@ -14,6 +14,7 @@ data_samples/
 SuperYOLO/
 
 results/
+controlled_experiments/
 
 # OS / Editor files
 .DS_Store
@@ -47,3 +48,29 @@ tools/remote_*.sh
 
 
 Adaptive_Single_Low-Light_Image_Enhancement_by_Fractional_Stretching_in_Logarithmic_Domain
+
+# Verified research archives are local/cluster storage, not git artifacts.
+archive/
+
+# Full-resolution annotation review caches and versioned candidate datasets.
+data_review/
+
+# Keep manuscript source text versionable despite the historical global ignores.
+!paper/manuscript/*.md
+!paper/manuscript/*.tex
+
+# Editable source for the standalone experimental-results section.
+!paper/overleaf_results_section/**/*.tex
+!paper/overleaf_results_section/*.bib
+!paper/PAPER_CONTEXT_README.md
+
+# Local reference PDFs, presentations, backups, and large binary/media caches
+*.pdf
+*.pptx
+*.html
+ensemble_champions/
+paper_images/
+paper/.build/
+paper/mdpi_manuscript_backup_*/
+paper/*.jpg
+paper/*.txt

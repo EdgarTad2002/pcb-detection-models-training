@@ -1,3 +1,11 @@
+> Historical research record. For retained models, active datasets and current evidence, use README_PROJECT_LAYOUT.md and configs/model_registry.json. Older scores and paths below are not the current paper benchmark.
+
+> **6 November 2026 correction:** the historical claims below of completely clean,
+> noise-free or fully audited ground truth are not established. The native data
+> review found class errors, missing boxes and cross-split photo overlap. See
+> [README_DATASET_REVIEW_V2.md](README_DATASET_REVIEW_V2.md) for the separate
+> candidate and the actual scope of verification.
+
 # PCB Benchmark Dataset Catalog & Reference Manual
 
 > **Permanent Documentation for all Active Datasets on the YSU-HPC Cluster (`cluster.ysu.am`)**  

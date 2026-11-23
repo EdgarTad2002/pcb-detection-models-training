@@ -1,3 +1,5 @@
+> Historical research record. For retained models, active datasets and current evidence, use README_PROJECT_LAYOUT.md and configs/model_registry.json. Older scores and paths below are not the current paper benchmark.
+
 # PCB Automated Optical Inspection (AOI): Comprehensive Architecture & Experimentation Changelog
 
 > **Notice for Project Collaborators:**  

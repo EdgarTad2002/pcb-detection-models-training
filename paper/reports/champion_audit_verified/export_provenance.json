@@ -1,0 +1,31 @@
+{
+  "status": "completed",
+  "created_utc": "2026-10-30T22:31:23.258564+00:00",
+  "source_summary": "/home/edgar/pcb-detection-models-training/results/champion_audit_v1_20261030/summary.json",
+  "source_summary_sha256": "febb655d34649c42be51b01bb494b0cefd9d278f83692643709cdde143269a27",
+  "manifest_id": "d7f890125f064c71dc09b2567eba5612cde4e3a0a7f851ab479de070a288c59a",
+  "builder_sha256": "ef6473916a6168ed5883356554274092910987a9ab6e055bfc4df1cd179ce694",
+  "output_sha256": {
+    "PCB_Detection_Master_Benchmark_Verified.xlsx": "a1db78463c23b9b573ee384a5bf4768e0de590334a846394c09fdbdff608955e",
+    "Professor_Meeting_Presentation_Verified.pptx": "904dd2649f6c5c12bc67603db09fb3d11568fe2b8de3da29f355ee6c51c5bc14"
+  },
+  "checks": {
+    "workbook_numeric_values_compared": 252,
+    "fps_formulas_verified": 6,
+    "workbook_formula_error_matches": 0,
+    "presentation_tables_checked_against_source": [
+      4,
+      5,
+      6,
+      7,
+      8,
+      9
+    ],
+    "presentation_layout_findings": 0,
+    "presentation_import_passed": true,
+    "slides_rendered_from_final_pptx_and_visually_reviewed": 10,
+    "workbook_sheets_rendered_and_visually_reviewed": 3
+  },
+  "validation_receipt": "/home/edgar/pcb-detection-models-training/paper/.build/champion_audit_verified/presentation-validation.json",
+  "scope": "Four fixed historical single checkpoints and two fixed WBF ensembles, 44 cleaned full-board test images, FP32 1280px, common metric code; training recipes differ. No retraining."
+}

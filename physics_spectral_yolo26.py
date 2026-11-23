@@ -206,6 +206,7 @@ def parse_args():
     p.add_argument("--eval-conf", type=float, default=0.001)
     p.add_argument("--eval-iou", type=float, default=0.5)
     p.add_argument("--eval-split", default="test")
+    p.add_argument("--max-det", type=int, default=1000, help="Max detections per image (E1 standard: 1000).")
     p.add_argument("--alpha", type=float, default=0.0, help="Logarithmic alpha-rooting contrast parameter alpha (0.0 = baseline contrast).")
     p.add_argument("--classes", type=int, nargs="+", default=None, help="Optional class indices filter.")
     p.add_argument("--skip-train", action="store_true")
@@ -213,7 +214,7 @@ def parse_args():
 
 
 def evaluate_and_save(weights_path, args, effective_classes=None):
-    print(f"\nEvaluating clean checkpoint: {weights_path} at conf={args.eval_conf} on '{args.eval_split}' split")
+    print(f"\nEvaluating clean checkpoint: {weights_path} at conf={args.eval_conf}, max_det={args.max_det} on '{args.eval_split}' split")
     clean = YOLO(str(weights_path))
 
     val_kwargs = dict(
@@ -222,6 +223,7 @@ def evaluate_and_save(weights_path, args, effective_classes=None):
         conf=args.eval_conf,
         iou=args.eval_iou,
         imgsz=args.imgsz,
+        max_det=args.max_det,
         device=args.device,
     )
     if effective_classes is not None:
@@ -267,6 +269,7 @@ def evaluate_and_save(weights_path, args, effective_classes=None):
         "fps": float(fps),
         "per_class_ap50": per_class_ap,
         "alpha": float(args.alpha),
+        "max_det": args.max_det,
         "eval_conf": args.eval_conf,
         "eval_iou": args.eval_iou,
         "eval_split": args.eval_split,

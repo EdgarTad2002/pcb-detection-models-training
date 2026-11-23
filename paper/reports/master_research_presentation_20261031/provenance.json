@@ -1,0 +1,83 @@
+{
+  "created": "2026-10-31",
+  "slides": 30,
+  "sources": [
+    {
+      "path": "results/champion_audit_v1_20261030/summary.json",
+      "sha256": "febb655d34649c42be51b01bb494b0cefd9d278f83692643709cdde143269a27"
+    },
+    {
+      "path": "results/info17_protocol_v1_20261031/manifest.json",
+      "sha256": "be457c9d7c3568c4a9ade64432e2c0d3fcd6e7361a89365e943f2de1c2d2caae"
+    },
+    {
+      "path": "results/info17_protocol_v1_20261031/metrics.json",
+      "sha256": "df1ae20facdea28625d72ef91d8199c4f6770c58000a6a247444708bf238db94"
+    },
+    {
+      "path": "results/info17_protocol_v1_20261031/summary.json",
+      "sha256": "a9cca59925e4121833facd8d31c267159cd38db1ce0503f360d07faf683f1479"
+    },
+    {
+      "path": "paper/references/information-17-00322.pdf",
+      "sha256": "5ab5bf211e4513f7f753dbf505a6b293093f980e18c5a9e2d7e912a93f09dd44"
+    },
+    {
+      "path": "results/info17_speed_v1_20261031/benchmark.json",
+      "sha256": "e3cd6da1469f478d7feecc419955f83e2c5f9650f47b0b6df5bd9e31bd7b90fa"
+    },
+    {
+      "path": "results/info17_speed_v1_20261031/checkpoint_parameter_counts.json",
+      "sha256": "b5351df292746422d0fca7d71a1318afaeafe191ebb4a3b0a2d696a3287ef615"
+    }
+  ],
+  "output_sha256": "c109dea0043655c5be0aeedd45055bd6a8b8ab2cabaa409b5b6cecce51462067",
+  "paper_speed_included": true,
+  "chart_numeric_precision": "Source values rounded to 6 decimal places for editable Excel chart workbooks; tables display 2 decimals",
+  "editable_tables": [
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    12,
+    14,
+    15,
+    16,
+    17,
+    18,
+    19,
+    21,
+    22,
+    23,
+    24,
+    26,
+    27,
+    28,
+    29
+  ],
+  "editable_charts": [
+    11,
+    20
+  ],
+  "published_protocol_equivalence": false,
+  "final_file": "PCB_Research_Master_Presentation_2026-10-31_Final.pptx",
+  "verified_table_cells": 872,
+  "slides_visually_reviewed": 30,
+  "visual_review": "All final slides inspected. The final spacing revision changed only slides 28 and 29; other 28 slide PNG hashes matched the already inspected final renders.",
+  "layout_findings": 0,
+  "layout_warnings": 0,
+  "native_chart_workbooks": 2,
+  "source_builder_sha256": "51191b6fbea89c2330528979a8eff473f3e7dfc57e28fb55d45c3413f9930dac",
+  "validation_receipt": "paper/.build/master_presentation/presentation-validation-final.json",
+  "benchmark_640": {
+    "slurm_job": 371039,
+    "checkpoints": 18,
+    "timed_predictions": 1800,
+    "gpu": "NVIDIA H100 80GB HBM3"
+  }
+}

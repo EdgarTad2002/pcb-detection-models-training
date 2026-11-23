@@ -36,23 +36,51 @@ print(f"[SquaredDiceTrainer] ultralytics.__version__ = {ultralytics.__version__}
 
 class SquaredDiceLoss(nn.Module):
     """
-    Computes Squared-Dice Loss (Eq. 3):
+    Computes Squared-Dice Loss (Eq. 3 & Eq. 8 from Agaian et al.):
         L_SDice = 1 - (2 * (sum(p * y))^2 + smooth) / ((sum(p))^2 + (sum(y))^2 + smooth)
+    Supports both global computation and multi-stage deep-supervision weighting (Eq. 8).
     """
-    def __init__(self, smooth: float = 1.0):
+    def __init__(self, smooth: float = 1.0, stage_weights: list[float] | None = None):
         super().__init__()
         self.smooth = smooth
+        self.stage_weights = stage_weights
 
-    def forward(self, pred_prob: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+    def forward(self, pred_prob: torch.Tensor, target: torch.Tensor, feats: list | None = None) -> torch.Tensor:
         """
         Args:
             pred_prob: Sigmoid probabilities of shape (batch, num_anchors, num_classes)
             target: Target assignment scores of shape (batch, num_anchors, num_classes)
+            feats: Optional list of feature maps from the backbone/neck for multi-stage weighting (Eq. 8).
         """
         p = pred_prob.float()
         y = target.float()
+        if p.shape[-1] == 23:
+            active_cls = [2, 4, 7, 9]
+            p = p[..., active_cls]
+            y = y[..., active_cls]
 
-        # Compute across batch and spatial anchors for each class channel
+        # Multi-stage weighting if feats are provided and stage_weights are configured
+        if feats is not None and self.stage_weights is not None and len(self.stage_weights) == len(feats):
+            stage_losses = []
+            offset = 0
+            for i, feat in enumerate(feats):
+                n_stage = int(feat.shape[2] * feat.shape[3])
+                if offset + n_stage <= p.shape[1]:
+                    p_s = p[:, offset : offset + n_stage, :]
+                    y_s = y[:, offset : offset + n_stage, :]
+                    inter = (p_s * y_s).sum(dim=(0, 1))
+                    p_sum = p_s.sum(dim=(0, 1))
+                    y_sum = y_s.sum(dim=(0, 1))
+                    num = 2.0 * (inter ** 2) + self.smooth
+                    den = (p_sum ** 2) + (y_sum ** 2) + self.smooth
+                    sdice_s = (1.0 - (num / den)).mean()
+                    stage_losses.append(self.stage_weights[i] * sdice_s)
+                offset += n_stage
+            if stage_losses:
+                total_w = sum(self.stage_weights[:len(stage_losses)])
+                return sum(stage_losses) / (total_w if total_w > 0 else 1.0)
+
+        # Global computation across batch and spatial anchors for each class channel
         dims = (0, 1)
         intersection = (p * y).sum(dim=dims)
         p_sum = p.sum(dim=dims)
@@ -62,6 +90,7 @@ class SquaredDiceLoss(nn.Module):
         denominator = (p_sum ** 2) + (y_sum ** 2) + self.smooth
         sdice_per_class = 1.0 - (numerator / denominator)
         return sdice_per_class.mean()
+
 
 
 class SquaredDiceBboxLoss(BboxLoss):
@@ -131,12 +160,13 @@ class SquaredDiceDetectionLoss(v8DetectionLoss):
         tal_topk2: int | None = None,
         lambda_dice: float = 0.5,
         smooth: float = 1.0,
+        stage_weights: list[float] | None = None,
         squared_box: bool = False,
         **kwargs,
     ):
         super().__init__(model, tal_topk=tal_topk, tal_topk2=tal_topk2)
         self.lambda_dice = lambda_dice
-        self.sdice_loss = SquaredDiceLoss(smooth=smooth)
+        self.sdice_loss = SquaredDiceLoss(smooth=smooth, stage_weights=stage_weights)
         m = model.model[-1]
         self.bbox_loss = SquaredDiceBboxLoss(reg_max=m.reg_max, squared=squared_box).to(self.device)
         self.last_bce: float = 0.0
@@ -182,9 +212,9 @@ class SquaredDiceDetectionLoss(v8DetectionLoss):
             bce_loss *= self.class_weights
         loss_bce = bce_loss.sum() / target_scores_sum
 
-        # 2. Squared-Dice Loss component (Eq. 3 & Eq. 4)
+        # 2. Squared-Dice Loss component (Eq. 3, 4, 8)
         p_prob = pred_scores.sigmoid()
-        sdice = self.sdice_loss(p_prob, target_scores.to(dtype))
+        sdice = self.sdice_loss(p_prob, target_scores.to(dtype), feats=preds.get("feats"))
 
         # Store unscaled losses as detached floats and log every ~100 steps
         self.last_bce = float(loss_bce.detach().item())
@@ -232,6 +262,7 @@ def squared_dice_loss_factory(
     m: torch.nn.Module,
     lambda_dice: float = 0.5,
     smooth: float = 1.0,
+    stage_weights: list[float] | None = None,
     squared_box: bool = False,
     **kw,
 ) -> "SquaredDiceDetectionLoss":
@@ -240,6 +271,7 @@ def squared_dice_loss_factory(
         m,
         lambda_dice=lambda_dice,
         smooth=smooth,
+        stage_weights=stage_weights,
         squared_box=squared_box,
         **kw,
     )
@@ -293,6 +325,7 @@ class SquaredDiceTrainer(DetectionTrainer):
     """
     lambda_dice: float = 0.5
     smooth: float = 1.0
+    stage_weights: list[float] | None = None
     squared_box: bool = False
 
     def __init__(
@@ -302,6 +335,7 @@ class SquaredDiceTrainer(DetectionTrainer):
         _callbacks=None,
         lambda_dice: float | None = None,
         smooth: float | None = None,
+        stage_weights: list[float] | None = None,
         squared_box: bool | None = None,
     ):
         super().__init__(cfg=cfg, overrides=overrides, _callbacks=_callbacks)
@@ -309,6 +343,8 @@ class SquaredDiceTrainer(DetectionTrainer):
             self.lambda_dice = lambda_dice
         if smooth is not None:
             self.smooth = smooth
+        if stage_weights is not None:
+            self.stage_weights = stage_weights
         if squared_box is not None:
             self.squared_box = squared_box
 
@@ -318,6 +354,7 @@ class SquaredDiceTrainer(DetectionTrainer):
             squared_dice_loss_factory,
             lambda_dice=self.lambda_dice,
             smooth=self.smooth,
+            stage_weights=self.stage_weights,
             squared_box=self.squared_box,
         )
         model.init_criterion = functools.partial(
@@ -341,15 +378,18 @@ class SquaredDiceTrainer(DetectionTrainer):
 def get_squared_dice_trainer(
     lambda_dice: float = 0.5,
     smooth: float = 1.0,
+    stage_weights: list[float] | None = None,
     squared_box: bool = False,
 ) -> type[DetectionTrainer]:
     """
     Public factory returning a picklable DetectionTrainer class configured with the
     specified Squared-Dice hyperparameters without relying on module-level globals.
     """
+    sw_str = "_".join(str(w).replace(".", "_") for w in stage_weights) if stage_weights else "none"
     key = (
         f"SquaredDiceTrainer_l{str(lambda_dice).replace('.', '_')}"
         f"_s{str(smooth).replace('.', '_')}"
+        f"_sw{sw_str}"
         f"_{'sq' if squared_box else 'ciou'}"
     )
     mod = sys.modules[__name__]
@@ -362,6 +402,7 @@ def get_squared_dice_trainer(
         {
             "lambda_dice": lambda_dice,
             "smooth": smooth,
+            "stage_weights": stage_weights,
             "squared_box": squared_box,
             "__module__": __name__,
         },

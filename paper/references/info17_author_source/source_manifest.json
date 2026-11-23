@@ -1,0 +1,51 @@
+{
+  "repository": "https://github.com/Jerrychow0505/Ensemble-methods-of-YOLO-models-for-PCB-detection",
+  "commit": "21044102c2d73e516d45e17a7fc06e894e841104",
+  "policy": "Unmodified public source snippets for protocol audit. Evaluation adapter extracts only named pure metric functions; never executes training/main code. This is not an exact-publication reproduction certificate.",
+  "files": [
+    {
+      "path": "README.md",
+      "sha256": "ce245cc84058578c96dcba7ba885b6448cfb19dda7cbb700f8cc5cfe2b375c93"
+    },
+    {
+      "path": "training/train_yolov8.py",
+      "sha256": "8b3d31fcb9c60425fd91efcd1159a2288bb008fb001b0b2deeaf96672562cfc2"
+    },
+    {
+      "path": "ensemble/nms.py",
+      "sha256": "e247a15a6ecafd74d34caedd116eca1083126363aa19c6d34a9ca96e1030f9b1"
+    },
+    {
+      "path": "ensemble/ensemble_voting_experiment.py",
+      "sha256": "7cbb233f80fc9e9ed3b5869c934ce3a296987bda251ddcff0302227fe2e8a58c"
+    },
+    {
+      "path": "ensemble/weighted_voting_methods/evaluate.py",
+      "sha256": "f50a5dcdbc812b001f7f967ecb3516d7424c1efae7fadc9b7545c1c7842bdc29"
+    },
+    {
+      "path": "ensemble/weighted_voting_methods/box_utils.py",
+      "sha256": "40fdfc5c49ab16250acb0b88e54be0ea77d918bdb06fa198c7e026f1e58cea93"
+    },
+    {
+      "path": "ensemble/weighted_voting_methods/config.py",
+      "sha256": "cc559bd8f657d86036e4e78a145a16715502dbd2b1f1f2dc8477d51243ff75e4"
+    },
+    {
+      "path": "ensemble/weighted_voting_methods/prepare_predictions.py",
+      "sha256": "1ac824a33b4a8b2dee274a864c31e446f715f2334fb6f4362d2d163c5e77ab0b"
+    },
+    {
+      "path": "ensemble/weighted_voting_methods/run_experiments.py",
+      "sha256": "da8149c777dddd1cbd8702a5d83d0a8ec33f852512008c1e57bb13a76ef6dcd1"
+    },
+    {
+      "path": "results/individual_models_performance.json",
+      "sha256": "735bc0418a24ea99816bc597992dc1cb7d99d926524f90a1d98d2f2506f71bd0"
+    },
+    {
+      "path": "results/voting_ensemble_performance.json",
+      "sha256": "96836c91e4243ef36d9a8f4dd0a33847ce51d78660b94acdbecdeac5ee13eca5"
+    }
+  ]
+}

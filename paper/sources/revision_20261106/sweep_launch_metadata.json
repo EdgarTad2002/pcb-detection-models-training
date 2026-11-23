@@ -1,0 +1,70 @@
+{
+  "slurm_sdice_sweep_352552.out": [
+    "Running Squared-Dice Exploration: yolo26s_agwd_sdice_smooth0.01_uniform",
+    "  lambda_dice   = 0.5",
+    "  smooth_dice   = 0.01",
+    "  stage_weights = ",
+    "[PhysOT Proposal 1: AGWD-OTA (Anisotropic W2 + Jeffreys KLD + Dynamic-k SimOTA) + Multi-Stage Squared-Dice (lambda=0.5, smooth=0.01, weights=None)] constant_c=12.8px, kappa=576.0, tal_beta=3.0",
+    "lambda_dice: 0.5"
+  ],
+  "slurm_sdice_sweep_352553.out": [
+    "Running Squared-Dice Exploration: yolo26s_agwd_sdice_smooth0.1_uniform",
+    "  lambda_dice   = 0.5",
+    "  smooth_dice   = 0.1",
+    "  stage_weights = ",
+    "[PhysOT Proposal 1: AGWD-OTA (Anisotropic W2 + Jeffreys KLD + Dynamic-k SimOTA) + Multi-Stage Squared-Dice (lambda=0.5, smooth=0.1, weights=None)] constant_c=12.8px, kappa=576.0, tal_beta=3.0",
+    "lambda_dice: 0.5"
+  ],
+  "slurm_sdice_sweep_352513.out": [
+    "Running Squared-Dice Exploration: yolo26s_agwd_sdice_l1.0_s0.01",
+    "  lambda_dice   = 1.0",
+    "  smooth_dice   = 0.01",
+    "  stage_weights = 0.5 0.3 0.2",
+    "[PhysOT Proposal 1: AGWD-OTA (Anisotropic W2 + Jeffreys KLD + Dynamic-k SimOTA) + Multi-Stage Squared-Dice (lambda=1.0, smooth=0.01, weights=[0.5, 0.3, 0.2])] constant_c=12.8px, kappa=576.0, tal_beta=3.0",
+    "lambda_dice: 1.0"
+  ],
+  "slurm_sdice_sweep_352549.out": [
+    "Running Squared-Dice Exploration: yolo26s_agwd_sdice_smooth1.0_stageweights",
+    "  lambda_dice   = 0.5",
+    "  smooth_dice   = 1.0",
+    "  stage_weights = 0.5 0.3 0.2",
+    "[PhysOT Proposal 1: AGWD-OTA (Anisotropic W2 + Jeffreys KLD + Dynamic-k SimOTA) + Multi-Stage Squared-Dice (lambda=0.5, smooth=1.0, weights=[0.5, 0.3, 0.2])] constant_c=12.8px, kappa=576.0, tal_beta=3.0",
+    "lambda_dice: 0.5"
+  ],
+  "slurm_sdice_sweep_352550.out": [
+    "Running Squared-Dice Exploration: yolo26s_agwd_sdice_smooth0.1_uniform",
+    "  lambda_dice   = 0.5",
+    "  smooth_dice   = 0.1",
+    "  stage_weights = "
+  ],
+  "slurm_sdice_sweep_352512.out": [
+    "Running Squared-Dice Exploration: yolo26s_agwd_sdice_stage_s0.01",
+    "  lambda_dice   = 0.5",
+    "  smooth_dice   = 0.01",
+    "  stage_weights = 0.5 0.3 0.2",
+    "[PhysOT Proposal 1: AGWD-OTA (Anisotropic W2 + Jeffreys KLD + Dynamic-k SimOTA) + Multi-Stage Squared-Dice (lambda=0.5, smooth=0.01, weights=[0.5, 0.3, 0.2])] constant_c=12.8px, kappa=576.0, tal_beta=3.0",
+    "lambda_dice: 0.5"
+  ],
+  "slurm_sdice_sweep_354516.out": [
+    "Running Squared-Dice Exploration: yolo26s_agwd_sdice_l0.20_s0.01",
+    "  lambda_dice   = 0.20",
+    "  smooth_dice   = 0.01",
+    "  stage_weights = ",
+    "[PhysOT Proposal 1: AGWD-OTA (Anisotropic W2 + Jeffreys KLD + Dynamic-k SimOTA) + Multi-Stage Squared-Dice (lambda=0.2, smooth=0.01, weights=None)] constant_c=12.8px, kappa=576.0, tal_beta=3.0",
+    "lambda_dice: 0.2"
+  ],
+  "slurm_sdice_sweep_354523.out": [
+    "Running Squared-Dice Exploration: yolo26s_agwd_sdice_l0.35_s0.01",
+    "  lambda_dice   = 0.35",
+    "  smooth_dice   = 0.01",
+    "  stage_weights = ",
+    "[PhysOT Proposal 1: AGWD-OTA (Anisotropic W2 + Jeffreys KLD + Dynamic-k SimOTA) + Multi-Stage Squared-Dice (lambda=0.35, smooth=0.01, weights=None)] constant_c=12.8px, kappa=576.0, tal_beta=3.0",
+    "lambda_dice: 0.35"
+  ],
+  "slurm_sdice_sweep_352547.out": [
+    "Running Squared-Dice Exploration: yolo26s_agwd_sdice_smooth0.01_uniform",
+    "  lambda_dice   = 0.5",
+    "  smooth_dice   = 0.01",
+    "  stage_weights = "
+  ]
+}

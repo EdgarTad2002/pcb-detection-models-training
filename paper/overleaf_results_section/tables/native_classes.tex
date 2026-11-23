@@ -1,0 +1,12 @@
+\begin{table}[!t]\centering
+\caption{Per-class AP50 (\%) in the native checkpoint audit. Only 18 electrolytic-capacitor boxes occur in these legacy test labels.}
+\label{tab:nativeclasses}\footnotesize\setlength{\tabcolsep}{3pt}
+\begin{tabular}{lrrrr}\toprule
+Configuration & Cap. & Conn. & Elec. & IC\\\midrule
+YOLOv12s & 43.43 & 77.88 & 74.50 & 68.85 \\
+Crop-trained YOLO26s & 39.67 & 70.94 & 83.33 & 72.30 \\
+AGWD + Squared-Dice & 44.12 & 68.63 & 74.51 & 72.69 \\
+PhysOT-YOLO26s & 43.68 & 65.81 & 71.02 & 68.21 \\
+WBF, two models & 45.10 & 76.95 & 78.19 & 73.74 \\
+WBF, four models & 47.04 & 78.85 & 73.31 & 75.77 \\
+\bottomrule\end{tabular}\end{table}

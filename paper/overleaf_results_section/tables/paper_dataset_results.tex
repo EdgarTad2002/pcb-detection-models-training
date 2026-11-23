@@ -1,0 +1,18 @@
+\begin{table*}[!t]
+\centering
+\caption{Original-label RF100 exports at 640 pixels. Our methods share the same 41-image test split and evaluator (mean $\pm$ sample SD, seeds 0/1/2). P/R/F1 use pooled counts at confidence 0.25 and matching IoU 0.50. Published rows use the authors' protocol and are contextual; a direct improvement claim is unverified.}
+\label{tab:paper}\small\setlength{\tabcolsep}{4pt}
+\begin{tabular}{lrrrrr}\toprule
+Method & $\mathrm{mAP}_{50}$ & $\mathrm{mAP}_{50:95}$ & P & R & F1\\\midrule
+\multicolumn{6}{l}{\emph{Our common evaluation protocol (all entries in percent)}}\\
+YOLOv8s & $52.34\pm1.38$ & $38.33\pm1.54$ & $61.45\pm1.14$ & $24.04\pm0.46$ & $34.55\pm0.29$ \\
+YOLOv12s & $53.61\pm2.39$ & $38.44\pm2.53$ & $62.39\pm3.55$ & $24.58\pm1.55$ & $35.20\pm1.11$ \\
+YOLO26s & $49.94\pm1.85$ & $35.03\pm1.12$ & $60.51\pm5.52$ & $24.75\pm1.20$ & $35.04\pm0.31$ \\
+AGWD + Dice & $53.23\pm1.40$ & $37.77\pm1.33$ & $58.97\pm4.50$ & $25.18\pm0.41$ & $35.25\pm0.76$ \\
+PhysOT & $52.27\pm1.79$ & $37.60\pm1.87$ & $56.87\pm1.82$ & $26.29\pm1.13$ & $35.93\pm0.76$ \\
+Crop + AGWD/Dice & $55.08\pm0.89$ & $39.62\pm0.64$ & $59.45\pm2.46$ & $25.84\pm0.99$ & $35.99\pm0.53$ \\
+\midrule
+\multicolumn{6}{l}{\emph{Published context only~\cite{zhou2026ensemble}; P/R thresholds may differ}}\\
+YOLOv8s, best single (Table 4) & 54.04 & -- & 60.6 & 51.8 & --\\
+Consensus Top-4, best ensemble (Table 9) & 59.63 & -- & 63.2 & 59.3 & --\\
+\bottomrule\end{tabular}\end{table*}

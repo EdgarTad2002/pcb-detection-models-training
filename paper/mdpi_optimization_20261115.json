@@ -1,0 +1,12 @@
+{
+  "date": "2026-11-15",
+  "overleaf_project": "https://www.overleaf.com/project/6af8b9ebfd60cee294e6718b",
+  "status": "source_optimized_full_compile_still_time_limited",
+  "full_manuscript_restored": true,
+  "full_pdf_verified": false,
+  "original_figures_bibliography_class_unchanged": true,
+  "archive": "paper/mdpi_manuscript_optimized_20261115.zip",
+  "archive_sha256": "f949cfda924b4d7c90f39e3b8f93441c9c4649abbdd3782f996e10c0238403ea",
+  "main_tex_sha256": "bab99791252b7b868943543a2515ed5a6c65057747396718d260b3d810e946b7",
+  "backup": "paper/history/mdpi_before_overleaf_optimization_20261115.zip"
+}

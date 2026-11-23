@@ -1,0 +1,879 @@
+{
+  "schema_version": 1,
+  "description": "Retained artifacts after approved cleanup. Historical-review weights stay on cluster; default sync downloads champions and current results only.",
+  "champions": [
+    {
+      "id": "yolo12",
+      "name": "YOLOv12s",
+      "path": "ensemble_champions/1_yolov12s_champion.pt",
+      "sha256": "912819a56bce0ebc3d1ee6431af8c59e32ddcc4717b64f5cb4d866fa9a186c6e"
+    },
+    {
+      "id": "crop",
+      "name": "YOLO26s crop specialist",
+      "path": "ensemble_champions/2_yolo26s_crop_specialist.pt",
+      "sha256": "64a2c9de97b21bb9d84a4ac68bd22cbfec9fdf7142b8e891a37a08f197890cd3"
+    },
+    {
+      "id": "agwd_sdice",
+      "name": "YOLO26s AGWD + Squared-Dice",
+      "path": "ensemble_champions/3_yolo26s_agwd_sdice.pt",
+      "sha256": "a51d9285abd33fa0b304abd2b300740672c7e0ad2bbe9a367950e84b9a0540f6"
+    },
+    {
+      "id": "physot",
+      "name": "PhysOT-YOLO26s",
+      "path": "ensemble_champions/4_physot_yolo26s.pt",
+      "sha256": "498a09cca2f0b754a1967b001a6fddc108b0fb9e28a9077b74ac1338d330a280"
+    }
+  ],
+  "ensembles": [
+    {
+      "id": "ensemble2",
+      "name": "Two-model WBF",
+      "members": [
+        "yolo12",
+        "crop"
+      ],
+      "weights": [
+        1.3,
+        1.2
+      ]
+    },
+    {
+      "id": "ensemble4",
+      "name": "Four-model WBF",
+      "members": [
+        "yolo12",
+        "crop",
+        "agwd_sdice",
+        "physot"
+      ],
+      "weights": [
+        1.3,
+        1.2,
+        1.1,
+        1.0
+      ]
+    }
+  ],
+  "runs": [
+    {
+      "path": "runs/clean_crop_noextraaug_v1_a57c5f08_budget_physot_yolo26s_clean_s0",
+      "group": "native1280",
+      "reason": "Matched clean baselines, losses, three seeds, and clean/crop controls",
+      "checkpoints": [
+        {
+          "path": "runs/clean_crop_noextraaug_v1_a57c5f08_budget_physot_yolo26s_clean_s0/pcb-filtered/weights/best.pt",
+          "sha256": "78a7d5afeefefcca3f2793013426b2238e0b390d2b339e743b4c50d58213f8e2"
+        }
+      ]
+    },
+    {
+      "path": "runs/clean_crop_noextraaug_v1_a57c5f08_budget_physot_yolo26s_mixed_s0",
+      "group": "native1280",
+      "reason": "Matched clean baselines, losses, three seeds, and clean/crop controls",
+      "checkpoints": [
+        {
+          "path": "runs/clean_crop_noextraaug_v1_a57c5f08_budget_physot_yolo26s_mixed_s0/pcb-filtered/weights/best.pt",
+          "sha256": "9187706c82e811fd0d60d4312fc4330c5b78d334f769b3d5cb577704571ad970"
+        }
+      ]
+    },
+    {
+      "path": "runs/clean_crop_noextraaug_v1_a57c5f08_budget_yolov12s_clean_s0",
+      "group": "native1280",
+      "reason": "Matched clean baselines, losses, three seeds, and clean/crop controls",
+      "checkpoints": [
+        {
+          "path": "runs/clean_crop_noextraaug_v1_a57c5f08_budget_yolov12s_clean_s0/pcb-filtered/weights/best.pt",
+          "sha256": "cca5e8cdf54fee15daa97d173d4dc78d80ba1e9fdb20eccf1445c35bcbebc2d9"
+        }
+      ]
+    },
+    {
+      "path": "runs/clean_crop_noextraaug_v1_a57c5f08_budget_yolov12s_mixed_s0",
+      "group": "native1280",
+      "reason": "Matched clean baselines, losses, three seeds, and clean/crop controls",
+      "checkpoints": [
+        {
+          "path": "runs/clean_crop_noextraaug_v1_a57c5f08_budget_yolov12s_mixed_s0/pcb-filtered/weights/best.pt",
+          "sha256": "abab0cd83f761dc1f4c5ea84622273fed9d101d9346bd4972534d29f7be1324f"
+        }
+      ]
+    },
+    {
+      "path": "runs/clean_main_noextraaug_v1_f54a6d2e_main_physot_yolo26s_clean_s1",
+      "group": "native1280",
+      "reason": "Matched clean baselines, losses, three seeds, and clean/crop controls",
+      "checkpoints": [
+        {
+          "path": "runs/clean_main_noextraaug_v1_f54a6d2e_main_physot_yolo26s_clean_s1/pcb-filtered/weights/best.pt",
+          "sha256": "77b3cadd62b0a55efe940823349448d211a57e3a0b0e9af383f3162dbcacb1f3"
+        }
+      ]
+    },
+    {
+      "path": "runs/clean_main_noextraaug_v1_f54a6d2e_main_physot_yolo26s_clean_s2",
+      "group": "native1280",
+      "reason": "Matched clean baselines, losses, three seeds, and clean/crop controls",
+      "checkpoints": [
+        {
+          "path": "runs/clean_main_noextraaug_v1_f54a6d2e_main_physot_yolo26s_clean_s2/pcb-filtered/weights/best.pt",
+          "sha256": "40482a87ad1c2a2e341c4cdc0751aa32fa9526dda557bcb2ead446a9ddd62976"
+        }
+      ]
+    },
+    {
+      "path": "runs/clean_main_noextraaug_v1_f54a6d2e_main_yolo26s_agwd_sdice_clean_s0",
+      "group": "native1280",
+      "reason": "Matched clean baselines, losses, three seeds, and clean/crop controls",
+      "checkpoints": [
+        {
+          "path": "runs/clean_main_noextraaug_v1_f54a6d2e_main_yolo26s_agwd_sdice_clean_s0/pcb-filtered/weights/best.pt",
+          "sha256": "3e57199197484484574a08862dc331d7a5b8d83c031b486def3e964e57804e07"
+        }
+      ]
+    },
+    {
+      "path": "runs/clean_main_noextraaug_v1_f54a6d2e_main_yolo26s_agwd_sdice_clean_s1",
+      "group": "native1280",
+      "reason": "Matched clean baselines, losses, three seeds, and clean/crop controls",
+      "checkpoints": [
+        {
+          "path": "runs/clean_main_noextraaug_v1_f54a6d2e_main_yolo26s_agwd_sdice_clean_s1/pcb-filtered/weights/best.pt",
+          "sha256": "1437c484f6a106fe7150f55d4315560b24e2a021bde0e2ed2ef8a8aef7e3ca97"
+        }
+      ]
+    },
+    {
+      "path": "runs/clean_main_noextraaug_v1_f54a6d2e_main_yolo26s_agwd_sdice_clean_s2",
+      "group": "native1280",
+      "reason": "Matched clean baselines, losses, three seeds, and clean/crop controls",
+      "checkpoints": [
+        {
+          "path": "runs/clean_main_noextraaug_v1_f54a6d2e_main_yolo26s_agwd_sdice_clean_s2/pcb-filtered/weights/best.pt",
+          "sha256": "10ab0494a7e4e1c82c942d8df2dff146e561a5c3c8e2a28cdb39ba68073dea11"
+        }
+      ]
+    },
+    {
+      "path": "runs/clean_main_noextraaug_v1_f54a6d2e_main_yolo26s_agwd_sdice_l035_clean_s0",
+      "group": "native1280",
+      "reason": "Matched clean baselines, losses, three seeds, and clean/crop controls",
+      "checkpoints": [
+        {
+          "path": "runs/clean_main_noextraaug_v1_f54a6d2e_main_yolo26s_agwd_sdice_l035_clean_s0/pcb-filtered/weights/best.pt",
+          "sha256": "152b828f939059ef1a5e09db2e36375cc1ba434e4f569ff42ab87698c6aaa4f4"
+        }
+      ]
+    },
+    {
+      "path": "runs/clean_main_noextraaug_v1_f54a6d2e_main_yolo26s_agwd_sdice_l035_clean_s1",
+      "group": "native1280",
+      "reason": "Matched clean baselines, losses, three seeds, and clean/crop controls",
+      "checkpoints": [
+        {
+          "path": "runs/clean_main_noextraaug_v1_f54a6d2e_main_yolo26s_agwd_sdice_l035_clean_s1/pcb-filtered/weights/best.pt",
+          "sha256": "e51b42ee92faed62c1e4ef7a57683ab81ce899edf8f55d272eef4b5ccd0ce610"
+        }
+      ]
+    },
+    {
+      "path": "runs/clean_main_noextraaug_v1_f54a6d2e_main_yolo26s_agwd_sdice_l035_clean_s2",
+      "group": "native1280",
+      "reason": "Matched clean baselines, losses, three seeds, and clean/crop controls",
+      "checkpoints": [
+        {
+          "path": "runs/clean_main_noextraaug_v1_f54a6d2e_main_yolo26s_agwd_sdice_l035_clean_s2/pcb-filtered/weights/best.pt",
+          "sha256": "a0f61adb8b798f59b73b4302dc7a84908c18cbe933ca3995781957eb2c9676ee"
+        }
+      ]
+    },
+    {
+      "path": "runs/clean_main_noextraaug_v1_f54a6d2e_main_yolo26s_clean_s0",
+      "group": "native1280",
+      "reason": "Matched clean baselines, losses, three seeds, and clean/crop controls",
+      "checkpoints": [
+        {
+          "path": "runs/clean_main_noextraaug_v1_f54a6d2e_main_yolo26s_clean_s0/pcb-filtered/weights/best.pt",
+          "sha256": "b61624d06022203b655134a16536ba17756b394dc28cf477ca7e05a779ddf697"
+        }
+      ]
+    },
+    {
+      "path": "runs/clean_main_noextraaug_v1_f54a6d2e_main_yolo26s_clean_s1",
+      "group": "native1280",
+      "reason": "Matched clean baselines, losses, three seeds, and clean/crop controls",
+      "checkpoints": [
+        {
+          "path": "runs/clean_main_noextraaug_v1_f54a6d2e_main_yolo26s_clean_s1/pcb-filtered/weights/best.pt",
+          "sha256": "8ef0467d02eeff75d01f55d734e08b44b39d1fe47ad9e71bcbb34a11bdd70408"
+        }
+      ]
+    },
+    {
+      "path": "runs/clean_main_noextraaug_v1_f54a6d2e_main_yolo26s_clean_s2",
+      "group": "native1280",
+      "reason": "Matched clean baselines, losses, three seeds, and clean/crop controls",
+      "checkpoints": [
+        {
+          "path": "runs/clean_main_noextraaug_v1_f54a6d2e_main_yolo26s_clean_s2/pcb-filtered/weights/best.pt",
+          "sha256": "6d1656800e6b61dceb77cd8f16fca2512f4ed4a4953ea4f8480db54157ec9d26"
+        }
+      ]
+    },
+    {
+      "path": "runs/clean_main_noextraaug_v1_f54a6d2e_main_yolo26s_sdice_clean_s0",
+      "group": "native1280",
+      "reason": "Matched clean baselines, losses, three seeds, and clean/crop controls",
+      "checkpoints": [
+        {
+          "path": "runs/clean_main_noextraaug_v1_f54a6d2e_main_yolo26s_sdice_clean_s0/pcb-filtered/weights/best.pt",
+          "sha256": "f03736c38027b65a73f9e21cfee2e7384ca6e1d2406134dc87810182f724056f"
+        }
+      ]
+    },
+    {
+      "path": "runs/clean_main_noextraaug_v1_f54a6d2e_main_yolo26s_sdice_clean_s1",
+      "group": "native1280",
+      "reason": "Matched clean baselines, losses, three seeds, and clean/crop controls",
+      "checkpoints": [
+        {
+          "path": "runs/clean_main_noextraaug_v1_f54a6d2e_main_yolo26s_sdice_clean_s1/pcb-filtered/weights/best.pt",
+          "sha256": "72d618c880fb8778a958731d51f8e1adbe5ec69dff474dac877accaf4ba7dd39"
+        }
+      ]
+    },
+    {
+      "path": "runs/clean_main_noextraaug_v1_f54a6d2e_main_yolo26s_sdice_clean_s2",
+      "group": "native1280",
+      "reason": "Matched clean baselines, losses, three seeds, and clean/crop controls",
+      "checkpoints": [
+        {
+          "path": "runs/clean_main_noextraaug_v1_f54a6d2e_main_yolo26s_sdice_clean_s2/pcb-filtered/weights/best.pt",
+          "sha256": "b6d033ed97d4bf12cfe118b059b22b2ff56d1ab37cee23cc6151810c5ad9c550"
+        }
+      ]
+    },
+    {
+      "path": "runs/clean_main_noextraaug_v1_f54a6d2e_main_yolov10s_clean_s0",
+      "group": "native1280",
+      "reason": "Matched clean baselines, losses, three seeds, and clean/crop controls",
+      "checkpoints": [
+        {
+          "path": "runs/clean_main_noextraaug_v1_f54a6d2e_main_yolov10s_clean_s0/pcb-filtered/weights/best.pt",
+          "sha256": "c2d3adac3dbf52e09b998c89c7258da3fdc5fd110580147d2a33e62413275337"
+        }
+      ]
+    },
+    {
+      "path": "runs/clean_main_noextraaug_v1_f54a6d2e_main_yolov10s_clean_s1",
+      "group": "native1280",
+      "reason": "Matched clean baselines, losses, three seeds, and clean/crop controls",
+      "checkpoints": [
+        {
+          "path": "runs/clean_main_noextraaug_v1_f54a6d2e_main_yolov10s_clean_s1/pcb-filtered/weights/best.pt",
+          "sha256": "0bd366c8d3189e731e33bcb75a253c28e0ea038c1beeaa6e1ef4f2839e7cbaa0"
+        }
+      ]
+    },
+    {
+      "path": "runs/clean_main_noextraaug_v1_f54a6d2e_main_yolov10s_clean_s2",
+      "group": "native1280",
+      "reason": "Matched clean baselines, losses, three seeds, and clean/crop controls",
+      "checkpoints": [
+        {
+          "path": "runs/clean_main_noextraaug_v1_f54a6d2e_main_yolov10s_clean_s2/pcb-filtered/weights/best.pt",
+          "sha256": "fed32bebd9b2c675a55e5dd9657167ee428eb47bd14b8b153e127134e0ff3005"
+        }
+      ]
+    },
+    {
+      "path": "runs/clean_main_noextraaug_v1_f54a6d2e_main_yolov12s_clean_s1",
+      "group": "native1280",
+      "reason": "Matched clean baselines, losses, three seeds, and clean/crop controls",
+      "checkpoints": [
+        {
+          "path": "runs/clean_main_noextraaug_v1_f54a6d2e_main_yolov12s_clean_s1/pcb-filtered/weights/best.pt",
+          "sha256": "982f5b893230786e5af69c899fd591e7eb1a2747668bce890d2a453ed8261dc7"
+        }
+      ]
+    },
+    {
+      "path": "runs/clean_main_noextraaug_v1_f54a6d2e_main_yolov12s_clean_s2",
+      "group": "native1280",
+      "reason": "Matched clean baselines, losses, three seeds, and clean/crop controls",
+      "checkpoints": [
+        {
+          "path": "runs/clean_main_noextraaug_v1_f54a6d2e_main_yolov12s_clean_s2/pcb-filtered/weights/best.pt",
+          "sha256": "323325f8a10ad2a61a4255d221dbccd54b07eab0f4099767582169096bd3a0b4"
+        }
+      ]
+    },
+    {
+      "path": "runs/controlled_v1_restart1_a0becd8a_main_physot_yolo26s_cappaste_s0",
+      "group": "historical_review",
+      "reason": "Historical copy-paste three-seed comparison; preserve weights until deciding whether augmentation evidence belongs in paper",
+      "checkpoints": [
+        {
+          "path": "runs/controlled_v1_restart1_a0becd8a_main_physot_yolo26s_cappaste_s0/pcb-filtered/weights/best.pt",
+          "sha256": "2e9897599bb63d7be9166cc0342bc5f3ce8ab7d293c85fba2243a71f75823d02"
+        }
+      ]
+    },
+    {
+      "path": "runs/controlled_v1_restart1_a0becd8a_main_physot_yolo26s_cappaste_s1",
+      "group": "native1280",
+      "reason": "Original source run for a selected champion; duplicate weights can be deduplicated only with a stable replacement path",
+      "checkpoints": [
+        {
+          "path": "runs/controlled_v1_restart1_a0becd8a_main_physot_yolo26s_cappaste_s1/pcb-filtered/weights/best.pt",
+          "sha256": "498a09cca2f0b754a1967b001a6fddc108b0fb9e28a9077b74ac1338d330a280"
+        }
+      ]
+    },
+    {
+      "path": "runs/controlled_v1_restart1_a0becd8a_main_physot_yolo26s_cappaste_s2",
+      "group": "historical_review",
+      "reason": "Historical copy-paste three-seed comparison; preserve weights until deciding whether augmentation evidence belongs in paper",
+      "checkpoints": [
+        {
+          "path": "runs/controlled_v1_restart1_a0becd8a_main_physot_yolo26s_cappaste_s2/pcb-filtered/weights/best.pt",
+          "sha256": "805bf37fcec92264bc44117001f7037170108d0b1f0b183f16de78a9768e2ae6"
+        }
+      ]
+    },
+    {
+      "path": "runs/controlled_v1_restart1_a0becd8a_main_yolo26s_agwd_sdice_cappaste_s0",
+      "group": "historical_review",
+      "reason": "Historical copy-paste three-seed comparison; preserve weights until deciding whether augmentation evidence belongs in paper",
+      "checkpoints": [
+        {
+          "path": "runs/controlled_v1_restart1_a0becd8a_main_yolo26s_agwd_sdice_cappaste_s0/pcb-filtered/weights/best.pt",
+          "sha256": "6fae5a5fd086ccf02b9db7eed5d07b10dbacae519732726a9a1cb103f90e7d62"
+        }
+      ]
+    },
+    {
+      "path": "runs/controlled_v1_restart1_a0becd8a_main_yolo26s_agwd_sdice_cappaste_s1",
+      "group": "historical_review",
+      "reason": "Historical copy-paste three-seed comparison; preserve weights until deciding whether augmentation evidence belongs in paper",
+      "checkpoints": [
+        {
+          "path": "runs/controlled_v1_restart1_a0becd8a_main_yolo26s_agwd_sdice_cappaste_s1/pcb-filtered/weights/best.pt",
+          "sha256": "308beb42aeb06902bbd425646bf3eef7f2202db1a93b646f8788a0cbf6fcc748"
+        }
+      ]
+    },
+    {
+      "path": "runs/controlled_v1_restart1_a0becd8a_main_yolo26s_agwd_sdice_cappaste_s2",
+      "group": "historical_review",
+      "reason": "Historical copy-paste three-seed comparison; preserve weights until deciding whether augmentation evidence belongs in paper",
+      "checkpoints": [
+        {
+          "path": "runs/controlled_v1_restart1_a0becd8a_main_yolo26s_agwd_sdice_cappaste_s2/pcb-filtered/weights/best.pt",
+          "sha256": "b5cca2b5a9b4d87312ffb4ee148eda6915f0bf9d6639329e197786d2c1499315"
+        }
+      ]
+    },
+    {
+      "path": "runs/controlled_v1_restart1_a0becd8a_main_yolo26s_agwd_sdice_l035_cappaste_s0",
+      "group": "historical_review",
+      "reason": "Historical copy-paste three-seed comparison; preserve weights until deciding whether augmentation evidence belongs in paper",
+      "checkpoints": [
+        {
+          "path": "runs/controlled_v1_restart1_a0becd8a_main_yolo26s_agwd_sdice_l035_cappaste_s0/pcb-filtered/weights/best.pt",
+          "sha256": "d29259425c80ae32ab3bc6b863691480beb408285594e3f6c00041a0375f8e2e"
+        }
+      ]
+    },
+    {
+      "path": "runs/controlled_v1_restart1_a0becd8a_main_yolo26s_agwd_sdice_l035_cappaste_s1",
+      "group": "historical_review",
+      "reason": "Historical copy-paste three-seed comparison; preserve weights until deciding whether augmentation evidence belongs in paper",
+      "checkpoints": [
+        {
+          "path": "runs/controlled_v1_restart1_a0becd8a_main_yolo26s_agwd_sdice_l035_cappaste_s1/pcb-filtered/weights/best.pt",
+          "sha256": "1bbbc557a7f6892b6f182a83009b6b0bfb8754111b1e0516cde46d1ab0ca9398"
+        }
+      ]
+    },
+    {
+      "path": "runs/controlled_v1_restart1_a0becd8a_main_yolo26s_agwd_sdice_l035_cappaste_s2",
+      "group": "historical_review",
+      "reason": "Historical copy-paste three-seed comparison; preserve weights until deciding whether augmentation evidence belongs in paper",
+      "checkpoints": [
+        {
+          "path": "runs/controlled_v1_restart1_a0becd8a_main_yolo26s_agwd_sdice_l035_cappaste_s2/pcb-filtered/weights/best.pt",
+          "sha256": "9bc3960e8f8eba2f4a32b6de5e2696cd192eaaeab773d08ffa8561adcd682b4e"
+        }
+      ]
+    },
+    {
+      "path": "runs/controlled_v1_restart1_a0becd8a_main_yolo26s_cappaste_s0",
+      "group": "historical_review",
+      "reason": "Historical copy-paste three-seed comparison; preserve weights until deciding whether augmentation evidence belongs in paper",
+      "checkpoints": [
+        {
+          "path": "runs/controlled_v1_restart1_a0becd8a_main_yolo26s_cappaste_s0/pcb-filtered/weights/best.pt",
+          "sha256": "cdd3b2f0fcfa4e95b710f3603be57d01fd884b75104ba69d4b58bf4af57cd227"
+        }
+      ]
+    },
+    {
+      "path": "runs/controlled_v1_restart1_a0becd8a_main_yolo26s_cappaste_s1",
+      "group": "historical_review",
+      "reason": "Historical copy-paste three-seed comparison; preserve weights until deciding whether augmentation evidence belongs in paper",
+      "checkpoints": [
+        {
+          "path": "runs/controlled_v1_restart1_a0becd8a_main_yolo26s_cappaste_s1/pcb-filtered/weights/best.pt",
+          "sha256": "e7f9a23c36eaef7949b5b6ac743b2f2158b58a6e356cc52a8d6575216089fd12"
+        }
+      ]
+    },
+    {
+      "path": "runs/controlled_v1_restart1_a0becd8a_main_yolo26s_cappaste_s2",
+      "group": "historical_review",
+      "reason": "Historical copy-paste three-seed comparison; preserve weights until deciding whether augmentation evidence belongs in paper",
+      "checkpoints": [
+        {
+          "path": "runs/controlled_v1_restart1_a0becd8a_main_yolo26s_cappaste_s2/pcb-filtered/weights/best.pt",
+          "sha256": "bae6598ab0c020f7356c3a6e0348330fbc177f821ab2147c256d5c3f024d8716"
+        }
+      ]
+    },
+    {
+      "path": "runs/controlled_v1_restart1_a0becd8a_main_yolo26s_sdice_cappaste_s0",
+      "group": "historical_review",
+      "reason": "Historical copy-paste three-seed comparison; preserve weights until deciding whether augmentation evidence belongs in paper",
+      "checkpoints": [
+        {
+          "path": "runs/controlled_v1_restart1_a0becd8a_main_yolo26s_sdice_cappaste_s0/pcb-filtered/weights/best.pt",
+          "sha256": "e917cc8ee7311a5ffbb232b21a4248b45f07a50e4e65e0647b1dde9df749c2ea"
+        }
+      ]
+    },
+    {
+      "path": "runs/controlled_v1_restart1_a0becd8a_main_yolo26s_sdice_cappaste_s1",
+      "group": "historical_review",
+      "reason": "Historical copy-paste three-seed comparison; preserve weights until deciding whether augmentation evidence belongs in paper",
+      "checkpoints": [
+        {
+          "path": "runs/controlled_v1_restart1_a0becd8a_main_yolo26s_sdice_cappaste_s1/pcb-filtered/weights/best.pt",
+          "sha256": "b43293f00adbbed93e92a5245cba1c32e1825f2666d156043432da4b087e6b0f"
+        }
+      ]
+    },
+    {
+      "path": "runs/controlled_v1_restart1_a0becd8a_main_yolo26s_sdice_cappaste_s2",
+      "group": "historical_review",
+      "reason": "Historical copy-paste three-seed comparison; preserve weights until deciding whether augmentation evidence belongs in paper",
+      "checkpoints": [
+        {
+          "path": "runs/controlled_v1_restart1_a0becd8a_main_yolo26s_sdice_cappaste_s2/pcb-filtered/weights/best.pt",
+          "sha256": "f205646a1f6974ef9f215b554208757e7d71b62a01578ff72e7e9233857cd629"
+        }
+      ]
+    },
+    {
+      "path": "runs/controlled_v1_restart1_a0becd8a_main_yolov10s_cappaste_s0",
+      "group": "historical_review",
+      "reason": "Historical copy-paste three-seed comparison; preserve weights until deciding whether augmentation evidence belongs in paper",
+      "checkpoints": [
+        {
+          "path": "runs/controlled_v1_restart1_a0becd8a_main_yolov10s_cappaste_s0/pcb-filtered/weights/best.pt",
+          "sha256": "bb50bbb495633cf51689bb82bb3b36f711bcd4d8944139d6e47a3727615a26ff"
+        }
+      ]
+    },
+    {
+      "path": "runs/controlled_v1_restart1_a0becd8a_main_yolov10s_cappaste_s1",
+      "group": "historical_review",
+      "reason": "Historical copy-paste three-seed comparison; preserve weights until deciding whether augmentation evidence belongs in paper",
+      "checkpoints": [
+        {
+          "path": "runs/controlled_v1_restart1_a0becd8a_main_yolov10s_cappaste_s1/pcb-filtered/weights/best.pt",
+          "sha256": "0e14c8adf5ea4d0e2b2c9a08fe1f39d3419ae16771489799efeac0a8254a8090"
+        }
+      ]
+    },
+    {
+      "path": "runs/controlled_v1_restart1_a0becd8a_main_yolov10s_cappaste_s2",
+      "group": "historical_review",
+      "reason": "Historical copy-paste three-seed comparison; preserve weights until deciding whether augmentation evidence belongs in paper",
+      "checkpoints": [
+        {
+          "path": "runs/controlled_v1_restart1_a0becd8a_main_yolov10s_cappaste_s2/pcb-filtered/weights/best.pt",
+          "sha256": "254c43bd0bedc18f1ee96f459ceaa6c7b1e8c769e21b41cedc3614e9cef96d15"
+        }
+      ]
+    },
+    {
+      "path": "runs/controlled_v1_yolo12fix1_37dd1dfc_main_yolov12s_cappaste_s0",
+      "group": "native1280",
+      "reason": "Original source run for a selected champion; duplicate weights can be deduplicated only with a stable replacement path",
+      "checkpoints": [
+        {
+          "path": "runs/controlled_v1_yolo12fix1_37dd1dfc_main_yolov12s_cappaste_s0/pcb-filtered/weights/best.pt",
+          "sha256": "912819a56bce0ebc3d1ee6431af8c59e32ddcc4717b64f5cb4d866fa9a186c6e"
+        }
+      ]
+    },
+    {
+      "path": "runs/controlled_v1_yolo12fix1_37dd1dfc_main_yolov12s_cappaste_s1",
+      "group": "historical_review",
+      "reason": "Historical copy-paste three-seed comparison; preserve weights until deciding whether augmentation evidence belongs in paper",
+      "checkpoints": [
+        {
+          "path": "runs/controlled_v1_yolo12fix1_37dd1dfc_main_yolov12s_cappaste_s1/pcb-filtered/weights/best.pt",
+          "sha256": "a2ab432c61f2b8e04b00c2284c575d008c1e582446fab388c34c51f490c21b56"
+        }
+      ]
+    },
+    {
+      "path": "runs/controlled_v1_yolo12fix1_37dd1dfc_main_yolov12s_cappaste_s2",
+      "group": "historical_review",
+      "reason": "Historical copy-paste three-seed comparison; preserve weights until deciding whether augmentation evidence belongs in paper",
+      "checkpoints": [
+        {
+          "path": "runs/controlled_v1_yolo12fix1_37dd1dfc_main_yolov12s_cappaste_s2/pcb-filtered/weights/best.pt",
+          "sha256": "7df5659a2db4a8ae7792ac6b5ca54b272b913669856e5a5776c0cc4dde9d47f7"
+        }
+      ]
+    },
+    {
+      "path": "runs/info17_final_v1_56f756d1_budget_yolo26s_crop_specialist_mixed_s0",
+      "group": "paper640",
+      "reason": "18 final paper-data model/seed checkpoints and metadata",
+      "checkpoints": [
+        {
+          "path": "runs/info17_final_v1_56f756d1_budget_yolo26s_crop_specialist_mixed_s0/pcb-filtered/weights/best.pt",
+          "sha256": "e5b3ac313bc11d20665bd482158e4cb3d11e6fed46024068cd4b95662cddff32"
+        }
+      ]
+    },
+    {
+      "path": "runs/info17_final_v1_56f756d1_budget_yolo26s_crop_specialist_mixed_s1",
+      "group": "paper640",
+      "reason": "18 final paper-data model/seed checkpoints and metadata",
+      "checkpoints": [
+        {
+          "path": "runs/info17_final_v1_56f756d1_budget_yolo26s_crop_specialist_mixed_s1/pcb-filtered/weights/best.pt",
+          "sha256": "2fe7647cab14f4357a32c2de1652b5a0d9a867204a70422f1e183a7e71a95aa3"
+        }
+      ]
+    },
+    {
+      "path": "runs/info17_final_v1_56f756d1_budget_yolo26s_crop_specialist_mixed_s2",
+      "group": "paper640",
+      "reason": "18 final paper-data model/seed checkpoints and metadata",
+      "checkpoints": [
+        {
+          "path": "runs/info17_final_v1_56f756d1_budget_yolo26s_crop_specialist_mixed_s2/pcb-filtered/weights/best.pt",
+          "sha256": "1fdfdaeacb1df5dd8f1089dcb829ed61d34e64f07d5b0ae7d2d1d70f1f5f25a8"
+        }
+      ]
+    },
+    {
+      "path": "runs/info17_final_v1_56f756d1_main_physot_yolo26s_paper_s0",
+      "group": "paper640",
+      "reason": "18 final paper-data model/seed checkpoints and metadata",
+      "checkpoints": [
+        {
+          "path": "runs/info17_final_v1_56f756d1_main_physot_yolo26s_paper_s0/pcb-filtered/weights/best.pt",
+          "sha256": "ec21d3b2c8ff2eef2f0741e0e11d95af3eda002aa612bd25658a5ba972c86d3d"
+        }
+      ]
+    },
+    {
+      "path": "runs/info17_final_v1_56f756d1_main_physot_yolo26s_paper_s1",
+      "group": "paper640",
+      "reason": "18 final paper-data model/seed checkpoints and metadata",
+      "checkpoints": [
+        {
+          "path": "runs/info17_final_v1_56f756d1_main_physot_yolo26s_paper_s1/pcb-filtered/weights/best.pt",
+          "sha256": "2d45c3e6156e7055d9a4372ef344bd5430632c10636bddad15a8418ce9b4a81d"
+        }
+      ]
+    },
+    {
+      "path": "runs/info17_final_v1_56f756d1_main_physot_yolo26s_paper_s2",
+      "group": "paper640",
+      "reason": "18 final paper-data model/seed checkpoints and metadata",
+      "checkpoints": [
+        {
+          "path": "runs/info17_final_v1_56f756d1_main_physot_yolo26s_paper_s2/pcb-filtered/weights/best.pt",
+          "sha256": "260909ca0e28e23012c1bca57304a4947bcc34081bbe7c944158d4082a0dab0f"
+        }
+      ]
+    },
+    {
+      "path": "runs/info17_final_v1_56f756d1_main_yolo26s_agwd_sdice_paper_s0",
+      "group": "paper640",
+      "reason": "18 final paper-data model/seed checkpoints and metadata",
+      "checkpoints": [
+        {
+          "path": "runs/info17_final_v1_56f756d1_main_yolo26s_agwd_sdice_paper_s0/pcb-filtered/weights/best.pt",
+          "sha256": "96c70bf1640584e81bd3101aa011396adcace4b1c0cc4e94a2cb79cd56b3c6a8"
+        }
+      ]
+    },
+    {
+      "path": "runs/info17_final_v1_56f756d1_main_yolo26s_agwd_sdice_paper_s1",
+      "group": "paper640",
+      "reason": "18 final paper-data model/seed checkpoints and metadata",
+      "checkpoints": [
+        {
+          "path": "runs/info17_final_v1_56f756d1_main_yolo26s_agwd_sdice_paper_s1/pcb-filtered/weights/best.pt",
+          "sha256": "bb92c7d132d80103eb8c1182eb979ed4435f1e34962afc1f7b38002efb6fbfd9"
+        }
+      ]
+    },
+    {
+      "path": "runs/info17_final_v1_56f756d1_main_yolo26s_agwd_sdice_paper_s2",
+      "group": "paper640",
+      "reason": "18 final paper-data model/seed checkpoints and metadata",
+      "checkpoints": [
+        {
+          "path": "runs/info17_final_v1_56f756d1_main_yolo26s_agwd_sdice_paper_s2/pcb-filtered/weights/best.pt",
+          "sha256": "9363b5166530f98bcc3c95306b16d505608a715239e922e0643c758c5eaedcc9"
+        }
+      ]
+    },
+    {
+      "path": "runs/info17_final_v1_56f756d1_main_yolo26s_paper_s0",
+      "group": "paper640",
+      "reason": "18 final paper-data model/seed checkpoints and metadata",
+      "checkpoints": [
+        {
+          "path": "runs/info17_final_v1_56f756d1_main_yolo26s_paper_s0/pcb-filtered/weights/best.pt",
+          "sha256": "e50da8a00a5450e89a56e2b7e40588daf39393042fb4ec4ed96916d553d9ff8c"
+        }
+      ]
+    },
+    {
+      "path": "runs/info17_final_v1_56f756d1_main_yolo26s_paper_s1",
+      "group": "paper640",
+      "reason": "18 final paper-data model/seed checkpoints and metadata",
+      "checkpoints": [
+        {
+          "path": "runs/info17_final_v1_56f756d1_main_yolo26s_paper_s1/pcb-filtered/weights/best.pt",
+          "sha256": "cf31165526f1cd90c164498bfaaca6e6d5fb4cfaec183ad7e4c5fef08d7c8488"
+        }
+      ]
+    },
+    {
+      "path": "runs/info17_final_v1_56f756d1_main_yolo26s_paper_s2",
+      "group": "paper640",
+      "reason": "18 final paper-data model/seed checkpoints and metadata",
+      "checkpoints": [
+        {
+          "path": "runs/info17_final_v1_56f756d1_main_yolo26s_paper_s2/pcb-filtered/weights/best.pt",
+          "sha256": "f57803ef45543a6f87f52b5026f87a7bb750d61569ff45e92b63213fea21d2eb"
+        }
+      ]
+    },
+    {
+      "path": "runs/info17_final_v1_56f756d1_main_yolov12s_paper_s0",
+      "group": "paper640",
+      "reason": "18 final paper-data model/seed checkpoints and metadata",
+      "checkpoints": [
+        {
+          "path": "runs/info17_final_v1_56f756d1_main_yolov12s_paper_s0/pcb-filtered/weights/best.pt",
+          "sha256": "ad5997fd1d2d169273cd87127c9d1701841aa9d4d033570ea9aa860c0f31eeec"
+        }
+      ]
+    },
+    {
+      "path": "runs/info17_final_v1_56f756d1_main_yolov12s_paper_s1",
+      "group": "paper640",
+      "reason": "18 final paper-data model/seed checkpoints and metadata",
+      "checkpoints": [
+        {
+          "path": "runs/info17_final_v1_56f756d1_main_yolov12s_paper_s1/pcb-filtered/weights/best.pt",
+          "sha256": "a75605a258a0cf08f9ab9aad35f78678f0b74fc83e19fe52c4fd205e3fd8f969"
+        }
+      ]
+    },
+    {
+      "path": "runs/info17_final_v1_56f756d1_main_yolov12s_paper_s2",
+      "group": "paper640",
+      "reason": "18 final paper-data model/seed checkpoints and metadata",
+      "checkpoints": [
+        {
+          "path": "runs/info17_final_v1_56f756d1_main_yolov12s_paper_s2/pcb-filtered/weights/best.pt",
+          "sha256": "235a9cb85969f66179c029fd4c99545c2ee7e7d740796459c93b57cb7ea637eb"
+        }
+      ]
+    },
+    {
+      "path": "runs/info17_final_v1_56f756d1_main_yolov8s_paper_s0",
+      "group": "paper640",
+      "reason": "18 final paper-data model/seed checkpoints and metadata",
+      "checkpoints": [
+        {
+          "path": "runs/info17_final_v1_56f756d1_main_yolov8s_paper_s0/pcb-filtered/weights/best.pt",
+          "sha256": "089f072634e61f0993f821336c36b20c9f7ed675d738eb22394bc9124959294e"
+        }
+      ]
+    },
+    {
+      "path": "runs/info17_final_v1_56f756d1_main_yolov8s_paper_s1",
+      "group": "paper640",
+      "reason": "18 final paper-data model/seed checkpoints and metadata",
+      "checkpoints": [
+        {
+          "path": "runs/info17_final_v1_56f756d1_main_yolov8s_paper_s1/pcb-filtered/weights/best.pt",
+          "sha256": "7737eaed92ace21b4fdbf2e5356ab48d28745774eea5282e8fdd963228f6e8a5"
+        }
+      ]
+    },
+    {
+      "path": "runs/info17_final_v1_56f756d1_main_yolov8s_paper_s2",
+      "group": "paper640",
+      "reason": "18 final paper-data model/seed checkpoints and metadata",
+      "checkpoints": [
+        {
+          "path": "runs/info17_final_v1_56f756d1_main_yolov8s_paper_s2/pcb-filtered/weights/best.pt",
+          "sha256": "a39156af507e76c99a0950375fddcb1b1390a92863c18d4d699e760fb10c780f"
+        }
+      ]
+    },
+    {
+      "path": "runs/physot_yolo26s_native_cleaned_champion_1280",
+      "group": "alternates",
+      "reason": "Alternative historical baseline/strong checkpoint; retain until final model registry is agreed",
+      "checkpoints": [
+        {
+          "path": "runs/physot_yolo26s_native_cleaned_champion_1280/pcb-filtered/weights/best.pt",
+          "sha256": "0e0ada2321994df255cdae2b547a459651b6eb07ee34110d8bbc0e2f92984d2d"
+        }
+      ]
+    },
+    {
+      "path": "runs/yolo26s_agwd_sdice_l0.20_s0.01",
+      "group": "native1280",
+      "reason": "Squared-Dice lambda/smoothing/stage-weight ablation requested by professor",
+      "checkpoints": [
+        {
+          "path": "runs/yolo26s_agwd_sdice_l0.20_s0.01/pcb-filtered/weights/best.pt",
+          "sha256": "bae234bafd4c9fb6301fc2b0e406602d16f97df7a28a3acec46a66dc3a2af1b9"
+        }
+      ]
+    },
+    {
+      "path": "runs/yolo26s_agwd_sdice_l0.35_s0.01",
+      "group": "native1280",
+      "reason": "Squared-Dice lambda/smoothing/stage-weight ablation requested by professor",
+      "checkpoints": [
+        {
+          "path": "runs/yolo26s_agwd_sdice_l0.35_s0.01/pcb-filtered/weights/best.pt",
+          "sha256": "ed55e96d7d425d49e344a935af022dad21fd65a5dabd60aac4416012178aeb36"
+        }
+      ]
+    },
+    {
+      "path": "runs/yolo26s_agwd_sdice_l1.0_s0.01",
+      "group": "native1280",
+      "reason": "Squared-Dice lambda/smoothing/stage-weight ablation requested by professor",
+      "checkpoints": [
+        {
+          "path": "runs/yolo26s_agwd_sdice_l1.0_s0.01/pcb-filtered/weights/best.pt",
+          "sha256": "c6e4dc292d697b9a9d8aa02f1a51e2b0c5ef3fe6cd46384bdb5dcd03c3cd4572"
+        }
+      ]
+    },
+    {
+      "path": "runs/yolo26s_agwd_sdice_smooth0.01_uniform",
+      "group": "native1280",
+      "reason": "Original source run for a selected champion; duplicate weights can be deduplicated only with a stable replacement path",
+      "checkpoints": [
+        {
+          "path": "runs/yolo26s_agwd_sdice_smooth0.01_uniform/pcb-filtered/weights/best.pt",
+          "sha256": "a51d9285abd33fa0b304abd2b300740672c7e0ad2bbe9a367950e84b9a0540f6"
+        }
+      ]
+    },
+    {
+      "path": "runs/yolo26s_agwd_sdice_smooth0.1_uniform",
+      "group": "native1280",
+      "reason": "Squared-Dice lambda/smoothing/stage-weight ablation requested by professor",
+      "checkpoints": [
+        {
+          "path": "runs/yolo26s_agwd_sdice_smooth0.1_uniform/pcb-filtered/weights/best.pt",
+          "sha256": "74e31e176a9f80690a0c8aab247fb362b9e9f37117bb6919ae22ed7c7b9bed6c"
+        }
+      ]
+    },
+    {
+      "path": "runs/yolo26s_agwd_sdice_smooth1.0_stageweights",
+      "group": "native1280",
+      "reason": "Squared-Dice lambda/smoothing/stage-weight ablation requested by professor",
+      "checkpoints": [
+        {
+          "path": "runs/yolo26s_agwd_sdice_smooth1.0_stageweights/pcb-filtered/weights/best.pt",
+          "sha256": "23547d51bf262e1745743fcd003d0e6c42050e599b548f2be66d29bb9fc4825e"
+        }
+      ]
+    },
+    {
+      "path": "runs/yolo26s_agwd_sdice_stage_s0.01",
+      "group": "native1280",
+      "reason": "Squared-Dice lambda/smoothing/stage-weight ablation requested by professor",
+      "checkpoints": [
+        {
+          "path": "runs/yolo26s_agwd_sdice_stage_s0.01/pcb-filtered/weights/best.pt",
+          "sha256": "a0871aedce9d85f6470f2675abe7dd2b19cd9aae7d30e678e223e201f76f6ab4"
+        }
+      ]
+    },
+    {
+      "path": "runs/yolo26s_crop_specialist_mixed1280",
+      "group": "native1280",
+      "reason": "Original source run for a selected champion; duplicate weights can be deduplicated only with a stable replacement path",
+      "checkpoints": [
+        {
+          "path": "runs/yolo26s_crop_specialist_mixed1280/pcb-filtered/weights/best.pt",
+          "sha256": "64a2c9de97b21bb9d84a4ac68bd22cbfec9fdf7142b8e891a37a08f197890cd3"
+        }
+      ]
+    },
+    {
+      "path": "runs/yolo26s_native_cleaned_baseline_cappaste_1280",
+      "group": "alternates",
+      "reason": "Alternative historical baseline/strong checkpoint; retain until final model registry is agreed",
+      "checkpoints": [
+        {
+          "path": "runs/yolo26s_native_cleaned_baseline_cappaste_1280/pcb-filtered/weights/best.pt",
+          "sha256": "bd0e7bc10cb49676b7196865eb719f25a53a369b3dce5bf13e31a31413fb75ca"
+        }
+      ]
+    },
+    {
+      "path": "runs/yolov12s_native_cleaned_baseline_cappaste_1280",
+      "group": "alternates",
+      "reason": "Alternative historical baseline/strong checkpoint; retain until final model registry is agreed",
+      "checkpoints": [
+        {
+          "path": "runs/yolov12s_native_cleaned_baseline_cappaste_1280/pcb-filtered/weights/best.pt",
+          "sha256": "e6ac7be74d0c526f5c2ffaf525e06466891c9b9e1972341099fd5475f7f2879f"
+        }
+      ]
+    }
+  ],
+  "current_result_directories": [
+    "results/champion_audit_v1_20261030",
+    "results/clean_main_test_v1",
+    "results/clean_main_completed",
+    "results/info17_protocol_v1_20261031",
+    "results/info17_speed_v1_20261031"
+  ],
+  "paper_plan": "controlled_experiments/751837c92ab4",
+  "initializers": [
+    "yolo26s.pt",
+    "yolo12s.pt",
+    "yolov8s.pt",
+    "yolov10s.pt"
+  ]
+}
